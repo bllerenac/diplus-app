@@ -1,0 +1,7 @@
+{
+  "name": "DIPLUS-APP",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite"
+}
