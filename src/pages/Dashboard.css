@@ -1,20 +1,76 @@
-.dashboard-header-container {
+/* STYLES FOR DIPLUS-APP TABBED DIAGNOSTIC & CONSOLE */
+
+.dashboard-page {
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.dashboard-header ion-toolbar {
+  --background: #0f172a;
+  --border-color: #1e293b;
+  padding: 4px 8px;
+}
+
+.header-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  width: 100%;
 }
 
-.brand-logo {
+.brand-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #38bdf8;
 }
 
 .brand-icon {
-  width: 24px;
-  height: 24px;
-  color: #3880ff;
+  color: #38bdf8;
+}
+
+.brand-title .subtitle {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+
+/* NAVEGACION POR PESTAÑAS EN EL HEADER */
+.tab-navigation {
+  display: flex;
+  gap: 8px;
+  background: #1e293b;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: #f8fafc;
+}
+
+.tab-btn.active {
+  background: #38bdf8;
+  color: #0f172a;
 }
 
 .status-badges {
@@ -22,147 +78,177 @@
   gap: 8px;
 }
 
-.main-layout-row {
-  height: calc(100vh - 112px);
+.status-badge {
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
-.map-col, .console-col {
-  height: 100%;
+.dashboard-content {
+  --background: #0f172a;
+  --padding-top: 0px;
+  --padding-bottom: 0px;
+  --padding-start: 0px;
+  --padding-end: 0px;
+}
+
+/* CONTENEDOR PESTAÑA RS485 DIAGNÓSTICO */
+.rs485-diagnostic-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: calc(100vh - 56px);
   padding: 8px;
-}
-
-.map-card-wrapper {
-  background: #1e293b;
-  border-radius: 12px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.map-info-header {
-  padding: 12px 16px;
-  background: #0f172a;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.map-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  color: #f8fafc;
-  font-size: 1rem;
-}
-
-.map-title-icon {
-  color: #ef4444;
-}
-
-.gps-details {
-  display: flex;
-  gap: 12px;
-  font-size: 0.82rem;
-  color: #94a3b8;
-  font-family: monospace;
-}
-
-.leaflet-map-container {
-  flex-grow: 1;
-  width: 100%;
-  min-height: 300px;
-  z-index: 1;
-  background: #1e293b;
-}
-
-.leaflet-container {
-  background: #1e293b !important;
-  width: 100%;
-  height: 100%;
-}
-
-.nmea-raw-bar {
-  background: #0f172a;
-  padding: 8px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
   gap: 10px;
-  font-size: 0.8rem;
+  box-sizing: border-box;
 }
 
-.raw-label {
-  color: #64748b;
-  white-space: nowrap;
-}
-
-.nmea-raw-bar code {
-  color: #38bdf8;
-  font-family: monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.console-card-wrapper {
-  background: #0f172a;
-  border-radius: 12px;
-  height: 100%;
+.diagnostic-sidebar {
+  flex: 32;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  height: 100%;
 }
 
-.console-header {
-  padding: 12px 16px;
+.diagnostic-main-console {
+  flex: 68;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.card-panel {
   background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 12px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
 }
 
-.console-title {
+.panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
-  color: #f8fafc;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: #f1f5f9;
 }
 
-.console-icon {
-  color: #22c55e;
+.panel-icon {
+  color: #38bdf8;
+  width: 18px;
+  height: 18px;
 }
 
-.console-search {
-  padding: 6px 8px;
+/* CONFIGURACION Y PROTOCOLOS LADO IZQUIERDO */
+.config-form {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-label {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.form-select {
   background: #0f172a;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #38bdf8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  outline: none;
 }
 
-.custom-console-search {
+.protocol-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 6px;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.mini-select {
+  background: #1e293b;
+  color: #38bdf8;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.76rem;
+}
+
+/* CONSOLA DE EVENTOS REAL-TIME */
+.console-toolbar {
+  padding: 6px 10px;
+  background: #111827;
+  border-bottom: 1px solid #334155;
+}
+
+.console-searchbar {
   --background: #1e293b;
   --color: #f8fafc;
   --placeholder-color: #64748b;
   --icon-color: #64748b;
-  --clear-button-color: #64748b;
+  --border-radius: 6px;
   padding: 0;
+  height: 34px;
 }
 
 .console-body {
-  flex-grow: 1;
-  padding: 12px;
+  flex: 1;
+  background: #090d16;
+  padding: 8px;
   overflow-y: auto;
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  font-family: monospace;
 }
 
 .console-empty {
@@ -172,72 +258,215 @@
   justify-content: center;
   height: 100%;
   color: #64748b;
-  gap: 6px;
   text-align: center;
-}
-
-.console-baud-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 12px;
-  background: #1e293b;
-  border-radius: 6px;
-  margin-bottom: 6px;
-}
-
-.baud-label {
-  font-size: 0.78rem;
-  color: #94a3b8;
-}
-
-.baud-select {
-  background: #0f172a;
-  color: #38bdf8;
-  border: 1px solid #334155;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  font-family: monospace;
-  outline: none;
+  font-size: 0.82rem;
+  gap: 6px;
 }
 
 .console-line {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   padding: 6px 10px;
-  background: rgba(30, 41, 59, 0.5);
   border-radius: 4px;
-  border-left: 3px solid #22c55e;
+  background: rgba(30, 41, 59, 0.6);
 }
 
-.console-line-header {
+.line-tx {
+  border-left: 4px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.line-rx {
+  border-left: 4px solid #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.line-error {
+  border-left: 4px solid #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.line-info {
+  border-left: 4px solid #a855f7;
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.line-header {
   display: flex;
   justify-content: space-between;
-  font-size: 0.78rem;
-}
-
-.line-ascii {
-  color: #a7f3d0;
-  font-size: 0.8rem;
-  font-family: monospace;
+  align-items: center;
+  font-size: 0.72rem;
 }
 
 .line-time {
   color: #64748b;
-  font-size: 0.78rem;
-  white-space: nowrap;
+}
+
+.line-tag {
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.tag-tx {
+  background: #1d4ed8;
+  color: #bfdbfe;
+}
+
+.tag-rx {
+  background: #15803d;
+  color: #bbf7d0;
+}
+
+.tag-error {
+  background: #b91c1c;
+  color: #fecaca;
+}
+
+.tag-info {
+  background: #6b21a8;
+  color: #e9d5ff;
 }
 
 .line-port {
-  color: #3880ff;
-  font-weight: 700;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.line-hex {
+  color: #f8fafc;
   font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.line-ascii {
+  color: #fbbf24;
+  font-size: 0.75rem;
+}
+
+.line-parsed {
+  font-size: 0.76rem;
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+.eurosens-parsed {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  font-weight: 600;
+}
+
+.flowmeter-parsed {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  font-weight: 600;
+}
+
+/* PESTAÑA MAPA COMPLETA */
+.map-tab-container {
+  width: 100%;
+  height: calc(100vh - 56px);
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.gps-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.gps-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.pill-label {
+  font-size: 0.62rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.pill-val {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: monospace;
+}
+
+.pill-val.highlight {
+  color: #4ade80;
+}
+
+.leaflet-map-container {
+  flex: 1;
+  width: 100%;
+  background: #090d16;
+  z-index: 1;
+}
+
+.custom-gps-marker {
+  position: relative;
+}
+
+.marker-pin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #38bdf8;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 10px #38bdf8;
+}
+
+.marker-pulse {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  top: -9px;
+  left: -9px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.4);
+  animation: pulse 1.8s infinite ease-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.nmea-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #0f172a;
+  border-top: 1px solid #334155;
+  font-size: 0.72rem;
+}
+
+.nmea-label {
+  color: #64748b;
   white-space: nowrap;
 }
 
-.line-text {
-  color: #f1f5f9;
-  word-break: break-all;
+.nmea-code {
+  color: #4ade80;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

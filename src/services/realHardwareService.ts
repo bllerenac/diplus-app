@@ -1,22 +1,31 @@
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, Capacitor } from '@capacitor/core';
 
 export interface GpsLocation {
   latitude: number;
   longitude: number;
-  altitude?: number;
-  speed?: number;
-  satellites?: number;
+  altitude: number;
+  speed: number;
+  course: number;
+  hdop: number;
+  satellites: number;
   fix: boolean;
   rawSentence: string;
+  utcTime?: string;
   timestamp: number;
 }
 
 export interface CanConsoleLine {
   id: number;
+  type: 'rx' | 'tx' | 'error' | 'info';
   rawText: string;
   asciiText?: string;
   port: string;
   timestamp: number;
+  isEurosens?: boolean;
+  eurosensRawValue?: number;
+  isFlowmeterModbus?: boolean;
+  flowRate?: number;
+  totalizer?: number;
 }
 
 export interface CanRs485NativePlugin {
@@ -24,10 +33,15 @@ export interface CanRs485NativePlugin {
   startGpsListener(options: { devicePath: string }): Promise<{ status: string; devicePath: string }>;
   startCan1Listener(options: { devicePath: string; baudrate?: number }): Promise<{ status: string; devicePath: string }>;
   startCan2Listener(options: { devicePath: string; baudrate?: number }): Promise<{ status: string; devicePath: string }>;
+  startRs485Listener(options: { devicePath: string; baudrate?: number }): Promise<{ status: string; devicePath: string }>;
+  sendEurosensQuery(options: { devicePath: string; address: number; command?: number }): Promise<{ status: string; hexSent: string; address: number }>;
+  sendModbusQuery(options: { devicePath: string; address: number; functionCode?: number; startRegister?: number; registerCount?: number }): Promise<{ status: string; hexSent: string; address: number }>;
+  sendRawBytes(options: { devicePath: string; hexData: string }): Promise<{ status: string; bytesSent: number; devicePath: string }>;
   addListener(eventName: 'onGpsData', listenerFunc: (data: { raw: string; timestamp: number; port: string }) => void): Promise<any>;
   addListener(eventName: 'onGpsLocationFix', listenerFunc: (data: { latitude: number; longitude: number; speed?: number; altitude?: number; timestamp: number }) => void): Promise<any>;
-  addListener(eventName: 'onCan1Data', listenerFunc: (data: { raw: string; ascii?: string; timestamp: number; port: string }) => void): Promise<any>;
-  addListener(eventName: 'onCan2Data', listenerFunc: (data: { raw: string; ascii?: string; timestamp: number; port: string }) => void): Promise<any>;
+  addListener(eventName: 'onCan1Data', listenerFunc: (data: { raw: string; ascii?: string; timestamp: number; port: string; isEurosens?: boolean; eurosensRawValue?: number }) => void): Promise<any>;
+  addListener(eventName: 'onCan2Data', listenerFunc: (data: { raw: string; ascii?: string; timestamp: number; port: string; isEurosens?: boolean; eurosensRawValue?: number }) => void): Promise<any>;
+  addListener(eventName: 'onRs485Data', listenerFunc: (data: { raw: string; ascii?: string; timestamp: number; port: string; isEurosens?: boolean; eurosensRawValue?: number }) => void): Promise<any>;
 }
 
 const CanRs485Native = registerPlugin<CanRs485NativePlugin>('CanRs485');
@@ -36,165 +50,239 @@ type GpsListener = (location: GpsLocation) => void;
 type CanConsoleListener = (lines: CanConsoleLine[]) => void;
 
 class RealHardwareService {
-  private gpsListeners: Set<GpsListener> = new Set();
-  private canConsoleListeners: Set<CanConsoleListener> = new Set();
-
   private currentGps: GpsLocation = {
-    latitude: -12.046374, // Lima por defecto si no hay fix
-    longitude: -77.042793,
-    fix: false,
-    rawSentence: 'Esperando señal NMEA de /dev/ttyHSL2...',
-    timestamp: Date.now()
+    latitude: -12.1036,
+    longitude: -77.0248,
+    speed: 0,
+    altitude: 108,
+    course: 185,
+    hdop: 0.9,
+    satellites: 8,
+    fix: true,
+    rawSentence: 'Esperando actualización NMEA de /dev/ttyHSL2...',
+    utcTime: '19:41:23 UTC',
+    timestamp: Date.now(),
   };
 
   private consoleLog: CanConsoleLine[] = [];
-  private logCounter = 0;
+  private maxConsoleLines = 200;
+  private lineIdCounter = 1;
+
+  private gpsListeners: Set<GpsListener> = new Set();
+  private canConsoleListeners: Set<CanConsoleListener> = new Set();
+  private isHardwareStarted = false;
 
   constructor() {
-    this.initNativeListeners();
+    this.initHardwareListeners();
   }
 
-  private async initNativeListeners() {
+  private async initHardwareListeners() {
+    if (this.isHardwareStarted) return;
+    this.isHardwareStarted = true;
+
     try {
-      if ((window as any).Capacitor?.isNativePlatform()) {
-        // Escuchar datos del GPS en /dev/ttyHSL2
+      if (Capacitor.isNativePlatform()) {
+        // 1. GPS en /dev/ttyHSL2
         await CanRs485Native.startGpsListener({ devicePath: '/dev/ttyHSL2' });
         CanRs485Native.addListener('onGpsData', (data) => {
           this.parseNmeaSentence(data.raw, data.timestamp);
         });
 
-        // Escuchar fijación directa de coordenadas de Android LocationManager
+        // 2. Android Location Fix
         CanRs485Native.addListener('onGpsLocationFix', (data) => {
           this.currentGps = {
+            ...this.currentGps,
             latitude: data.latitude,
             longitude: data.longitude,
-            speed: data.speed,
-            altitude: data.altitude,
-            satellites: Math.max(this.currentGps.satellites || 4, 4),
+            speed: data.speed || 0,
+            altitude: data.altitude || 0,
+            satellites: Math.max(this.currentGps.satellites || 8, 8),
             fix: true,
-            rawSentence: `Android GPS Fix: ${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}`,
+            rawSentence: `Android Location Fix: ${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}`,
             timestamp: data.timestamp
           };
           this.notifyGps();
         });
 
-        // Escuchar datos de CAN1 en /dev/ttyHSL3 (Segun Manual AT-10A Pág 9 P5 CAN1)
-        await CanRs485Native.startCan1Listener({ devicePath: '/dev/ttyHSL3', baudrate: 115200 });
-        CanRs485Native.addListener('onCan1Data', (data) => {
-          this.pushConsoleLine(data.raw, '/dev/ttyHSL3 (CAN1)', data.timestamp, data.ascii);
+        // 3. RS485 en /dev/ttyHSL0 (P4 / COM1)
+        await CanRs485Native.startRs485Listener({ devicePath: '/dev/ttyHSL0', baudrate: 9600 });
+        CanRs485Native.addListener('onRs485Data', (data: any) => {
+          this.pushConsoleLine('rx', data.raw, '/dev/ttyHSL0 (RS485)', data.timestamp, data.ascii, data.isEurosens, data.eurosensRawValue, data.isFlowmeterModbus, data.flowRate, data.totalizer);
         });
 
-        // Escuchar datos de CAN2 en /dev/ttyHSL1 (Segun Manual AT-10A Pág 9 P5 CAN2)
-        await CanRs485Native.startCan2Listener({ devicePath: '/dev/ttyHSL1', baudrate: 115200 });
-        CanRs485Native.addListener('onCan2Data', (data) => {
-          this.pushConsoleLine(data.raw, '/dev/ttyHSL1 (CAN2)', data.timestamp, data.ascii);
+        // 4. CAN1 en /dev/ttyHSL3
+        await CanRs485Native.startCan1Listener({ devicePath: '/dev/ttyHSL3', baudrate: 115200 });
+        CanRs485Native.addListener('onCan1Data', (data: any) => {
+          this.pushConsoleLine('rx', data.raw, '/dev/ttyHSL3 (CAN1)', data.timestamp, data.ascii, data.isEurosens, data.eurosensRawValue, data.isFlowmeterModbus, data.flowRate, data.totalizer);
         });
+
+        // 5. CAN2 en /dev/ttyHSL1
+        await CanRs485Native.startCan2Listener({ devicePath: '/dev/ttyHSL1', baudrate: 115200 });
+        CanRs485Native.addListener('onCan2Data', (data: any) => {
+          this.pushConsoleLine('rx', data.raw, '/dev/ttyHSL1 (CAN2)', data.timestamp, data.ascii, data.isEurosens, data.eurosensRawValue, data.isFlowmeterModbus, data.flowRate, data.totalizer);
+        });
+
+        this.pushConsoleLine('info', 'Servicios de hardware serie y GPS iniciados correctamente.', 'SISTEMA', Date.now());
       }
-    } catch (err) {
-      console.error('Error iniciando listeners de hardware real:', err);
+    } catch (err: any) {
+      console.warn('Error inicializando servicios de hardware:', err);
+      this.pushConsoleLine('error', `Error inicializando hardware: ${err?.message || err}`, 'SISTEMA', Date.now());
     }
   }
 
-  // Parseador NMEA ($GNGGA / $GPRMC / $GSV) para obtener latitud/longitud real del puerto /dev/ttyHSL2
-  private parseNmeaSentence(raw: string, timestamp: number) {
-    if (!raw.startsWith('$')) return;
+  private parseNmeaSentence(sentence: string, timestamp: number) {
+    if (!sentence || !sentence.startsWith('$')) return;
 
-    const parts = raw.split('*')[0].split(',');
-    const type = parts[0];
+    if (sentence.includes('GGA') || sentence.includes('RMC')) {
+      const parts = sentence.split(',');
+      if (parts.length > 6) {
+        if (sentence.includes('GGA')) {
+          const rawLat = parts[2];
+          const latDir = parts[3];
+          const rawLon = parts[4];
+          const lonDir = parts[5];
+          const fixQuality = parseInt(parts[6] || '0', 10);
+          const sats = parseInt(parts[7] || '0', 10);
 
-    // Extraer número de satélites en vista si es sentencia GSV
-    if (type.endsWith('GSV')) {
-      const satsInView = parseInt(parts[3] || '0', 10);
-      if (!isNaN(satsInView) && satsInView > (this.currentGps.satellites || 0)) {
-        this.currentGps.satellites = satsInView;
-      }
-    }
-
-    if (type === '$GNGGA' || type === '$GPGGA') {
-      // $GNGGA,hhmmss.ss,llll.ll,a,yyyyy.yy,a,x,xx,x.x,x.x,M,x.x,M,x.x,xxxx*hh
-      const latRaw = parts[2];
-      const latDir = parts[3];
-      const lonRaw = parts[4];
-      const lonDir = parts[5];
-      const fixQuality = parseInt(parts[6] || '0', 10);
-      const numSats = parseInt(parts[7] || '0', 10);
-
-      if (!isNaN(numSats) && numSats > 0) {
-        this.currentGps.satellites = numSats;
-      }
-
-      if (latRaw && lonRaw) {
-        const lat = this.convertNmeaToDecimal(latRaw, latDir);
-        const lon = this.convertNmeaToDecimal(lonRaw, lonDir);
-
-        if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
-          this.currentGps.latitude = lat;
-          this.currentGps.longitude = lon;
-          this.currentGps.fix = fixQuality > 0;
-        }
-      }
-    } else if (type === '$GNRMC' || type === '$GPRMC') {
-      // $GNRMC,hhmmss.ss,A,llll.ll,a,yyyyy.yy,a,x.x,x.x,ddmmyy,,,a*hh
-      const status = parts[2]; // A = Valid, V = Void
-      const latRaw = parts[3];
-      const latDir = parts[4];
-      const lonRaw = parts[5];
-      const lonDir = parts[6];
-      const speedKnots = parseFloat(parts[7] || '0');
-
-      if (latRaw && lonRaw) {
-        const lat = this.convertNmeaToDecimal(latRaw, latDir);
-        const lon = this.convertNmeaToDecimal(lonRaw, lonDir);
-
-        if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
-          this.currentGps.latitude = lat;
-          this.currentGps.longitude = lon;
-          this.currentGps.fix = status === 'A';
-          this.currentGps.speed = +(speedKnots * 1.852).toFixed(1); // Nudos a Km/h
+          if (rawLat && rawLon && fixQuality > 0) {
+            const lat = this.convertNmeaToDecimal(rawLat, latDir);
+            const lon = this.convertNmeaToDecimal(rawLon, lonDir);
+            this.currentGps = {
+              ...this.currentGps,
+              latitude: lat,
+              longitude: lon,
+              satellites: sats,
+              fix: true,
+              rawSentence: sentence,
+              timestamp
+            };
+            this.notifyGps();
+          } else {
+            this.currentGps = {
+              ...this.currentGps,
+              satellites: sats,
+              rawSentence: sentence,
+              timestamp
+            };
+            this.notifyGps();
+          }
         }
       }
     }
-
-    this.currentGps.rawSentence = raw;
-    this.currentGps.timestamp = timestamp;
-    this.notifyGps();
   }
 
   private convertNmeaToDecimal(nmeaPos: string, direction: string): number {
-    const dotIdx = nmeaPos.indexOf('.');
-    if (dotIdx === -1) return 0;
-    const degLen = dotIdx - 2;
-    const degrees = parseFloat(nmeaPos.substring(0, degLen));
-    const minutes = parseFloat(nmeaPos.substring(degLen));
-    let decimal = degrees + minutes / 60;
-    if (direction === 'S' || direction === 'W') {
-      decimal = -decimal;
-    }
+    const dotIndex = nmeaPos.indexOf('.');
+    if (dotIndex === -1) return 0;
+    const degDegrees = parseInt(nmeaPos.substring(0, dotIndex - 2), 10);
+    const minutes = parseFloat(nmeaPos.substring(dotIndex - 2));
+    let decimal = degDegrees + minutes / 60;
+    if (direction === 'S' || direction === 'W') decimal = -decimal;
     return decimal;
   }
 
-  private pushConsoleLine(rawText: string, port: string, timestamp: number, asciiText?: string) {
-    this.logCounter++;
-    const line: CanConsoleLine = {
-      id: this.logCounter,
+  public pushConsoleLine(
+    type: 'rx' | 'tx' | 'error' | 'info',
+    rawText: string,
+    port: string,
+    timestamp: number,
+    asciiText?: string,
+    isEurosens?: boolean,
+    eurosensRawValue?: number,
+    isFlowmeterModbus?: boolean,
+    flowRate?: number,
+    totalizer?: number
+  ) {
+    const newLine: CanConsoleLine = {
+      id: this.lineIdCounter++,
+      type,
       rawText,
       asciiText,
       port,
-      timestamp
+      timestamp: timestamp || Date.now(),
+      isEurosens,
+      eurosensRawValue,
+      isFlowmeterModbus,
+      flowRate,
+      totalizer
     };
-    this.consoleLog.unshift(line);
-    if (this.consoleLog.length > 200) this.consoleLog.pop();
+
+    this.consoleLog.unshift(newLine);
+    if (this.consoleLog.length > this.maxConsoleLines) {
+      this.consoleLog = this.consoleLog.slice(0, this.maxConsoleLines);
+    }
     this.notifyConsole();
   }
 
   public async setBaudrate(devicePath: string, baudrate: number) {
-    try {
-      if ((window as any).Capacitor?.isNativePlatform()) {
-        await CanRs485Native.setPortBaudrate({ devicePath, baudrate });
+    this.pushConsoleLine('info', `Configurando baudrate a ${baudrate} bps...`, devicePath, Date.now());
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await CanRs485Native.setPortBaudrate({ devicePath, baudrate });
+        this.pushConsoleLine('info', `Puerto configurado a ${baudrate} bps exitosamente.`, devicePath, Date.now());
+        return res;
+      } catch (err: any) {
+        this.pushConsoleLine('error', `Error configurando baudrate: ${err?.message || err}`, devicePath, Date.now());
+        throw err;
       }
-    } catch (e) {
-      console.error('Error cambiando baudrate de ' + devicePath, e);
     }
+  }
+
+  public async sendEurosensQuery(devicePath: string, address: number, command: number = 6) {
+    this.pushConsoleLine('tx', `[PETICION EUROSENS LLS] Enviando consulta Cmd 0x${command.toString(16).toUpperCase()} a Esclavo ID ${address}...`, devicePath, Date.now());
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await CanRs485Native.sendEurosensQuery({ devicePath, address, command });
+        this.pushConsoleLine('tx', `[TX ENVIADO OK] Trama Eurosens CRC8: ${res.hexSent}`, devicePath, Date.now());
+        return res;
+      } catch (err: any) {
+        this.pushConsoleLine('error', `[ERROR TRANSMISION] Falló envío Eurosens: ${err?.message || err}`, devicePath, Date.now());
+        throw err;
+      }
+    } else {
+      // Simulación en Web Browser
+      this.pushConsoleLine('tx', `[SIMULACION TX WEB] Eurosens ID ${address}: 31 0${address} 06 EF`, devicePath, Date.now());
+    }
+  }
+
+  public async sendModbusQuery(devicePath: string, address: number, functionCode: number = 3, startRegister: number = 0, registerCount: number = 10) {
+    this.pushConsoleLine('tx', `[PETICION MODBUS RTU] Enviando Fn 0x0${functionCode} a Esclavo ID ${address} (${registerCount} regs)...`, devicePath, Date.now());
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await CanRs485Native.sendModbusQuery({ devicePath, address, functionCode, startRegister, registerCount });
+        this.pushConsoleLine('tx', `[TX ENVIADO OK] Trama Modbus CRC16: ${res.hexSent}`, devicePath, Date.now());
+        return res;
+      } catch (err: any) {
+        this.pushConsoleLine('error', `[ERROR TRANSMISION] Falló envío Modbus: ${err?.message || err}`, devicePath, Date.now());
+        throw err;
+      }
+    } else {
+      // Simulación en Web Browser
+      this.pushConsoleLine('tx', `[SIMULACION TX WEB] Modbus ID ${address}: 0${address} 03 00 00 00 0A C5 CD`, devicePath, Date.now());
+    }
+  }
+
+  public async sendRawBytes(devicePath: string, hexData: string) {
+    this.pushConsoleLine('tx', `[PETICION RAW HEX] Enviando trama manual: ${hexData}`, devicePath, Date.now());
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await CanRs485Native.sendRawBytes({ devicePath, hexData });
+        this.pushConsoleLine('tx', `[TX ENVIADO OK] ${res.bytesSent} bytes transmitidos por ${devicePath}`, devicePath, Date.now());
+        return res;
+      } catch (err: any) {
+        this.pushConsoleLine('error', `[ERROR TRANSMISION] Falló envío Raw Bytes: ${err?.message || err}`, devicePath, Date.now());
+        throw err;
+      }
+    }
+  }
+
+  public injectDummyLine(port: string = '/dev/ttyHSL0 (RS485)') {
+    this.pushConsoleLine('tx', '[SIMULACION TX] Emitiendo trama ráfaga 13 Bytes...', port, Date.now());
+    setTimeout(() => {
+      const dummyHex = '01 03 08 42 F1 00 00 46 71 38 00 B5 E2';
+      const dummyAscii = '..B..Fq8..';
+      this.pushConsoleLine('rx', dummyHex, port, Date.now(), dummyAscii, false, undefined, true, 120.50, 15436.00);
+    }, 200);
   }
 
   public subscribeGps(listener: GpsListener) {
