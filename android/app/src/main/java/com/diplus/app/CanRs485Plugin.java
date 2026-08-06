@@ -223,6 +223,7 @@ public class CanRs485Plugin extends Plugin {
     @PluginMethod
     public void startGpsListener(PluginCall call) {
         String devicePath = call.getString("devicePath", "/dev/ttyHSL2");
+        int baudrate = call.getInt("baudrate", 921600);
 
         try {
             getActivity().runOnUiThread(() -> {
@@ -255,13 +256,14 @@ public class CanRs485Plugin extends Plugin {
 
         if (!isGpsListening.get()) {
             isGpsListening.set(true);
-            configureStty(devicePath, 9600);
+            configureStty(devicePath, baudrate);
             gpsThread = new Thread(() -> readTextStream(devicePath, "onGpsData", isGpsListening));
             gpsThread.start();
         }
         JSObject ret = new JSObject();
         ret.put("status", "started");
         ret.put("devicePath", devicePath);
+        ret.put("baudrate", baudrate);
         call.resolve(ret);
     }
 
@@ -393,6 +395,7 @@ public class CanRs485Plugin extends Plugin {
     public void startRs485Listener(PluginCall call) {
         String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
         int baudrate = call.getInt("baudrate", 9600);
+        enableRs485HardwarePower(true);
         if (!isRs485Listening.get()) {
             isRs485Listening.set(true);
             configureStty(devicePath, baudrate);
@@ -402,7 +405,20 @@ public class CanRs485Plugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("status", "started");
         ret.put("devicePath", devicePath);
+        ret.put("rs485Power", "gpio40_HIGH");
         call.resolve(ret);
+    }
+
+    private void enableRs485HardwarePower(boolean enable) {
+        try {
+            String dirCmd = "echo out > /sys/class/gpio/gpio40/direction";
+            String valCmd = "echo " + (enable ? "1" : "0") + " > /sys/class/gpio/gpio40/value";
+            Runtime.getRuntime().exec(new String[]{"sh", "-c", dirCmd}).waitFor();
+            Runtime.getRuntime().exec(new String[]{"sh", "-c", valCmd}).waitFor();
+            Log.i(TAG, "Alimentacion Hardware RS485 (gpio40) -> " + (enable ? "ACTIVADA (1)" : "DESACTIVADA (0)"));
+        } catch (Exception e) {
+            Log.w(TAG, "No se pudo cambiar estado gpio40 para RS485: " + e.getMessage());
+        }
     }
 
     private void configureStty(String devicePath, int baudrate) {
@@ -499,9 +515,7 @@ public class CanRs485Plugin extends Plugin {
                                 String line = sb.toString().trim();
                                 sb.setLength(0);
                                 if (!line.isEmpty()) {
-                                    JSObject data = new JSObject();
-                                    data.put("raw", line);
-                                    data.put("timestamp", System.currentTimeMillis());
+                                    JSObject data = parseNmeaLine(line);
                                     data.put("port", devicePath);
                                     notifyListeners(eventName, data);
                                 }
@@ -517,12 +531,213 @@ public class CanRs485Plugin extends Plugin {
         }
     }
 
+    private JSObject parseNmeaLine(String line) {
+        JSObject data = new JSObject();
+        data.put("raw", line);
+        data.put("timestamp", System.currentTimeMillis());
+
+        if (line == null || !line.startsWith("$")) {
+            return data;
+        }
+
+        try {
+            String[] parts = line.split(",", -1);
+            if (parts.length < 2) return data;
+
+            String type = parts[0].toUpperCase();
+
+            // Parse $GNGGA / $GPGGA (Global Positioning System Fix Data & RTK Status)
+            if (type.endsWith("GGA") && parts.length >= 10) {
+                data.put("isGga", true);
+                data.put("utcTime", parts[1]);
+
+                double lat = parseNmeaCoord(parts[2], parts[3]);
+                double lon = parseNmeaCoord(parts[4], parts[5]);
+                data.put("latitude", lat);
+                data.put("longitude", lon);
+
+                int quality = 0;
+                try {
+                    if (!parts[6].isEmpty()) quality = Integer.parseInt(parts[6]);
+                } catch (Exception ignored) {}
+
+                data.put("rtkQuality", quality);
+                data.put("rtkStatus", getRtkQualityName(quality));
+                data.put("isRtkFixed", quality == 4);
+                data.put("isRtkFloat", quality == 5);
+                data.put("hasFix", quality > 0);
+
+                int sats = 0;
+                try {
+                    if (!parts[7].isEmpty()) sats = Integer.parseInt(parts[7]);
+                } catch (Exception ignored) {}
+                data.put("satellites", sats);
+
+                double hdop = 99.9;
+                try {
+                    if (!parts[8].isEmpty()) hdop = Double.parseDouble(parts[8]);
+                } catch (Exception ignored) {}
+                data.put("hdop", hdop);
+
+                double alt = 0.0;
+                try {
+                    if (!parts[9].isEmpty()) alt = Double.parseDouble(parts[9]);
+                } catch (Exception ignored) {}
+                data.put("altitude", alt);
+            }
+            // Parse $GNRMC / $GPRMC (Recommended Minimum Navigation Information)
+            else if (type.endsWith("RMC") && parts.length >= 9) {
+                data.put("isRmc", true);
+                String status = parts[2];
+                boolean valid = "A".equalsIgnoreCase(status);
+                data.put("isValid", valid);
+
+                if (valid && parts.length >= 9) {
+                    double lat = parseNmeaCoord(parts[3], parts[4]);
+                    double lon = parseNmeaCoord(parts[5], parts[6]);
+                    data.put("latitude", lat);
+                    data.put("longitude", lon);
+
+                    double speedKnots = 0.0;
+                    try {
+                        if (!parts[7].isEmpty()) speedKnots = Double.parseDouble(parts[7]);
+                    } catch (Exception ignored) {}
+                    data.put("speedKnots", speedKnots);
+                    data.put("speedKmH", speedKnots * 1.852);
+
+                    double heading = 0.0;
+                    try {
+                        if (!parts[8].isEmpty()) heading = Double.parseDouble(parts[8]);
+                    } catch (Exception ignored) {}
+                    data.put("heading", heading);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error parseando sentencia NMEA: " + line, e);
+        }
+
+        return data;
+    }
+
+    private double parseNmeaCoord(String raw, String dir) {
+        if (raw == null || raw.isEmpty()) return 0.0;
+        try {
+            double val = Double.parseDouble(raw);
+            int deg = (int) (val / 100);
+            double min = val - (deg * 100);
+            double decimal = deg + (min / 60.0);
+            if ("S".equalsIgnoreCase(dir) || "W".equalsIgnoreCase(dir)) {
+                decimal = -decimal;
+            }
+            return decimal;
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    private String getRtkQualityName(int quality) {
+        switch (quality) {
+            case 1: return "GPS Standalone (~2.5m)";
+            case 2: return "DGPS (~0.5m)";
+            case 4: return "RTK FIXED (~1-2 cm)";
+            case 5: return "RTK FLOAT (~10-20 cm)";
+            case 6: return "Estimated / Dead Reckoning";
+            default: return "No Fix / Buscando";
+        }
+    }
+
+    @PluginMethod
+    public void setGpioPin(PluginCall call) {
+        String gpioName = call.getString("gpioName", "gpio137");
+        int value = call.getInt("value", 1);
+        String direction = call.getString("direction", "out");
+
+        try {
+            String dirCmd = "echo " + direction + " > /sys/class/gpio/" + gpioName + "/direction";
+            String valCmd = "echo " + value + " > /sys/class/gpio/" + gpioName + "/value";
+
+            Process pDir = Runtime.getRuntime().exec(new String[]{"sh", "-c", dirCmd});
+            pDir.waitFor();
+
+            Process pVal = Runtime.getRuntime().exec(new String[]{"sh", "-c", valCmd});
+            pVal.waitFor();
+
+            JSObject ret = new JSObject();
+            ret.put("status", "success");
+            ret.put("gpioName", gpioName);
+            ret.put("direction", direction);
+            ret.put("value", value);
+            call.resolve(ret);
+        } catch (Exception e) {
+            Log.e(TAG, "Error configurando GPIO " + gpioName, e);
+            call.reject("Error GPIO: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void readGpioPin(PluginCall call) {
+        String gpioName = call.getString("gpioName", "gpio44");
+        String direction = call.getString("direction", "in");
+
+        try {
+            String dirCmd = "echo " + direction + " > /sys/class/gpio/" + gpioName + "/direction";
+            Process pDir = Runtime.getRuntime().exec(new String[]{"sh", "-c", dirCmd});
+            pDir.waitFor();
+
+            File file = new File("/sys/class/gpio/" + gpioName + "/value");
+            int val = 0;
+            if (file.exists()) {
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    byte[] b = new byte[8];
+                    int r = fis.read(b);
+                    if (r > 0) {
+                        String s = new String(b, 0, r).trim();
+                        val = Integer.parseInt(s);
+                    }
+                }
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("gpioName", gpioName);
+            ret.put("value", val);
+            ret.put("isHigh", val == 1);
+            call.resolve(ret);
+        } catch (Exception e) {
+            Log.e(TAG, "Error leyendo GPIO " + gpioName, e);
+            call.reject("Error leyendo GPIO: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void readAllGpios(PluginCall call) {
+        String[] gpioNames = new String[]{"gpio44", "gpio45", "gpio138", "gpio36", "gpio137", "gpio66", "gpio90", "gpio96"};
+        JSObject list = new JSObject();
+        for (String name : gpioNames) {
+            File file = new File("/sys/class/gpio/" + name + "/value");
+            int val = -1;
+            if (file.exists()) {
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    byte[] b = new byte[8];
+                    int r = fis.read(b);
+                    if (r > 0) {
+                        val = Integer.parseInt(new String(b, 0, r).trim());
+                    }
+                } catch (Exception ignored) {}
+            }
+            list.put(name, val);
+        }
+        JSObject ret = new JSObject();
+        ret.put("gpios", list);
+        call.resolve(ret);
+    }
+
     @Override
     protected void handleOnDestroy() {
         isGpsListening.set(false);
         isCan1Listening.set(false);
         isCan2Listening.set(false);
         isRs485Listening.set(false);
+        enableRs485HardwarePower(false);
         try {
             canBusHelper0.uninitialize(0);
         } catch (Exception e) {
