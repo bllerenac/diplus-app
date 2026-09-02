@@ -4,12 +4,25 @@
  */
 
 
+/* Mapa y panel en columnas de verdad, 70 y 30. El panel no flota encima: si
+   tapara el mapa, el 30 % de lo que hay que mirar quedaria debajo del panel. */
 .nav-pantalla {
   position: relative;
   height: 100%;
+  display: grid;
+  grid-template-columns: 70% 30%;
   background: var(--bg);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  transition: grid-template-columns 0.25s ease;
+}
+.nav-pantalla.sin-panel { grid-template-columns: 100% 0%; }
+
+/* Columna del mapa. Todo lo que va sobre el mapa se posiciona respecto a esto
+   y no respecto a la pantalla, para que no se meta debajo del panel. */
+.nav-izquierda {
+  position: relative;
+  overflow: hidden;
 }
 
 /* ── Mapa ─────────────────────────────────────────────────────────────────── */
@@ -19,6 +32,7 @@
   inset: 0;
   z-index: 0;
 }
+
 
 /* Las teselas vienen claras y aquí todo es oscuro: se apagan para que la
    información que va encima no compita con el mapa. */
@@ -155,21 +169,16 @@
 /* ── Panel lateral ────────────────────────────────────────────────────────── */
 
 .nav-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   z-index: 600;
-  width: 320px;
-  max-width: 86vw;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--line);
-  background: rgba(9, 15, 20, 0.95);
-  backdrop-filter: blur(16px);
-  transition: transform 0.25s ease;
+  background: var(--sur);
+  overflow: hidden;
 }
-.nav-panel.oculto { transform: translateX(100%); }
+.nav-panel.oculto { border-left: 0; }
 
 .nav-panel__cab {
   display: flex;
@@ -256,9 +265,26 @@
   color: var(--ink2);
 }
 
-@media (max-width: 640px) {
+/* Por debajo de esto, 30 % de ancho no da ni para un numero: el panel vuelve a
+   superponerse y el mapa se queda entero debajo. */
+@media (max-width: 760px) {
+  .nav-pantalla,
+  .nav-pantalla.sin-panel { grid-template-columns: 100%; }
+
+  .nav-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 78vw;
+    max-width: 320px;
+    background: rgba(9, 15, 20, 0.96);
+    backdrop-filter: blur(16px);
+    transition: transform 0.25s ease;
+  }
+  .nav-panel.oculto { transform: translateX(100%); }
+
   .nav-velocidad b { font-size: 32px; }
-  .nav-panel { width: 78vw; }
 }
 
 /* Mientras no hay fix. Ocupa el centro a proposito: es lo unico que se puede

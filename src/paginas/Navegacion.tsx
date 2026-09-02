@@ -134,6 +134,13 @@ export default function Navegacion() {
     };
   }, [cfg.fuentes]);
 
+  /* Al abrir o cerrar el panel cambia el ancho del mapa. Leaflet no se entera
+     solo: sin esto queda descuadrado y los toques caen desplazados. */
+  useEffect(() => {
+    const t = setTimeout(() => mapa.current?.invalidateSize(), 280);
+    return () => clearTimeout(t);
+  }, [panelAbierto]);
+
   /* La frescura envejece sola aunque no llegue nada: un valor de hace un minuto
      tiene que dejar de parecer actual. */
   useEffect(() => {
@@ -164,8 +171,9 @@ export default function Navegacion() {
 
   return (
     <IonPage>
-      <div className="nav-pantalla">
-        <div className="nav-mapa" ref={divMapa} />
+      <div className={`nav-pantalla ${panelAbierto ? '' : 'sin-panel'}`}>
+        <div className="nav-izquierda">
+          <div className="nav-mapa" ref={divMapa} />
 
         <div className="nav-barra">
           <span className="nav-marca">DiPlus</span>
@@ -239,6 +247,8 @@ export default function Navegacion() {
             {cal.nombre} · {precisionAproximada(pos.calidad, pos.hdop)}
           </span>
         )}
+
+        </div>
 
         <aside className={`nav-panel ${panelAbierto ? '' : 'oculto'}`}>
           <div className="nav-panel__cab">
