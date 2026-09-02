@@ -58,8 +58,10 @@ export default function Monitor() {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent style={{ '--background': 'var(--bg)' } as never}>
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 p-3.5 pb-10">
+      <IonContent scrollY={false} style={{ '--background': 'var(--bg)' } as never}>
+        {/* Ancho completo: una trama en hexadecimal es una linea larga, y
+            en una columna estrecha se parte y deja de leerse de corrido. */}
+        <div className="flex h-full flex-col gap-4 p-5">
           {!hayHardware() && (
             <Aviso>Los puertos solo existen en el equipo. Aquí no va a llegar nada.</Aviso>
           )}
@@ -68,6 +70,7 @@ export default function Monitor() {
           )}
 
           <Bloque
+            className="flex min-h-0 flex-1 flex-col"
             titulo={`${tramas.length.toLocaleString('es-PE')} tramas`}
             accion={
               <div className="flex gap-2">
@@ -90,7 +93,7 @@ export default function Monitor() {
                 const el = e.currentTarget;
                 abajo.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
               }}
-              className="flex max-h-[62vh] flex-col gap-2 overflow-y-auto"
+              className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"
             >
               {ultimas.length === 0 && (
                 <Vacio>

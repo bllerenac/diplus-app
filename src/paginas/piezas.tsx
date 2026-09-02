@@ -16,7 +16,7 @@ export const Bloque = ({
         {accion}
       </header>
     )}
-    <div className="flex flex-col gap-4 p-4">{children}</div>
+    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">{children}</div>
   </section>
 );
 
@@ -47,7 +47,7 @@ export const Selector = (p: React.SelectHTMLAttributes<HTMLSelectElement>) => (
 );
 
 const botones = {
-  normal: 'border-line2 bg-sur2 text-ink active:translate-y-px',
+  normal: 'border-line2 bg-sur3 text-ink active:translate-y-px',
   fuerte: 'border-acc bg-acc text-[#06231a] active:translate-y-px',
   tenue: 'border-transparent text-ink3',
   peligro: 'border-transparent text-ink3 hover:border-bad hover:text-bad',
@@ -100,7 +100,7 @@ export const Nota = ({ children }: { children: ReactNode }) => (
 );
 
 export const Vacio = ({ children }: { children: ReactNode }) => (
-  <p className="m-0 rounded-xl border border-dashed border-line2 px-4 py-6 text-center text-[12.5px] leading-relaxed text-ink3">
+  <p className="m-0 rounded-xl bg-sur2 px-4 py-7 text-center text-[12.5px] leading-relaxed text-ink3">
     {children}
   </p>
 );
@@ -119,7 +119,15 @@ export const Aviso = ({
   );
 };
 
-/** Pestañas. El estado vive fuera para que la vista lo recuerde al volver. */
+/**
+ * Pestañas en columna, a la izquierda.
+ *
+ * La pantalla del equipo es apaisada, 1280 x 800. Con las pestañas en una fila
+ * arriba el contenido quedaba en una columna estrecha en el centro y media
+ * pantalla vacia a los lados; puestas en vertical, el ancho se usa entero.
+ *
+ * El estado vive fuera para que la vista recuerde donde estaba al volver.
+ */
 export const Pestanas = <T extends string>({
   opciones, puesta, alElegir,
 }: {
@@ -127,17 +135,17 @@ export const Pestanas = <T extends string>({
   puesta: T;
   alElegir: (id: T) => void;
 }) => (
-  <div className="flex gap-1 overflow-x-auto rounded-full border border-line bg-sur p-1">
+  <nav className="flex h-full w-[184px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-sur p-3">
     {opciones.map((o) => (
       <button
         key={o.id}
         onClick={() => alElegir(o.id)}
-        className={`shrink-0 rounded-full px-4 py-2 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] transition ${
-          puesta === o.id ? 'bg-acc text-[#06231a]' : 'text-ink3'
+        className={`rounded-lg px-3.5 py-2.5 text-left font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] transition ${
+          puesta === o.id ? 'bg-acc text-[#06231a]' : 'text-ink3 hover:bg-sur2 hover:text-ink2'
         }`}
       >
         {o.nombre}
       </button>
     ))}
-  </div>
+  </nav>
 );

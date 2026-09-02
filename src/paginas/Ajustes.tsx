@@ -292,9 +292,13 @@ export default function Ajustes() {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent style={{ '--background': 'var(--bg)' } as never}>
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 p-3.5 pb-10">
+      <IonContent scrollY={false} style={{ '--background': 'var(--bg)' } as never}>
+        <div className="flex h-full">
           <Pestanas opciones={PESTANAS} puesta={pestana} alElegir={setPestana} />
+
+          {/* El contenido se para en 900 px: una línea de texto de 1100 px de
+              ancho no se lee, se recorre. */}
+          <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 pb-12" style={{ maxWidth: 900 }}>
 
           {!hayHardware() && (
             <Aviso>
@@ -318,10 +322,10 @@ export default function Ajustes() {
                 </div>
               }
             >
-              <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-sur2 p-4">
+              <div className="flex flex-col gap-2.5 rounded-xl bg-sur2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="rotulo">¿No sabes dónde está conectado?</span>
-                  <Boton onClick={buscar} disabled={buscando}>
+                  <Boton variante="fuerte" onClick={buscar} disabled={buscando}>
                     {buscando ? 'Buscando…' : 'Buscar puertos'}
                   </Boton>
                 </div>
@@ -958,6 +962,7 @@ export default function Ajustes() {
           {eco && (
             <p className="m-0 text-center font-mono text-[11.5px] text-acc" role="status">{eco}</p>
           )}
+          </div>
         </div>
       </IonContent>
     </IonPage>
