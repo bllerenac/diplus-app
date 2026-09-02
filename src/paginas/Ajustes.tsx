@@ -1,22 +1,36 @@
 /**
- * Configuracion: de donde se lee, como se interpreta y que se enseña.
+ * Configuracion, en cuatro pestañas.
+ *
+ * Van separadas porque son cuatro decisiones distintas y en una sola columna
+ * habia que bajar mucho para llegar a lo de abajo. El orden es el que se sigue
+ * al montar un equipo: primero de donde se lee, luego que se ve, luego la
+ * posicion y por ultimo a donde se manda.
  *
  * Los formularios de cada protocolo **no estan escritos aqui**: se dibujan a
- * partir de los `campos` que declara el propio protocolo. Añadir un protocolo
- * nuevo no obliga a tocar esta pantalla.
+ * partir de los `campos` que el propio protocolo declara necesitar. Añadir un
+ * protocolo no obliga a tocar esta pantalla.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
   IonBackButton, IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
 } from '@ionic/react';
-import './Ajustes.css';
 
 import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config';
 import { Fuente, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
-import {
-  CampoProtocolo, PROTOCOLOS, SenalManual, defectosDe, protocolo, protocolosDe,
-} from '../nucleo/protocolos';
+import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
+import {
+  Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Pestanas, Selector, Vacio,
+} from './piezas';
+
+type Pestana = 'fuentes' | 'panel' | 'posicion' | 'servidor';
+
+const PESTANAS: { id: Pestana; nombre: string }[] = [
+  { id: 'fuentes', nombre: 'Fuentes' },
+  { id: 'panel', nombre: 'Panel' },
+  { id: 'posicion', nombre: 'Posición' },
+  { id: 'servidor', nombre: 'Servidor' },
+];
 
 const PUERTOS: { id: Fuente['puerto']; nombre: string }[] = [
   { id: 'rs485', nombre: 'RS485 (serie)' },
@@ -27,157 +41,133 @@ const PUERTOS: { id: Fuente['puerto']; nombre: string }[] = [
 const BAUDIOS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
 const BITRATES = [125000, 250000, 500000, 1000000];
 
-/* ── Piezas ───────────────────────────────────────────────────────────────── */
-
-const Bloque = ({ titulo, accion, children }: any) => (
-  <section className="aj-bloque">
-    <header className="aj-bloque__cab">
-      <span className="aj-rotulo">{titulo}</span>
-      {accion}
-    </header>
-    <div className="aj-bloque__cuerpo">{children}</div>
-  </section>
-);
-
-const Campo = ({ etiqueta, ayuda, children }: any) => (
-  <label className="aj-campo">
-    <span className="aj-campo__et">{etiqueta}</span>
-    {children}
-    {ayuda && <span className="aj-campo__ayuda">{ayuda}</span>}
-  </label>
-);
-
 /** Un campo dibujado a partir de lo que el protocolo declara necesitar. */
 function CampoDeclarado({
   campo, valor, alCambiar,
 }: {
   campo: CampoProtocolo;
-  valor: any;
-  alCambiar: (v: any) => void;
+  valor: unknown;
+  alCambiar: (v: string) => void;
 }) {
   if (campo.tipo === 'seleccion') {
     return (
       <Campo etiqueta={campo.etiqueta} ayuda={campo.ayuda}>
-        <select className="aj-entrada" value={valor ?? ''} onChange={(e) => alCambiar(e.target.value)}>
-          {(campo.opciones ?? []).map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
+        <Selector value={String(valor ?? '')} onChange={(e) => alCambiar(e.target.value)}>
+          {(campo.opciones ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+        </Selector>
       </Campo>
     );
   }
-
   return (
     <Campo etiqueta={campo.etiqueta} ayuda={campo.ayuda}>
-      <input
-        className="aj-entrada"
+      <Entrada
         type={campo.tipo === 'numero' ? 'number' : 'text'}
         min={campo.min}
         max={campo.max}
-        value={valor ?? ''}
+        value={String(valor ?? '')}
         onChange={(e) => alCambiar(e.target.value)}
       />
     </Campo>
   );
 }
 
-/** Editor de señales a mano: byte, tamaño, escala y unidad. */
-function EditorSenales({ lista, alCambiar }: { lista: SenalManual[]; alCambiar: (l: SenalManual[]) => void }) {
-  const cambiar = (i: number, k: keyof SenalManual, v: any) =>
+/** Editor de señales a mano: de qué byte sale cada valor y con qué escala. */
+function EditorSenales({
+  lista, alCambiar,
+}: {
+  lista: SenalManual[];
+  alCambiar: (l: SenalManual[]) => void;
+}) {
+  const cambiar = (i: number, k: keyof SenalManual, v: unknown) =>
     alCambiar(lista.map((s, j) => (j === i ? { ...s, [k]: v } : s)));
 
   return (
-    <div className="aj-senales">
+    <div className="flex flex-col gap-3">
       {lista.map((s, i) => (
-        <div className="aj-senal" key={i}>
-          <div className="aj-rejilla">
+        <div key={i} className="rounded-xl border border-line bg-bg p-3.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <Campo etiqueta="Clave">
-              <input className="aj-entrada" value={s.clave ?? ''} placeholder="presion"
+              <Entrada value={s.clave ?? ''} placeholder="presion"
                 onChange={(e) => cambiar(i, 'clave', e.target.value)} />
             </Campo>
             <Campo etiqueta="Nombre">
-              <input className="aj-entrada" value={s.nombre ?? ''} placeholder="Presión"
+              <Entrada value={s.nombre ?? ''} placeholder="Presión"
                 onChange={(e) => cambiar(i, 'nombre', e.target.value)} />
             </Campo>
             <Campo etiqueta="Unidad">
-              <input className="aj-entrada" value={s.unidad ?? ''} placeholder="bar"
+              <Entrada value={s.unidad ?? ''} placeholder="bar"
                 onChange={(e) => cambiar(i, 'unidad', e.target.value)} />
             </Campo>
             <Campo etiqueta="PGN" ayuda="Vacío = cualquiera">
-              <input className="aj-entrada" value={s.pgn ?? ''} placeholder="65262"
+              <Entrada value={String(s.pgn ?? '')} placeholder="65262"
                 onChange={(e) => cambiar(i, 'pgn', e.target.value)} />
             </Campo>
             <Campo etiqueta="Byte">
-              <input className="aj-entrada" type="number" min={0} value={s.desde ?? 0}
+              <Entrada type="number" min={0} value={s.desde ?? 0}
                 onChange={(e) => cambiar(i, 'desde', Number(e.target.value))} />
             </Campo>
             <Campo etiqueta="Tamaño">
-              <select className="aj-entrada" value={s.tipo ?? 'u16le'}
-                onChange={(e) => cambiar(i, 'tipo', e.target.value)}>
+              <Selector value={s.tipo ?? 'u16le'} onChange={(e) => cambiar(i, 'tipo', e.target.value)}>
                 {TIPOS_LECTURA.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </Selector>
             </Campo>
             <Campo etiqueta="Escala">
-              <input className="aj-entrada" value={s.escala ?? 1}
-                onChange={(e) => cambiar(i, 'escala', e.target.value)} />
+              <Entrada value={String(s.escala ?? 1)} onChange={(e) => cambiar(i, 'escala', e.target.value)} />
             </Campo>
             <Campo etiqueta="Desplazamiento">
-              <input className="aj-entrada" value={s.desplazamiento ?? 0}
+              <Entrada value={String(s.desplazamiento ?? 0)}
                 onChange={(e) => cambiar(i, 'desplazamiento', e.target.value)} />
             </Campo>
           </div>
-          <div className="aj-senal__pie">
-            <span className="aj-nota">valor = (crudo × {s.escala ?? 1}) + {s.desplazamiento ?? 0}</span>
-            <button className="aj-btn aj-btn--peligro" onClick={() => alCambiar(lista.filter((_, j) => j !== i))}>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Nota>valor = (crudo × {String(s.escala ?? 1)}) + {String(s.desplazamiento ?? 0)}</Nota>
+            <Boton variante="peligro" onClick={() => alCambiar(lista.filter((_, j) => j !== i))}>
               Quitar
-            </button>
+            </Boton>
           </div>
         </div>
       ))}
-      <button
-        className="aj-btn"
+      <Boton
         onClick={() => alCambiar([...lista, {
           clave: '', nombre: '', unidad: '', desde: 0, tipo: 'u16le', escala: 1, desplazamiento: 0,
         }])}
+        className="self-start"
       >
         Añadir señal
-      </button>
+      </Boton>
     </div>
   );
 }
 
-/* ── Pantalla ─────────────────────────────────────────────────────────────── */
-
 export default function Ajustes() {
   const [cfg, setCfg] = useState<Config>({ ...cargar() });
+  const [pestana, setPestana] = useState<Pestana>('fuentes');
   const [avanzado, setAvanzado] = useState(false);
-  const [vistas, setVistas] = useState<Map<string, { nombre: string; unidad: string }>>(new Map());
+  const [vistas, setVistas] = useState<Map<string, { nombre: string; unidad: string }>>(() => {
+    const m = new Map<string, { nombre: string; unidad: string }>();
+    for (const s of hardware.senales()) m.set(s.clave, { nombre: s.nombre, unidad: s.unidad });
+    return m;
+  });
   const [eco, setEco] = useState<string | null>(null);
 
-  /* Lo que esta llegando ahora, para poder elegirlo sin escribir claves a mano. */
-  useEffect(() => {
-    for (const s of hardware.senales()) {
-      vistas.set(s.clave, { nombre: s.nombre, unidad: s.unidad });
-    }
-    return hardware.alRecibir((t: TramaVista) => {
+  useEffect(() =>
+    hardware.alRecibir((t: TramaVista) => {
       setVistas((prev) => {
         const m = new Map(prev);
         for (const s of t.senales) m.set(`${t.fuenteId}.${s.clave}`, { nombre: s.nombre, unidad: s.unidad });
         return m;
       });
-    });
-  }, []);
+    }), []);
 
   const aplicar = (c: Config) => {
     setCfg(c);
     guardar(c);
     setEco(`Guardado a las ${new Date().toLocaleTimeString('es-PE')}`);
-    setTimeout(() => setEco(null), 3000);
+    setTimeout(() => setEco(null), 2500);
   };
 
   const cambiarFuente = (i: number, f: Fuente) => {
-    const fuentes = cfg.fuentes.map((x, j) => (j === i ? f : x));
-    aplicar({ ...cfg, fuentes });
+    aplicar({ ...cfg, fuentes: cfg.fuentes.map((x, j) => (j === i ? f : x)) });
     hardware.arrancar(f).catch(() => undefined);
   };
 
@@ -188,245 +178,282 @@ export default function Ajustes() {
 
   return (
     <IonPage>
-      <IonHeader>
-        <IonToolbar className="aj-toolbar">
+      <IonHeader className="ion-no-border">
+        <IonToolbar style={{ '--background': 'var(--sur)', '--border-width': '0' } as never}>
           <IonButtons slot="start"><IonBackButton defaultHref="/" text="" /></IonButtons>
-          <IonTitle>Configuración</IonTitle>
+          <IonTitle className="font-titulo text-[16px] font-bold">Configuración</IonTitle>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent className="aj-contenido">
-        {!hayHardware() && (
-          <p className="aj-aviso">
-            Estás fuera del equipo: se puede configurar todo, pero los puertos no existen
-            aquí y no llegará ninguna lectura.
-          </p>
-        )}
+      <IonContent style={{ '--background': 'var(--bg)' } as never}>
+        <div className="mx-auto flex max-w-3xl flex-col gap-4 p-3.5 pb-10">
+          <Pestanas opciones={PESTANAS} puesta={pestana} alElegir={setPestana} />
 
-        {/* ── Fuentes ──────────────────────────────────────────────────── */}
-        <Bloque
-          titulo="De dónde se lee"
-          accion={
-            <div className="aj-acciones">
-              <button className="aj-btn" onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('rs485')] })}>
-                + RS485
-              </button>
-              <button className="aj-btn" onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('can1')] })}>
-                + CAN
-              </button>
-            </div>
-          }
-        >
-          {cfg.fuentes.length === 0 && (
-            <p className="aj-vacio">
-              Todavía no hay ninguna fuente. Añade el RS485 por donde llega el HelperBox,
-              o el bus CAN si lees los sensores directamente.
-            </p>
+          {!hayHardware() && (
+            <Aviso>
+              Estás fuera del equipo: se puede configurar todo, pero los puertos no existen aquí
+              y no llegará ninguna lectura.
+            </Aviso>
           )}
 
-          {cfg.fuentes.map((f, i) => {
-            const proto = protocolo(f.protocoloId);
-            const esSerie = f.puerto === 'rs485';
-
-            return (
-              <div className="aj-fuente" key={f.id}>
-                <div className="aj-rejilla">
-                  <Campo etiqueta="Nombre">
-                    <input className="aj-entrada" value={f.nombre}
-                      onChange={(e) => cambiarFuente(i, { ...f, nombre: e.target.value })} />
-                  </Campo>
-                  <Campo etiqueta="Puerto">
-                    <select className="aj-entrada" value={f.puerto}
-                      onChange={(e) => {
-                        const puerto = e.target.value as Fuente['puerto'];
-                        const lista = protocolosDe(puerto === 'rs485' ? 'serie' : 'can');
-                        const nuevo = lista[0];
-                        cambiarFuente(i, { ...f, puerto, protocoloId: nuevo.id, config: defectosDe(nuevo) });
-                      }}>
-                      {PUERTOS.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
-                  </Campo>
-
-                  {esSerie ? (
-                    <>
-                      <Campo etiqueta="Dispositivo">
-                        <input className="aj-entrada" value={f.ruta}
-                          onChange={(e) => cambiarFuente(i, { ...f, ruta: e.target.value })} />
-                      </Campo>
-                      <Campo etiqueta="Baudios">
-                        <select className="aj-entrada" value={f.baudios}
-                          onChange={(e) => cambiarFuente(i, { ...f, baudios: Number(e.target.value) })}>
-                          {BAUDIOS.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      </Campo>
-                    </>
-                  ) : (
-                    <Campo etiqueta="Bitrate del bus">
-                      <select className="aj-entrada" value={f.bitrate}
-                        onChange={(e) => cambiarFuente(i, { ...f, bitrate: Number(e.target.value) })}>
-                        {BITRATES.map((b) => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </Campo>
-                  )}
-
-                  <Campo etiqueta="Qué habla por ahí">
-                    <select className="aj-entrada" value={f.protocoloId}
-                      onChange={(e) => {
-                        const p = protocolo(e.target.value);
-                        cambiarFuente(i, { ...f, protocoloId: p.id, config: defectosDe(p) });
-                      }}>
-                      {protocolosDe(esSerie ? 'serie' : 'can').map((p) => (
-                        <option key={p.id} value={p.id}>{p.nombre}</option>
-                      ))}
-                    </select>
-                  </Campo>
+          {/* ── Fuentes ────────────────────────────────────────────────── */}
+          {pestana === 'fuentes' && (
+            <Bloque
+              titulo="De dónde se lee"
+              accion={
+                <div className="flex gap-2">
+                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('rs485')] })}>
+                    + RS485
+                  </Boton>
+                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('can1')] })}>
+                    + CAN
+                  </Boton>
                 </div>
+              }
+            >
+              {cfg.fuentes.length === 0 && (
+                <Vacio>
+                  Todavía no hay ninguna fuente. Añade el RS485 por donde llega el HelperBox,
+                  o el bus CAN si lees los sensores directamente.
+                </Vacio>
+              )}
 
-                <p className="aj-nota">{proto.descripcion}</p>
+              {cfg.fuentes.map((f, i) => {
+                const proto = protocolo(f.protocoloId);
+                const esSerie = f.puerto === 'rs485';
 
-                {/* Los campos del protocolo, dibujados desde su definición. */}
-                <div className="aj-rejilla">
-                  {proto.campos
-                    .filter((c) => c.tipo !== 'senales' && (avanzado || !c.avanzado))
-                    .map((c) => (
-                      <CampoDeclarado
-                        key={c.clave}
-                        campo={c}
-                        valor={f.config[c.clave]}
-                        alCambiar={(v) => cambiarFuente(i, { ...f, config: { ...f.config, [c.clave]: v } })}
-                      />
-                    ))}
-                </div>
-
-                {proto.campos.filter((c) => c.tipo === 'senales').map((c) => (
-                  <div key={c.clave}>
-                    <span className="aj-rotulo">{c.etiqueta}</span>
-                    <p className="aj-nota">{c.ayuda}</p>
-                    <EditorSenales
-                      lista={(f.config[c.clave] as SenalManual[]) ?? []}
-                      alCambiar={(l) => cambiarFuente(i, { ...f, config: { ...f.config, [c.clave]: l } })}
-                    />
-                  </div>
-                ))}
-
-                <div className="aj-fuente__pie">
-                  <label className="aj-check">
-                    <input type="checkbox" checked={f.activa}
-                      onChange={(e) => cambiarFuente(i, { ...f, activa: e.target.checked })} />
-                    Leer de esta fuente
-                  </label>
-                  <button
-                    className="aj-btn aj-btn--peligro"
-                    onClick={() => {
-                      hardware.quitar(f.id);
-                      aplicar({ ...cfg, fuentes: cfg.fuentes.filter((_, j) => j !== i) });
-                    }}
-                  >
-                    Quitar fuente
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {PROTOCOLOS.some((p) => p.campos.some((c) => c.avanzado)) && (
-            <label className="aj-check">
-              <input type="checkbox" checked={avanzado} onChange={(e) => setAvanzado(e.target.checked)} />
-              Mostrar los valores del manual del fabricante
-            </label>
-          )}
-        </Bloque>
-
-        {/* ── Panel ────────────────────────────────────────────────────── */}
-        <Bloque titulo="Qué se ve en la pantalla principal">
-          <p className="aj-nota">
-            Se pulsan las señales que van al panel de la derecha, en el orden en que se pulsan.
-            Sin elegir ninguna se enseña todo lo que llegue.
-          </p>
-
-          {disponibles.length === 0 ? (
-            <p className="aj-vacio">
-              Todavía no ha llegado ninguna señal. En cuanto el equipo lea algo, aparece aquí
-              para poder elegirla.
-            </p>
-          ) : (
-            <div className="aj-fichas">
-              {disponibles.map(([clave, s]) => {
-                const puesta = cfg.panel.includes(clave);
                 return (
-                  <button
-                    key={clave}
-                    className={`aj-ficha ${puesta ? 'puesta' : ''}`}
-                    onClick={() =>
-                      aplicar({
-                        ...cfg,
-                        panel: puesta ? cfg.panel.filter((c) => c !== clave) : [...cfg.panel, clave],
-                      })
-                    }
-                  >
-                    {s.nombre}
-                    {s.unidad && <em>{s.unidad}</em>}
-                  </button>
+                  <div key={f.id} className="flex flex-col gap-3.5 rounded-xl border border-line bg-sur2 p-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Campo etiqueta="Nombre">
+                        <Entrada value={f.nombre} onChange={(e) => cambiarFuente(i, { ...f, nombre: e.target.value })} />
+                      </Campo>
+                      <Campo etiqueta="Puerto">
+                        <Selector
+                          value={f.puerto}
+                          onChange={(e) => {
+                            const puerto = e.target.value as Fuente['puerto'];
+                            const nuevo = protocolosDe(puerto === 'rs485' ? 'serie' : 'can')[0];
+                            cambiarFuente(i, { ...f, puerto, protocoloId: nuevo.id, config: defectosDe(nuevo) });
+                          }}
+                        >
+                          {PUERTOS.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        </Selector>
+                      </Campo>
+
+                      {esSerie ? (
+                        <>
+                          <Campo etiqueta="Dispositivo">
+                            <Entrada value={f.ruta} onChange={(e) => cambiarFuente(i, { ...f, ruta: e.target.value })} />
+                          </Campo>
+                          <Campo etiqueta="Baudios">
+                            <Selector value={f.baudios}
+                              onChange={(e) => cambiarFuente(i, { ...f, baudios: Number(e.target.value) })}>
+                              {BAUDIOS.map((b) => <option key={b} value={b}>{b}</option>)}
+                            </Selector>
+                          </Campo>
+                        </>
+                      ) : (
+                        <Campo etiqueta="Bitrate del bus">
+                          <Selector value={f.bitrate}
+                            onChange={(e) => cambiarFuente(i, { ...f, bitrate: Number(e.target.value) })}>
+                            {BITRATES.map((b) => <option key={b} value={b}>{b}</option>)}
+                          </Selector>
+                        </Campo>
+                      )}
+
+                      <Campo etiqueta="Qué habla por ahí">
+                        <Selector
+                          value={f.protocoloId}
+                          onChange={(e) => {
+                            const p = protocolo(e.target.value);
+                            cambiarFuente(i, { ...f, protocoloId: p.id, config: defectosDe(p) });
+                          }}
+                        >
+                          {protocolosDe(esSerie ? 'serie' : 'can').map((p) => (
+                            <option key={p.id} value={p.id}>{p.nombre}</option>
+                          ))}
+                        </Selector>
+                      </Campo>
+                    </div>
+
+                    <Nota>{proto.descripcion}</Nota>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {proto.campos
+                        .filter((c) => c.tipo !== 'senales' && (avanzado || !c.avanzado))
+                        .map((c) => (
+                          <CampoDeclarado
+                            key={c.clave}
+                            campo={c}
+                            valor={f.config[c.clave]}
+                            alCambiar={(v) => cambiarFuente(i, { ...f, config: { ...f.config, [c.clave]: v } })}
+                          />
+                        ))}
+                    </div>
+
+                    {proto.campos.filter((c) => c.tipo === 'senales').map((c) => (
+                      <div key={c.clave} className="flex flex-col gap-2">
+                        <span className="rotulo">{c.etiqueta}</span>
+                        <Nota>{c.ayuda}</Nota>
+                        <EditorSenales
+                          lista={(f.config[c.clave] as SenalManual[]) ?? []}
+                          alCambiar={(l) => cambiarFuente(i, { ...f, config: { ...f.config, [c.clave]: l } })}
+                        />
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-between gap-3 border-t border-line pt-3.5">
+                      <Interruptor
+                        activo={f.activa}
+                        alCambiar={(v) => cambiarFuente(i, { ...f, activa: v })}
+                        etiqueta="Leer de esta fuente"
+                      />
+                      <Boton
+                        variante="peligro"
+                        onClick={() => {
+                          hardware.quitar(f.id);
+                          aplicar({ ...cfg, fuentes: cfg.fuentes.filter((_, j) => j !== i) });
+                        }}
+                      >
+                        Quitar
+                      </Boton>
+                    </div>
+                  </div>
                 );
               })}
-            </div>
+
+              {cfg.fuentes.length > 0 && (
+                <Interruptor
+                  activo={avanzado}
+                  alCambiar={setAvanzado}
+                  etiqueta="Mostrar los valores del manual del fabricante"
+                />
+              )}
+            </Bloque>
           )}
-        </Bloque>
 
-        {/* ── GPS ──────────────────────────────────────────────────────── */}
-        <Bloque titulo="GPS y RTK">
-          <div className="aj-rejilla">
-            <Campo etiqueta="Dispositivo del GPS">
-              <input className="aj-entrada" value={cfg.gps.ruta}
-                onChange={(e) => aplicar({ ...cfg, gps: { ...cfg.gps, ruta: e.target.value } })} />
-            </Campo>
-          </div>
-          <label className="aj-check">
-            <input type="checkbox" checked={cfg.gps.activo}
-              onChange={(e) => aplicar({ ...cfg, gps: { ...cfg.gps, activo: e.target.checked } })} />
-            Leer la posición
-          </label>
-          <p className="aj-nota">
-            La calidad sale de la sentencia GGA del propio receptor. <b>RTK fijo</b> son unos
-            2 cm; <b>GPS autónomo</b>, varios metros. La pantalla principal lo enseña siempre,
-            porque no es lo mismo y de lejos se confunde.
-          </p>
-        </Bloque>
+          {/* ── Panel ──────────────────────────────────────────────────── */}
+          {pestana === 'panel' && (
+            <Bloque titulo="Qué se ve en la pantalla principal">
+              <Nota>
+                Se pulsan las señales que van al panel de la derecha, en el orden en que se
+                pulsan. Sin elegir ninguna se enseña todo lo que llegue.
+              </Nota>
 
-        {/* ── Servidor ─────────────────────────────────────────────────── */}
-        <Bloque titulo="Servidor">
-          <p className="aj-nota">
-            Para mandar lo leído y traer lo que haga falta. Si el equipo se queda sin red,
-            sigue leyendo y midiendo igual: esto no es imprescindible para trabajar.
-          </p>
+              {disponibles.length === 0 ? (
+                <Vacio>
+                  Todavía no ha llegado ninguna señal. En cuanto el equipo lea algo, aparece
+                  aquí para poder elegirla.
+                </Vacio>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {disponibles.map(([clave, s]) => {
+                    const puesta = cfg.panel.includes(clave);
+                    return (
+                      <button
+                        key={clave}
+                        onClick={() =>
+                          aplicar({
+                            ...cfg,
+                            panel: puesta ? cfg.panel.filter((c) => c !== clave) : [...cfg.panel, clave],
+                          })
+                        }
+                        className={`rounded-full border px-3.5 py-2 text-[12px] transition ${
+                          puesta ? 'border-acc bg-acc/10 text-acc' : 'border-line2 text-ink2'
+                        }`}
+                      >
+                        {s.nombre}
+                        {s.unidad && <em className="ml-1.5 font-mono text-[10.5px] not-italic opacity-60">{s.unidad}</em>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-          <div className="aj-rejilla">
-            <Campo etiqueta="Dirección" ayuda="Por ejemplo https://marcobre-back.diplus.io/api">
-              <input className="aj-entrada" value={cfg.servidor.url} placeholder="https://…"
-                onChange={(e) => cambiarServidor({ url: e.target.value })} />
-            </Campo>
-            <Campo etiqueta="Nombre de este equipo" ayuda="Con qué nombre aparece allá.">
-              <input className="aj-entrada" value={cfg.servidor.equipo} placeholder="CA-14"
-                onChange={(e) => cambiarServidor({ equipo: e.target.value })} />
-            </Campo>
-            <Campo etiqueta="Token">
-              <input className="aj-entrada" type="password" value={cfg.servidor.token}
-                onChange={(e) => cambiarServidor({ token: e.target.value })} />
-            </Campo>
-            <Campo etiqueta="Mandar cada (s)">
-              <input className="aj-entrada" type="number" min={5} value={cfg.servidor.cadaSeg}
-                onChange={(e) => cambiarServidor({ cadaSeg: Number(e.target.value) })} />
-            </Campo>
-          </div>
+              {cfg.panel.length > 0 && (
+                <div className="rounded-xl border border-line bg-bg px-3.5 py-2.5">
+                  <p className="rotulo mb-1">Orden en el que se ven</p>
+                  <p className="m-0 font-mono text-[11.5px] text-ink2">{cfg.panel.join(' · ')}</p>
+                </div>
+              )}
+            </Bloque>
+          )}
 
-          <label className="aj-check">
-            <input type="checkbox" checked={cfg.servidor.activo}
-              onChange={(e) => cambiarServidor({ activo: e.target.checked })} />
-            Hablar con el servidor
-          </label>
-        </Bloque>
+          {/* ── Posición ───────────────────────────────────────────────── */}
+          {pestana === 'posicion' && (
+            <Bloque titulo="GPS y RTK">
+              <Campo etiqueta="Dispositivo del receptor">
+                <Entrada
+                  value={cfg.gps.ruta}
+                  onChange={(e) => aplicar({ ...cfg, gps: { ...cfg.gps, ruta: e.target.value } })}
+                />
+              </Campo>
 
-        {eco && <p className="aj-eco">{eco}</p>}
+              <Interruptor
+                activo={cfg.gps.activo}
+                alCambiar={(v) => aplicar({ ...cfg, gps: { ...cfg.gps, activo: v } })}
+                etiqueta="Leer la posición"
+              />
+
+              <Nota>
+                La calidad sale de la sentencia GGA del propio receptor. <b className="text-ink2">RTK
+                fijo</b> son unos 2 cm; <b className="text-ink2">GPS autónomo</b>, varios metros.
+                La pantalla principal lo enseña siempre, porque no es lo mismo y de lejos se confunde.
+              </Nota>
+
+              <Aviso>
+                Si no hay posición, lo primero es la antena. El RTK no <i>da</i> la posición: afina
+                una que el receptor ya tiene con satélites. Sin satélites no hay posición, con
+                correcciones o sin ellas.
+              </Aviso>
+            </Bloque>
+          )}
+
+          {/* ── Servidor ───────────────────────────────────────────────── */}
+          {pestana === 'servidor' && (
+            <Bloque titulo="Servidor">
+              <Nota>
+                Para mandar lo leído y traer lo que haga falta. Si el equipo se queda sin red,
+                sigue leyendo y midiendo igual: esto no es imprescindible para trabajar.
+              </Nota>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo etiqueta="Dirección" ayuda="Por ejemplo https://marcobre-back.diplus.io/api">
+                  <Entrada value={cfg.servidor.url} placeholder="https://…"
+                    onChange={(e) => cambiarServidor({ url: e.target.value })} />
+                </Campo>
+                <Campo etiqueta="Nombre de este equipo" ayuda="Con qué nombre aparece allá.">
+                  <Entrada value={cfg.servidor.equipo} placeholder="CA-14"
+                    onChange={(e) => cambiarServidor({ equipo: e.target.value })} />
+                </Campo>
+                <Campo etiqueta="Token">
+                  <Entrada type="password" value={cfg.servidor.token}
+                    onChange={(e) => cambiarServidor({ token: e.target.value })} />
+                </Campo>
+                <Campo etiqueta="Mandar cada (s)">
+                  <Entrada type="number" min={5} value={cfg.servidor.cadaSeg}
+                    onChange={(e) => cambiarServidor({ cadaSeg: Number(e.target.value) })} />
+                </Campo>
+              </div>
+
+              <Interruptor
+                activo={cfg.servidor.activo}
+                alCambiar={(v) => cambiarServidor({ activo: v })}
+                etiqueta="Hablar con el servidor"
+              />
+
+              <Aviso tono="warn">
+                El envío todavía no está hecho: la configuración se guarda, pero de momento no
+                sale nada hacia el servidor.
+              </Aviso>
+            </Bloque>
+          )}
+
+          {eco && (
+            <p className="m-0 text-center font-mono text-[11.5px] text-acc" role="status">{eco}</p>
+          )}
+        </div>
       </IonContent>
     </IonPage>
   );
