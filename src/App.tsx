@@ -17,6 +17,8 @@ import '@ionic/react/css/display.css';
 /* Sin tema claro: esto se mira en una cabina. */
 import '@ionic/react/css/palettes/dark.always.css';
 import './theme/variables.css';
+/* La paleta y las tipografias, una sola vez y para toda la aplicacion. */
+import './theme/diplus.css';
 
 setupIonicReact({ mode: 'md' });
 

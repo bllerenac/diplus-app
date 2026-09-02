@@ -17,8 +17,17 @@ import { Posicion, calidad, gps, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { Senal } from '../nucleo/lecturas';
 
-/** Sin señal, el mapa arranca sobre la mina en vez de en mitad del oceano. */
-const INICIO: [number, number] = [-15.4, -75.1];
+/**
+ * Sin posicion no se pinta ninguna.
+ *
+ * El mapa arranca alejado sobre el pais y **la flecha no aparece hasta que hay
+ * fix de verdad**. Poner un punto por defecto es lo que hacia la version
+ * anterior —unas coordenadas fijas de Lima— y es peor que no ensenar nada: una
+ * posicion inventada no se distingue de una buena, y quien la mire va a creer
+ * que sabe donde esta la maquina.
+ */
+const VISTA_SIN_FIX: [number, number] = [-9.2, -75.0];
+const ZOOM_SIN_FIX = 5;
 
 const flechaDe = (rumbo: number) =>
   L.divIcon({
@@ -54,8 +63,8 @@ export default function Navegacion() {
     if (!divMapa.current || mapa.current) return;
 
     const m = L.map(divMapa.current, {
-      center: INICIO,
-      zoom: 16,
+      center: VISTA_SIN_FIX,
+      zoom: ZOOM_SIN_FIX,
       zoomControl: false,
       attributionControl: true,
     });
@@ -66,7 +75,6 @@ export default function Navegacion() {
     }).addTo(m);
 
     traza.current = L.polyline([], { color: '#2ee6b0', weight: 3, opacity: 0.55 }).addTo(m);
-    marca.current = L.marker(INICIO, { icon: flechaDe(0) }).addTo(m);
 
     /* Si el usuario arrastra el mapa, deja de seguirle la pista: estara mirando
        otra cosa a proposito. */
@@ -89,6 +97,12 @@ export default function Navegacion() {
     return gps.alMoverse((p) => {
       setPos(p);
       const punto: [number, number] = [p.lat, p.lon];
+
+      /* La flecha nace con la primera posicion buena, no antes. */
+      if (!marca.current && mapa.current) {
+        marca.current = L.marker(punto, { icon: flechaDe(p.rumbo) }).addTo(mapa.current);
+        mapa.current.setView(punto, 17);
+      }
       marca.current?.setLatLng(punto);
       marca.current?.setIcon(flechaDe(p.rumbo));
       traza.current?.setLatLngs(gps.camino());
@@ -204,13 +218,27 @@ export default function Navegacion() {
           </button>
         </div>
 
-        <div className="nav-velocidad">
-          <b>{velocidad}</b>
-          <span>KM/H</span>
-        </div>
-        <span className="nav-precision">
-          {pos ? `${cal.nombre} · ${precisionAproximada(pos.calidad, pos.hdop)}` : 'esperando posición'}
-        </span>
+        {!pos && (
+          <div className="nav-sinfix">
+            <b>Sin posición</b>
+            <span>
+              El receptor está buscando satélites. Hasta que enganche no se pinta
+              ninguna ubicación: una posición inventada no se distingue de una buena.
+            </span>
+          </div>
+        )}
+
+        {pos && (
+          <div className="nav-velocidad">
+            <b>{velocidad}</b>
+            <span>KM/H</span>
+          </div>
+        )}
+        {pos && (
+          <span className="nav-precision">
+            {cal.nombre} · {precisionAproximada(pos.calidad, pos.hdop)}
+          </span>
+        )}
 
         <aside className={`nav-panel ${panelAbierto ? '' : 'oculto'}`}>
           <div className="nav-panel__cab">

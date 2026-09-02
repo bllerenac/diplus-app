@@ -1,0 +1,94 @@
+/*
+ * Base de la aplicacion: tipografias, paleta y los ajustes de Ionic.
+ *
+ * Esto se carga una sola vez desde `App.tsx`. Antes cada pantalla traia sus
+ * propias variables, asi que al entrar en Configuracion o en el Monitor —que no
+ * cargan el CSS del mapa— se quedaban sin paleta y sin tipografia, y todo salia
+ * descuadrado. Los tokens tienen que ser globales o no son tokens.
+ */
+
+/* Las tipografias van empaquetadas, no por CDN: esto corre en una cabina y
+   puede no haber internet. Solo el alfabeto latino y los pesos que se usan. */
+@import "@fontsource-variable/archivo/wght.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+
+:root {
+  --bg: #070c10;
+  --sur: #0d151b;
+  --sur2: #121d24;
+  --sur3: #18242d;
+  --line: #1f2e37;
+  --line2: #2f4450;
+  --ink: #eef6f8;
+  --ink2: #8fa6b1;
+  --ink3: #597079;
+  --acc: #2ee6b0;
+  --acc2: #ff6b4a;
+  --ok: #2ee6b0;
+  --warn: #ffb347;
+  --bad: #ff5c47;
+  --glowa: rgba(46, 230, 176, 0.35);
+
+  --titulo: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --texto: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", "Roboto Mono", Consolas, monospace;
+
+  /* Ionic pinta su propio fondo por debajo; sin esto se cuela un blanco. */
+  --ion-background-color: #070c10;
+  --ion-text-color: #eef6f8;
+  --ion-font-family: var(--texto);
+  --ion-toolbar-background: #0d151b;
+  --ion-toolbar-color: #eef6f8;
+  --ion-item-background: #0d151b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--texto);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Un panel industrial no se selecciona ni rebota como una pagina web. */
+body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }
+
+h1, h2, h3, .titulo { font-family: var(--titulo); letter-spacing: -0.01em; }
+.mono { font-family: var(--mono); }
+
+/* Nada de resaltado azul al tocar: aqui todo se toca con guantes. */
+* { -webkit-tap-highlight-color: transparent; }
+
+button { font-family: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: 99px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

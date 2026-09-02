@@ -1,25 +1,8 @@
 /*
- * Paleta de D+, la misma que el resto de la plataforma, hex a hex.
- * Sin tema claro: esto se mira en una cabina, a pleno sol o de noche.
+ * Pantalla de navegacion. La paleta y las tipografias vienen del tema global
+ * (src/theme/diplus.css); aqui solo va lo propio de esta vista.
  */
-:root {
-  --bg: #070c10;
-  --sur: #0d151b;
-  --sur2: #121d24;
-  --line: #1f2e37;
-  --line2: #2f4450;
-  --ink: #eef6f8;
-  --ink2: #8fa6b1;
-  --ink3: #597079;
-  --acc: #2ee6b0;
-  --acc2: #ff6b4a;
-  --warn: #ffb347;
-  --bad: #ff5c47;
-  --glowa: rgba(46, 230, 176, 0.35);
 
-  --titulo: "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --mono: "IBM Plex Mono", Consolas, monospace;
-}
 
 .nav-pantalla {
   position: relative;
@@ -276,4 +259,36 @@
 @media (max-width: 640px) {
   .nav-velocidad b { font-size: 32px; }
   .nav-panel { width: 78vw; }
+}
+
+/* Mientras no hay fix. Ocupa el centro a proposito: es lo unico que se puede
+   decir con certeza en ese momento, y hay que decirlo en vez de dejar un mapa
+   quieto que parece estar ensenando algo. */
+.nav-sinfix {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 400;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 300px;
+  padding: 18px 22px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: rgba(13, 21, 27, 0.94);
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+.nav-sinfix b {
+  font-family: var(--titulo);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--warn);
+}
+.nav-sinfix span {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink3);
 }
