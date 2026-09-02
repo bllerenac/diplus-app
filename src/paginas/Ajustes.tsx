@@ -23,6 +23,9 @@ import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, vista } from '../nucleo/panel';
 import {
+  Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
+} from '../nucleo/actualizacion';
+import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
 
@@ -213,6 +216,43 @@ export default function Ajustes() {
   const cambiarServidor = (s: Partial<Servidor>) =>
     aplicar({ ...cfg, servidor: { ...cfg.servidor, ...s } });
 
+  /* ── Actualización de la aplicación ───────────────────────────────────── */
+  const [instalada, setInstalada] = useState<VersionInstalada | null>(null);
+  const [bajada, setBajada] = useState<Descarga | null>(null);
+  const [bajando, setBajando] = useState(false);
+  const [avance, setAvance] = useState(0);
+  const [avanceTotal, setAvanceTotal] = useState(0);
+
+  useEffect(() => {
+    if (!hayActualizador()) return;
+    actualizador.version().then(setInstalada).catch(() => undefined);
+  }, []);
+
+  const avisoUrl = cfg.actualizacion.url.trim() ? reparo(cfg.actualizacion.url) : null;
+
+  const buscarActualizacion = async () => {
+    if (!hayActualizador()) {
+      setEco('Actualizar solo funciona en el equipo.');
+      return;
+    }
+    setBajando(true);
+    setBajada(null);
+    setAvance(0);
+    setAvanceTotal(0);
+    try {
+      const d = await actualizador.descargar(cfg.actualizacion.url, (bytes, total) => {
+        setAvance(bytes);
+        setAvanceTotal(total);
+      });
+      setBajada(d);
+      /* El permiso puede haberse concedido entre medias. */
+      actualizador.version().then(setInstalada).catch(() => undefined);
+    } catch (e) {
+      setEco(String((e as Error).message ?? e));
+    } finally {
+      setBajando(false);
+    }
+  };
   const cambiarPanel = (panel: Config['panel']) => aplicar({ ...cfg, panel });
 
   const cambiarTarjeta = (id: string, cambio: Partial<Tarjeta>) =>
@@ -783,6 +823,7 @@ export default function Ajustes() {
 
           {/* ── Servidor ───────────────────────────────────────────────── */}
           {pestana === 'servidor' && (
+            <>
             <Bloque titulo="Servidor">
               <Nota>
                 Para mandar lo leído y traer lo que haga falta. Si el equipo se queda sin red,
@@ -819,6 +860,99 @@ export default function Ajustes() {
                 sale nada hacia el servidor.
               </Aviso>
             </Bloque>
+
+              <Bloque titulo="Actualizar la aplicación">
+                <Nota>
+                  El equipo se baja el APK de donde le digas y abre el instalador de Android.
+                  Sin Google Play y sin cable. El último paso —pulsar «Instalar»— lo da una
+                  persona delante de la máquina: para que entre sola haría falta quitarle la
+                  cuenta de Google al equipo.
+                </Nota>
+
+                <Campo etiqueta="Dirección del APK">
+                  <Entrada
+                    value={cfg.actualizacion.url}
+                    placeholder="https://…/diplus.apk"
+                    onChange={(e) => aplicar({ ...cfg, actualizacion: { url: e.target.value } })}
+                  />
+                </Campo>
+
+                {/* Vale el enlace de compartir de Drive tal cual: se traduce al de
+                    descarga directa al pulsar, porque el de compartir devuelve una
+                    página web y es el error que va a cometer todo el mundo. */}
+                {cfg.actualizacion.url.includes('drive.google.com') && (
+                  <p className="m-0 font-mono text-[10.5px] leading-relaxed text-ink3">
+                    Se pedirá como {arreglarDireccion(cfg.actualizacion.url)}
+                  </p>
+                )}
+
+                {avisoUrl && <Aviso tono="warn">{avisoUrl}</Aviso>}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Boton
+                    variante="fuerte"
+                    disabled={bajando || !cfg.actualizacion.url.trim()}
+                    onClick={buscarActualizacion}
+                  >
+                    {bajando ? 'Bajando…' : 'Buscar actualización'}
+                  </Boton>
+
+                  {instalada && (
+                    <span className="font-mono text-[11.5px] text-ink3">
+                      instalada {instalada.versionName} ({instalada.versionCode})
+                    </span>
+                  )}
+                </div>
+
+                {bajando && avance > 0 && (
+                  <p className="m-0 font-mono text-[11.5px] text-ink2">
+                    {(avance / 1048576).toFixed(1)} MB
+                    {avanceTotal > 0 && ` de ${(avanceTotal / 1048576).toFixed(1)} MB`}
+                  </p>
+                )}
+
+                {bajada && instalada && (
+                  <div className="rounded-xl border border-acc/40 bg-acc/10 px-3.5 py-3">
+                    <p className="m-0 font-mono text-[12.5px] text-acc">
+                      {bajada.versionName} ({bajada.versionCode}) ·{' '}
+                      {(bajada.bytes / 1048576).toFixed(1)} MB
+                    </p>
+
+                    <p className="m-0 mt-1 text-[11.5px] leading-relaxed text-ink2">
+                      {esMasNueva(bajada.versionCode, instalada.versionCode)
+                        ? 'Es más nueva que la instalada.'
+                        : bajada.versionCode === instalada.versionCode
+                          ? 'Es la misma que ya está puesta. Instalarla no cambia nada.'
+                          : 'Es más vieja que la instalada, y Android no deja instalar hacia atrás: ' +
+                            'primero habría que desinstalar, y eso se lleva la base de datos por delante.'}
+                    </p>
+
+                    <div className="mt-2.5">
+                      <Boton
+                        variante="fuerte"
+                        disabled={!esMasNueva(bajada.versionCode, instalada.versionCode)}
+                        onClick={async () => {
+                          try {
+                            await actualizador.instalar(bajada.ruta);
+                          } catch (e) {
+                            setEco(String((e as Error).message ?? e));
+                          }
+                        }}
+                      >
+                        Instalar
+                      </Boton>
+                    </div>
+                  </div>
+                )}
+
+                {instalada && !instalada.puedeInstalar && (
+                  <Aviso tono="warn">
+                    Android todavía no deja instalar desde esta aplicación. Al pulsar «Instalar»
+                    sale la pantalla del permiso; se concede una vez y ya queda.
+                  </Aviso>
+                )}
+              </Bloque>
+            </>
           )}
 
           {eco && (

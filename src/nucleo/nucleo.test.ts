@@ -7,6 +7,7 @@
  * se recomponga y que una configuracion distinta de la de fabrica se reconozca.
  */
 import { describe, expect, it } from 'vitest';
+import { arreglarDireccion, esMasNueva, reparo } from './actualizacion';
 import { calcular, nuevaTarjeta, texto, titulo } from './panel';
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
@@ -324,5 +325,46 @@ describe('tarjetas del panel', () => {
     ]);
     const t = { ...nuevaTarjeta('diferencia'), claves: ['f1.ida', 'f1.ret'] };
     expect(titulo(t, calcular(t, valores, frescura))).toBe('Ida − Retorno');
+  });
+});
+
+describe('direcciones para actualizar', () => {
+  const ID = '1AbC-dEf_GhIjKlMnOpQrStUvWxYz09';
+
+  it('traduce el enlace de compartir de Drive al de descarga', () => {
+    expect(arreglarDireccion(`https://drive.google.com/file/d/${ID}/view?usp=sharing`))
+      .toBe(`https://drive.google.com/uc?export=download&id=${ID}`);
+  });
+
+  it('traduce tambien el enlace antiguo de Drive', () => {
+    expect(arreglarDireccion(`https://drive.google.com/open?id=${ID}`))
+      .toBe(`https://drive.google.com/uc?export=download&id=${ID}`);
+  });
+
+  it('deja en paz una direccion que ya apunta al archivo', () => {
+    const u = 'https://gunjop.com/apk/diplus.apk';
+    expect(arreglarDireccion(u)).toBe(u);
+  });
+
+  it('avisa del enlace de Dropbox que devuelve una pagina', () => {
+    expect(reparo('https://www.dropbox.com/s/xxx/diplus.apk?dl=0')).toMatch(/dl=1/);
+    expect(reparo('https://www.dropbox.com/s/xxx/diplus.apk?dl=1')).toBeNull();
+  });
+
+  it('avisa del enlace de GitHub que es la pagina del archivo', () => {
+    expect(reparo('https://github.com/gunjop/diplus/blob/main/diplus.apk')).toMatch(/Raw/);
+  });
+
+  it('exige que la direccion sea http o https', () => {
+    expect(reparo('drive.google.com/algo')).toMatch(/http/);
+    expect(reparo('')).toMatch(/Falta/);
+  });
+
+  it('solo llama nueva a la version que sube el numero', () => {
+    /* Android no deja instalar hacia atras: bajar de version obliga a
+       desinstalar, y eso se lleva la base de datos por delante. */
+    expect(esMasNueva(3, 2)).toBe(true);
+    expect(esMasNueva(2, 2)).toBe(false);
+    expect(esMasNueva(1, 2)).toBe(false);
   });
 });

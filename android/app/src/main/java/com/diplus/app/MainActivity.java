@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(CanRs485Plugin.class);
+        registerPlugin(ActualizadorPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

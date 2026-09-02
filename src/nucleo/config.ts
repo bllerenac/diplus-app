@@ -22,6 +22,11 @@ export interface Servidor {
   equipo: string;
 }
 
+/** De donde se baja la aplicacion cuando se pulsa actualizar. */
+export interface Actualizacion {
+  url: string;
+}
+
 export interface Config {
   /** Que se guarda en la base del equipo y durante cuanto. */
   registro: AjustesRegistro;
@@ -30,6 +35,7 @@ export interface Config {
   panel: Tarjeta[];
   gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
+  actualizacion: Actualizacion;
 }
 
 const POR_DEFECTO: Config = {
@@ -40,6 +46,7 @@ const POR_DEFECTO: Config = {
   gps: { ruta: '/dev/ttyHSL2', baudios: 921600, activo: true },
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
+  actualizacion: { url: '' },
 };
 
 let memoria: Config = POR_DEFECTO;
