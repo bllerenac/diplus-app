@@ -309,7 +309,12 @@ public class CanRs485Plugin extends Plugin {
         
         int retInit = helper.initialize(canInterface, serialBaudrate, canBaudrate, false);
         if (retInit != 0) {
+            /* Si esto falla el hilo muere y no se lee nada. Antes solo quedaba en
+               el log del sistema y en la aplicacion no se notaba: la consola se
+               quedaba vacia sin decir por que. */
             Log.e(TAG, "initialize fallo en CAN" + (canInterface + 1) + ": " + retInit);
+            notificarProblema(eventName, "CAN" + (canInterface + 1),
+                "No se pudo abrir el bus (codigo " + retInit + "). Revisa el cable y el bitrate.");
             activeFlag.set(false);
             return;
         }
@@ -318,11 +323,13 @@ public class CanRs485Plugin extends Plugin {
             @Override
             public void onSetError() {
                 Log.w(TAG, "CAN" + (canInterface + 1) + " onSetError");
+                notificarProblema(eventName, "CAN" + (canInterface + 1), "Error al configurar el bus");
             }
 
             @Override
             public void onSendError() {
                 Log.w(TAG, "CAN" + (canInterface + 1) + " onSendError");
+                notificarProblema(eventName, "CAN" + (canInterface + 1), "Error al transmitir");
             }
 
             @Override
@@ -433,68 +440,75 @@ public class CanRs485Plugin extends Plugin {
         }
     }
 
+    /**
+     * Lectura del puerto serie: **solo transporta bytes**.
+     *
+     * Antes aqui se reconocian protocolos a mano, con las direcciones metidas a
+     * fuego: se buscaba literalmente una cabecera 0x3E para Eurosens y la
+     * secuencia 01 03 08 para Modbus. Con eso, un equipo con otra direccion de
+     * esclavo o con otro numero de registros no se reconocia, y para soportar un
+     * aparato nuevo habia que recompilar el APK.
+     *
+     * Ahora Java no interpreta nada. Quien decide que significan los bytes es el
+     * catalogo de protocolos del lado TypeScript, que el usuario puede ajustar
+     * desde la propia aplicacion.
+     *
+     * Tampoco se trocea aqui: un puerto serie entrega bytes, no mensajes, y una
+     * trama puede llegar partida en dos lecturas o pegada a la siguiente. El
+     * troceado necesita saber de que protocolo se trata, asi que va arriba.
+     */
     private void readRawStream(String devicePath, String eventName, AtomicBoolean activeFlag) {
-        Log.i(TAG, "Iniciando lectura binaria en " + devicePath + " para " + eventName);
+        Log.i(TAG, "Leyendo " + devicePath + " para " + eventName);
         File devFile = new File(devicePath);
-        if (!devFile.exists()) return;
 
-        byte[] buffer = new byte[256];
+        if (!devFile.exists()) {
+            notificarProblema(eventName, devicePath, "El dispositivo no existe: " + devicePath);
+            activeFlag.set(false);
+            return;
+        }
+
+        byte[] buffer = new byte[1024];
         try (FileInputStream fis = new FileInputStream(devFile)) {
             while (activeFlag.get()) {
-                int bytesRead = fis.read(buffer);
-                if (bytesRead > 0) {
-                    StringBuilder hexSb = new StringBuilder();
-                    StringBuilder asciiSb = new StringBuilder();
-                    for (int i = 0; i < bytesRead; i++) {
-                        byte b = buffer[i];
-                        hexSb.append(String.format("%02X ", b));
-                        if (b >= 32 && b <= 126) {
-                            asciiSb.append((char) b);
-                        } else {
-                            asciiSb.append('.');
-                        }
-                    }
+                int leidos = fis.read(buffer);
 
-                    JSObject data = new JSObject();
-                    data.put("raw", hexSb.toString().trim());
-                    data.put("ascii", asciiSb.toString());
-                    data.put("timestamp", System.currentTimeMillis());
-                    data.put("port", devicePath);
-
-                    // 1. Parseo del protocolo Eurosens DDS (Cabecera 0x3E, longitud >= 9)
-                    if (buffer[0] == (byte) 0x3e && bytesRead >= 9) {
-                        int eurosensCrc = calculateEurosensCrc8(buffer, 8);
-                        boolean crcOk = (buffer[8] & 0xff) == eurosensCrc;
-                        int rawValue = ((buffer[7] & 0xff) << 8) | (buffer[6] & 0xff); // readUInt16LE(6)
-                        data.put("isEurosens", true);
-                        data.put("eurosensCrcOk", crcOk);
-                        data.put("eurosensRawValue", rawValue);
-                    }
-
-                    // 2. Parseo de Trama Ráfaga 13 Bytes Flujómetro Modbus RTU (01 03 08 ...)
-                    if (buffer[0] == (byte) 0x01 && buffer[1] == (byte) 0x03 && buffer[2] == (byte) 0x08 && bytesRead >= 13) {
-                        int flowBits = ((buffer[3] & 0xff) << 24) | ((buffer[4] & 0xff) << 16) | ((buffer[5] & 0xff) << 8) | (buffer[6] & 0xff);
-                        float flowRate = Float.intBitsToFloat(flowBits);
-
-                        int totalBits = ((buffer[7] & 0xff) << 24) | ((buffer[8] & 0xff) << 16) | ((buffer[9] & 0xff) << 8) | (buffer[10] & 0xff);
-                        float totalizer = Float.intBitsToFloat(totalBits);
-
-                        int calculatedCrc = calculateModbusCrc16(buffer, 11);
-                        int rxCrc = ((buffer[12] & 0xff) << 8) | (buffer[11] & 0xff);
-                        boolean crcOk = calculatedCrc == rxCrc;
-
-                        data.put("isFlowmeterModbus", true);
-                        data.put("modbusCrcOk", crcOk);
-                        data.put("flowRate", flowRate);
-                        data.put("totalizer", totalizer);
-                    }
-
-                    notifyListeners(eventName, data);
+                /* -1 es fin de flujo: el puerto se cerro o se desenchufo el
+                   adaptador. Sin esto el bucle giraba en vacio quemando CPU. */
+                if (leidos < 0) {
+                    notificarProblema(eventName, devicePath, "El puerto se cerro");
+                    break;
                 }
+                if (leidos == 0) continue;
+
+                StringBuilder hexSb = new StringBuilder(leidos * 3);
+                for (int i = 0; i < leidos; i++) {
+                    hexSb.append(String.format("%02X", buffer[i]));
+                    if (i < leidos - 1) hexSb.append(" ");
+                }
+
+                JSObject data = new JSObject();
+                data.put("raw", hexSb.toString());
+                data.put("bytes", leidos);
+                data.put("timestamp", System.currentTimeMillis());
+                data.put("port", devicePath);
+                notifyListeners(eventName, data);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error leyendo raw de " + devicePath, e);
+            Log.e(TAG, "Error leyendo " + devicePath, e);
+            notificarProblema(eventName, devicePath, e.getMessage());
+        } finally {
+            activeFlag.set(false);
         }
+    }
+
+    /** Un fallo del puerto tiene que llegar a la pantalla, no quedarse en el log. */
+    private void notificarProblema(String eventName, String devicePath, String mensaje) {
+        JSObject err = new JSObject();
+        err.put("port", devicePath);
+        err.put("source", eventName);
+        err.put("message", mensaje == null ? "error desconocido" : mensaje);
+        err.put("timestamp", System.currentTimeMillis());
+        notifyListeners("onPortError", err);
     }
 
     private void readTextStream(String devicePath, String eventName, AtomicBoolean activeFlag) {
