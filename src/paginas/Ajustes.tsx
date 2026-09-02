@@ -153,6 +153,27 @@ export default function Ajustes() {
   });
   const [eco, setEco] = useState<string | null>(null);
   const [peso, setPeso] = useState<{ filas: number; desde: number | null } | null>(null);
+  const [buscando, setBuscando] = useState(false);
+  const [probando, setProbando] = useState<{ port: string; baudrate: number } | null>(null);
+  const [hallazgos, setHallazgos] = useState<{ port: string; baudrate: number; bytes: number }[] | null>(null);
+
+  const buscar = async () => {
+    setBuscando(true);
+    setHallazgos(null);
+    try {
+      const r = await hardware.buscarPuertos(setProbando);
+      setHallazgos(r.found);
+      /* El escaneo paro los hilos de lectura; hay que devolverlos a su sitio. */
+      for (const f of cfg.fuentes) hardware.arrancar(f).catch(() => undefined);
+    } catch (e: unknown) {
+      setHallazgos([]);
+      setEco(e instanceof Error ? e.message : 'No se pudo buscar');
+      setTimeout(() => setEco(null), 4000);
+    } finally {
+      setBuscando(false);
+      setProbando(null);
+    }
+  };
 
   const mirarPeso = async () => {
     try {
@@ -228,6 +249,60 @@ export default function Ajustes() {
                 </div>
               }
             >
+              <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-sur2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="rotulo">¿No sabes dónde está conectado?</span>
+                  <Boton onClick={buscar} disabled={buscando}>
+                    {buscando ? 'Buscando…' : 'Buscar puertos'}
+                  </Boton>
+                </div>
+                <Nota>
+                  Prueba cada puerto con cada velocidad y escucha un momento. Tarda cerca de un
+                  minuto y <b className="text-ink2">para la lectura mientras dura</b>: dos
+                  lectores sobre el mismo puerto se pisan.
+                </Nota>
+
+                {probando && (
+                  <p className="m-0 font-mono text-[11px] text-ink3">
+                    probando {probando.port} a {probando.baudrate}…
+                  </p>
+                )}
+
+                {hallazgos && (
+                  hallazgos.length === 0 ? (
+                    <Aviso tono="warn">
+                      No contestó nada en ningún puerto. Revisa que el aparato esté alimentado y
+                      el cable conectado.
+                    </Aviso>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {hallazgos.map((h) => (
+                        <div
+                          key={`${h.port}-${h.baudrate}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-acc/40 bg-acc/10 px-3.5 py-2.5"
+                        >
+                          <span className="font-mono text-[12px] text-acc">
+                            {h.port} · {h.baudrate} bd
+                            <span className="ml-2 text-ink3">{h.bytes} bytes</span>
+                          </span>
+                          <Boton
+                            onClick={() => {
+                              const f = nuevaFuente('rs485');
+                              aplicar({
+                                ...cfg,
+                                fuentes: [...cfg.fuentes, { ...f, ruta: h.port, baudios: h.baudrate }],
+                              });
+                            }}
+                          >
+                            Usar
+                          </Boton>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+
               {cfg.fuentes.length === 0 && (
                 <Vacio>
                   Todavía no hay ninguna fuente. Añade el RS485 por donde llega el HelperBox,

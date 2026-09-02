@@ -6,6 +6,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.util.Log;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -15,6 +16,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.android.canbus.CanBusHelper;
@@ -502,6 +505,131 @@ public class CanRs485Plugin extends Plugin {
     }
 
     /** Un fallo del puerto tiene que llegar a la pantalla, no quedarse en el log. */
+    /**
+     * Busca en que puerto y a que velocidad esta hablando un aparato.
+     *
+     * Es lo que hacia la version anterior de la aplicacion y se habia perdido:
+     * cuando no se sabe donde esta conectado algo, ir probando a mano es una
+     * tarde entera. Se prueba cada puerto con cada velocidad, se escucha un
+     * momento y se cuenta lo que llega.
+     *
+     * **Antes se paran los hilos de lectura.** Dos lectores sobre el mismo
+     * device se pisan y el escaneo devuelve resultados que no son. El aviso
+     * estaba en el codigo original —hablaba de colision JNI— y viene de haberse
+     * topado con ello.
+     */
+    @PluginMethod
+    public void scanPorts(PluginCall call) {
+        final int msPorPrueba = Math.max(200, call.getInt("dwellMs", 700));
+
+        final List<String> puertos = new ArrayList<>();
+        final List<Integer> baudios = new ArrayList<>();
+
+        try {
+            JSArray pedidos = call.getArray("ports");
+            if (pedidos != null) for (Object o : pedidos.toList()) puertos.add(String.valueOf(o));
+
+            JSArray velocidades = call.getArray("baudrates");
+            if (velocidades != null) {
+                for (Object o : velocidades.toList()) baudios.add((int) Double.parseDouble(String.valueOf(o)));
+            }
+        } catch (Exception e) {
+            /* Con una lista mal formada se sigue con la de por defecto. */
+        }
+
+        if (puertos.isEmpty()) {
+            /* ttyHSL2 es el GPS y ttyHSL0 el RS485 de fabrica; los otros dos son
+               los que la version anterior daba como CAN 1 y CAN 2. */
+            puertos.add("/dev/ttyHSL0");
+            puertos.add("/dev/ttyHSL1");
+            puertos.add("/dev/ttyHSL2");
+            puertos.add("/dev/ttyHSL3");
+        }
+        if (baudios.isEmpty()) {
+            for (int b : new int[] { 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600 }) {
+                baudios.add(b);
+            }
+        }
+
+        /* Los hilos activos, fuera. Luego se vuelven a levantar desde arriba. */
+        isRs485Listening.set(false);
+        isGpsListening.set(false);
+
+        new Thread(() -> {
+            JSArray hallazgos = new JSArray();
+
+            for (String puerto : puertos) {
+                File dev = new File(puerto);
+                if (!dev.exists()) continue;
+
+                for (int baud : baudios) {
+                    JSObject aviso = new JSObject();
+                    aviso.put("port", puerto);
+                    aviso.put("baudrate", baud);
+                    notifyListeners("onScanProgress", aviso);
+
+                    int leidos = escucharUnRato(dev, baud, msPorPrueba);
+                    if (leidos <= 0) continue;
+
+                    JSObject h = new JSObject();
+                    h.put("port", puerto);
+                    h.put("baudrate", baud);
+                    h.put("bytes", leidos);
+                    hallazgos.put(h);
+                    Log.i(TAG, "[SCAN] " + puerto + " a " + baud + ": " + leidos + " bytes");
+
+                    /* Encontrada una velocidad que da datos, no se prueban las
+                       demas en ese puerto: a otra velocidad tambien llegarian
+                       bytes, pero serian basura. */
+                    break;
+                }
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("found", hallazgos);
+            ret.put("scannedPorts", puertos.size());
+            call.resolve(ret);
+        }).start();
+    }
+
+    /**
+     * Escucha un puerto un momento y devuelve cuantos bytes utiles llegaron.
+     *
+     * Se descarta lo que sea todo ceros o todo 0xFF: una linea suelta flotando
+     * da eso y no significa que haya nadie al otro lado.
+     */
+    private int escucharUnRato(File dev, int baudrate, int ms) {
+        configureStty(dev.getAbsolutePath(), baudrate);
+
+        int utiles = 0;
+        long hasta = System.currentTimeMillis() + ms;
+        byte[] buffer = new byte[512];
+
+        try (FileInputStream fis = new FileInputStream(dev)) {
+            while (System.currentTimeMillis() < hasta) {
+                if (fis.available() <= 0) {
+                    try {
+                        Thread.sleep(30);
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
+                    continue;
+                }
+                int n = fis.read(buffer);
+                if (n <= 0) break;
+                for (int i = 0; i < n; i++) {
+                    int b = buffer[i] & 0xff;
+                    if (b != 0x00 && b != 0xff) utiles++;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[SCAN] no se pudo leer " + dev + ": " + e.getMessage());
+            return 0;
+        }
+        return utiles;
+    }
+
+
     private void notificarProblema(String eventName, String devicePath, String mensaje) {
         JSObject err = new JSObject();
         err.put("port", devicePath);

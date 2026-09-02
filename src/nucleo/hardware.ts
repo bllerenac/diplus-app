@@ -78,6 +78,10 @@ export interface PluginNativo {
     startRegister?: number; registerCount?: number;
   }): Promise<any>;
   sendEurosensQuery(o: { devicePath: string; address: number; command?: number }): Promise<any>;
+  scanPorts(o: { ports?: string[]; baudrates?: number[]; dwellMs?: number }): Promise<{
+    found: { port: string; baudrate: number; bytes: number }[];
+    scannedPorts: number;
+  }>;
   addListener(evento: string, fn: (d: any) => void): Promise<any>;
 }
 
@@ -219,6 +223,27 @@ class Hardware {
   async consultarModbus(ruta: string, address: number, startRegister: number, registerCount: number, functionCode = 3) {
     if (!hayHardware()) throw new Error('Sin hardware: esto solo funciona en el equipo.');
     return Nativo.sendModbusQuery({ devicePath: ruta, address, functionCode, startRegister, registerCount });
+  }
+
+  /**
+   * Busca en que puerto y a que velocidad hay algo hablando.
+   *
+   * Tarda: son varios puertos por varias velocidades, escuchando un momento en
+   * cada combinacion. Mientras corre, la lectura normal se para —dos lectores
+   * sobre el mismo device se pisan— y hay que volver a arrancar las fuentes
+   * cuando termine.
+   */
+  async buscarPuertos(alProbar?: (p: { port: string; baudrate: number }) => void) {
+    if (!hayHardware()) throw new Error('Buscar puertos solo funciona en el equipo.');
+
+    let quitar: { remove?: () => void } | null = null;
+    if (alProbar) quitar = await Nativo.addListener('onScanProgress', alProbar);
+
+    try {
+      return await Nativo.scanPorts({ dwellMs: 700 });
+    } finally {
+      quitar?.remove?.();
+    }
   }
 
   alRecibir(fn: OyenteTramas): () => void {

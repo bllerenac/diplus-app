@@ -14,7 +14,7 @@ import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
 
 import { Config, cargar } from '../nucleo/config';
-import { Posicion, calidad, gps, precisionAproximada } from '../nucleo/gps';
+import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
 import { Senal } from '../nucleo/lecturas';
@@ -194,10 +194,10 @@ export default function Navegacion() {
         <div className="nav-barra">
           <span className="nav-marca">DiPlus</span>
 
-          <span className={`nav-rtk ${cal.tono}`}>
+          <span className={`nav-rtk ${pos?.origen === 'interno' ? 'warn' : cal.tono}`}>
             <i className="nav-punto" />
-            {cal.corto}
-            {pos && <span style={{ opacity: 0.65 }}>{pos.satelites} sat</span>}
+            {pos?.origen === 'interno' ? 'GPS EQUIPO' : cal.corto}
+            {pos?.origen === 'rtk' && <span style={{ opacity: 0.65 }}>{pos.satelites} sat</span>}
           </span>
 
           <span className="nav-hueco" />
@@ -240,7 +240,7 @@ export default function Navegacion() {
         )}
         {pos && (
           <span className="nav-precision">
-            {cal.nombre} · {precisionAproximada(pos.calidad, pos.hdop)}
+            {nombreOrigen(pos.origen)} · {precisionAproximada(pos)}
           </span>
         )}
 
