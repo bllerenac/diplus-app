@@ -256,28 +256,29 @@ export default function Navegacion() {
 
         </div>
         <aside className="nav-panel">
-          <div className="nav-panel__cab">
-            <span className="nav-rotulo">Sensores</span>
-            <span className="nav-panel__cuenta">{tarjetas.length}</span>
-          </div>
+          {/* Sin rótulo. «Sensores» encima de unos sensores no dice nada, y ese
+              renglón vale más ocupado por el estado de cada bus: una fuente
+              puede estar muda mientras la otra va, y en las tarjetas eso no se
+              ve. */}
+          {estados.length > 0 && (
+            <div className="nav-fuentes">
+              {estados.map((e) => (
+                <span
+                  key={e.fuente.id}
+                  className={`nav-chip ${e.viva ? 'vivo' : e.nunca ? 'mudo' : 'viejo'}`}
+                  title={e.viva ? 'recibiendo' : e.nunca ? 'sin datos' : 'callado'}
+                >
+                  <i />
+                  <span>{e.fuente.nombre}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {problema && (
             <p className="nav-aviso">
               {problema.port}: {problema.message}
             </p>
-          )}
-
-          {/* Cada fuente con su propio estado: una puede estar muda mientras la
-              otra va, y en las tarjetas eso no se ve. */}
-          {estados.length > 0 && (
-            <div className="nav-fuentes">
-              {estados.map((e) => (
-                <span key={e.fuente.id} className={`nav-chip ${e.viva ? 'vivo' : e.nunca ? 'mudo' : 'viejo'}`}>
-                  <i />
-                  {e.fuente.nombre}
-                </span>
-              ))}
-            </div>
           )}
 
           <div className="nav-panel__cuerpo">
@@ -318,22 +319,24 @@ export default function Navegacion() {
                     </p>
 
                     {v.fraccion !== null && (
-                      <div className="nav-barra">
+                      <div className="nav-nivel">
                         <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />
                       </div>
                     )}
 
-                    {/* En una resta hace falta ver los dos lados: un consumo raro
-                        casi siempre es un caudalímetro caído, no un motor raro. */}
                     {v.partes.length > 1 && (
                       <p className="nav-tarjeta__partes">
                         {v.partes.map((p) => `${p.nombre} ${p.valor ?? '—'}`).join('   ·   ')}
                       </p>
                     )}
 
-                    <p className="nav-tarjeta__pie">
-                      {v.visto ? (viejo ? `HACE ${Math.round(edad / 1000)} S` : 'AHORA') : 'SIN DATOS'}
-                    </p>
+                    {/* Solo cuando el dato se quedó atrás: un «ahora» debajo de
+                        cada tarjeta es una línea repetida que no dice nada. */}
+                    {(viejo || !v.visto) && (
+                      <p className="nav-tarjeta__pie">
+                        {v.visto ? `hace ${Math.round(edad / 1000)} s` : 'sin datos'}
+                      </p>
+                    )}
                   </article>
                 );
               })}

@@ -16,7 +16,6 @@
   font-variant-numeric: tabular-nums;
   transition: grid-template-columns 0.25s ease;
 }
-.nav-pantalla.sin-panel { grid-template-columns: 100% 0%; }
 
 /* Columna del mapa. Todo lo que va sobre el mapa se posiciona respecto a esto
    y no respecto a la pantalla, para que no se meta debajo del panel. */
@@ -181,25 +180,6 @@
   background: var(--sur);
   overflow: hidden;
 }
-.nav-panel.oculto { border-left: 0; }
-
-.nav-panel__cab {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.nav-rotulo {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--ink3);
-}
 
 .nav-panel__cuerpo {
   flex: 1;
@@ -208,45 +188,6 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
-}
-
-/* Una lectura. Grande, porque esto se mira de reojo mientras se conduce. */
-.nav-lectura {
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--sur);
-  padding: 11px 13px;
-}
-.nav-lectura__nombre {
-  font-size: 11px;
-  color: var(--ink3);
-  margin: 0 0 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.nav-lectura__valor {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 25px;
-  font-weight: 600;
-  line-height: 1;
-}
-.nav-lectura__valor small {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--ink3);
-  margin-left: 5px;
-}
-.nav-lectura.viejo .nav-lectura__valor { color: var(--ink3); }
-.nav-lectura.sin .nav-lectura__valor { color: var(--ink3); font-size: 18px; }
-
-.nav-lectura__pie {
-  margin: 6px 0 0;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  color: var(--ink3);
 }
 
 .nav-vacio {
@@ -271,8 +212,7 @@
 /* Por debajo de esto, 30 % de ancho no da ni para un numero: el panel vuelve a
    superponerse y el mapa se queda entero debajo. */
 @media (max-width: 760px) {
-  .nav-pantalla,
-  .nav-pantalla.sin-panel { grid-template-columns: 100%; }
+  .nav-pantalla { grid-template-columns: 100%; }
 
   .nav-panel {
     position: absolute;
@@ -285,7 +225,6 @@
     backdrop-filter: blur(16px);
     transition: transform 0.25s ease;
   }
-  .nav-panel.oculto { transform: translateX(100%); }
 
   .nav-velocidad b { font-size: 32px; }
 }
@@ -322,189 +261,157 @@
   color: var(--ink3);
 }
 
-/* ── Grupos del panel ─────────────────────────────────────────────────────── */
+/* ── Panel de instrumentos ──────────────────────────────────────────────────
+   El panel no lleva rotulo. «Sensores» encima de unos sensores no dice nada, y
+   ese renglon vale mas ocupado por lo unico que hay que saber sin pensarlo:
+   que buses estan hablando. */
 
-/* Las lecturas van agrupadas por la fuente de la que salen. Sueltas no se sabia
-   si un numero venia del RS485 o del bus CAN, y con dos fuentes dando
-   magnitudes parecidas eso se confunde. */
-.nav-grupo {
+.nav-fuentes {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.nav-grupo + .nav-grupo {
-  margin-top: 5px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 13px 15px 12px;
+  border-bottom: 1px solid var(--line);
 }
 
-.nav-grupo__cab {
-  display: flex;
+/* Mismo idioma que la insignia de RTK de la barra: un punto y un nombre. Sin
+   recuadro, para que se lea como un estado y no como un boton que se pulsa. */
+.nav-chip {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 9px;
-}
-
-.nav-grupo__nombre {
+  gap: 6px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--titulo);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.nav-grupo__vacio {
-  margin: 0;
-  padding: 9px 11px;
-  border: 1px dashed var(--line2);
-  border-radius: 11px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink3);
-}
-
-/* Cada fuente lleva su propio estado: una puede estar muda mientras la otra va,
-   y sin esto un panel a medias parece un fallo de todo. */
-.nav-estado {
-  flex: none;
-  padding: 3px 9px;
-  border: 1px solid var(--line2);
-  border-radius: 99px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink3);
 }
-.nav-estado.vivo { border-color: var(--acc); color: var(--acc); }
-.nav-estado.viejo { border-color: var(--warn); color: var(--warn); }
-
-.nav-panel__cuenta {
-  padding: 2px 9px;
-  border: 1px solid var(--line2);
-  border-radius: 99px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink3);
-}
-
-/* ── Tarjetas del panel ─────────────────────────────────────────────────────
-   El panel ya no es una lista de señales sino tarjetas que uno arma: un
-   numero, la resta de dos caudalimetros, un nivel con su barra. Dos por fila,
-   y la que se marque como ancha ocupa la fila entera. */
-
-.nav-fuentes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 12px 10px;
-}
-.nav-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line2);
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 10.5px;
-  color: var(--ink3);
+.nav-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .nav-chip i {
-  width: 5px;
-  height: 5px;
+  flex: none;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
 }
-.nav-chip.vivo { border-color: var(--acc); color: var(--acc); }
-.nav-chip.viejo { border-color: var(--warn); color: var(--warn); }
+.nav-chip.vivo { color: var(--acc); }
+.nav-chip.vivo i { box-shadow: 0 0 7px currentColor; }
+.nav-chip.viejo { color: var(--warn); }
 
 .nav-rejilla {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px;
+  gap: 8px;
 }
 
+/* Cada tarjeta es un instrumento, no una caja. Sin borde: en una rejilla de
+   ocho, ocho recuadros son ocho lineas compitiendo con los numeros, que es lo
+   unico que hay que leer de reojo. La separacion la hace el fondo. */
 .nav-tarjeta {
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--sur);
-  padding: 11px 12px;
   min-width: 0;
+  padding: 11px 12px 12px;
+  border-radius: 14px;
+  background: var(--sur2);
 }
 .nav-tarjeta.ancha { grid-column: 1 / -1; }
 
 .nav-tarjeta__nombre {
-  font-size: 11px;
-  color: var(--ink3);
-  margin: 0 0 5px;
+  margin: 0 0 7px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .nav-tarjeta__valor {
   margin: 0;
   font-family: var(--mono);
-  font-size: 25px;
+  font-size: 27px;
   font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.nav-tarjeta.ancha .nav-tarjeta__valor { font-size: 32px; }
+.nav-tarjeta.ancha .nav-tarjeta__valor { font-size: 35px; }
 .nav-tarjeta__valor small {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--ink3);
   margin-left: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink2);
 }
 
-/* Fuera de los limites que se pusieron. El color va en el numero y en el
-   borde: solo en el numero se pierde de reojo. */
+/* Fuera de los limites que se pusieron. El fondo se tiñe ademas del numero:
+   solo en el numero se pierde cuando se mira la pantalla de refilon. */
 .nav-tarjeta.est-bajo,
-.nav-tarjeta.est-alto { border-color: var(--warn); }
+.nav-tarjeta.est-alto {
+  background: rgb(var(--warn-rgb) / 0.1);
+}
 .nav-tarjeta.est-bajo .nav-tarjeta__valor,
 .nav-tarjeta.est-alto .nav-tarjeta__valor { color: var(--warn); }
-.nav-tarjeta.est-sin .nav-tarjeta__valor { color: var(--ink3); font-size: 17px; }
+
+.nav-tarjeta.est-sin .nav-tarjeta__valor {
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--ink3);
+}
 .nav-tarjeta.viejo .nav-tarjeta__valor { color: var(--ink3); }
 
-.nav-barra {
-  margin-top: 9px;
-  height: 6px;
+.nav-nivel {
+  margin-top: 10px;
+  height: 5px;
   border-radius: 999px;
-  background: var(--sur3);
+  background: rgb(var(--ink3-rgb) / 0.22);
   overflow: hidden;
 }
-.nav-barra i {
+.nav-nivel i {
   display: block;
   height: 100%;
   background: var(--acc);
   transition: width 0.35s ease;
 }
-.nav-tarjeta.est-bajo .nav-barra i,
-.nav-tarjeta.est-alto .nav-barra i { background: var(--warn); }
+.nav-tarjeta.est-bajo .nav-nivel i,
+.nav-tarjeta.est-alto .nav-nivel i { background: var(--warn); }
 
-/* Los dos lados de una resta: un consumo raro casi siempre es un caudalimetro
+/* Los dos lados de una resta. Un consumo raro casi siempre es un caudalimetro
    caido, y sin ver los sumandos no hay manera de saberlo. */
 .nav-tarjeta__partes {
-  margin: 7px 0 0;
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--ink3-rgb) / 0.16);
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink3);
+  font-size: 9.5px;
+  color: var(--ink2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Solo aparece cuando el dato se quedo atras. Un «AHORA» debajo de cada
+   tarjeta es una linea repetida ocho veces que no dice nada: lo que hay que
+   ver es la que se salio de hora. */
 .nav-tarjeta__pie {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  color: var(--ink3);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
 }
+.nav-tarjeta.est-sin .nav-tarjeta__pie { color: var(--ink3); }
