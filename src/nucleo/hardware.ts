@@ -12,6 +12,18 @@ import { Senal, pgnDe, saDe } from './lecturas';
 import { Contexto, protocolo } from './protocolos';
 import { Troceador, aHex, deHex, troceador } from './tramas';
 
+/** Lo que el buscador encontro en un puerto. */
+export interface Hallazgo {
+  port: string;
+  baudrate: number;
+  bytes: number;
+  /** Que parecia ser: nmea, ubx, modbus o texto. */
+  kind: string | null;
+  /** Cuantas tramas cuadraron. Cero no llega a proponerse. */
+  score: number;
+  sample: string | null;
+}
+
 export type Puerto = 'rs485' | 'can1' | 'can2';
 
 export interface Fuente {
@@ -79,7 +91,7 @@ export interface PluginNativo {
   }): Promise<any>;
   sendEurosensQuery(o: { devicePath: string; address: number; command?: number }): Promise<any>;
   scanPorts(o: { ports?: string[]; baudrates?: number[]; dwellMs?: number }): Promise<{
-    found: { port: string; baudrate: number; bytes: number }[];
+    found: Hallazgo[];
     scannedPorts: number;
   }>;
   addListener(evento: string, fn: (d: any) => void): Promise<any>;

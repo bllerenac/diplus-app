@@ -16,7 +16,7 @@ import {
 } from '@ionic/react';
 
 import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config';
-import { Fuente, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
+import { Fuente, Hallazgo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
@@ -155,7 +155,7 @@ export default function Ajustes() {
   const [peso, setPeso] = useState<{ filas: number; desde: number | null } | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [probando, setProbando] = useState<{ port: string; baudrate: number } | null>(null);
-  const [hallazgos, setHallazgos] = useState<{ port: string; baudrate: number; bytes: number }[] | null>(null);
+  const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
 
   const buscar = async () => {
     setBuscando(true);
@@ -279,23 +279,37 @@ export default function Ajustes() {
                       {hallazgos.map((h) => (
                         <div
                           key={`${h.port}-${h.baudrate}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-acc/40 bg-acc/10 px-3.5 py-2.5"
+                          className="flex flex-col gap-2 rounded-lg border border-acc/40 bg-acc/10 px-3.5 py-3"
                         >
-                          <span className="font-mono text-[12px] text-acc">
-                            {h.port} · {h.baudrate} bd
-                            <span className="ml-2 text-ink3">{h.bytes} bytes</span>
-                          </span>
-                          <Boton
-                            onClick={() => {
-                              const f = nuevaFuente('rs485');
-                              aplicar({
-                                ...cfg,
-                                fuentes: [...cfg.fuentes, { ...f, ruta: h.port, baudios: h.baudrate }],
-                              });
-                            }}
-                          >
-                            Usar
-                          </Boton>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-mono text-[12.5px] text-acc">
+                              {h.port} · {h.baudrate} bd
+                              {h.kind && (
+                                <span className="ml-2 uppercase text-ink2">{h.kind}</span>
+                              )}
+                            </span>
+                            <Boton
+                              onClick={() => {
+                                const f = nuevaFuente('rs485');
+                                aplicar({
+                                  ...cfg,
+                                  fuentes: [...cfg.fuentes, {
+                                    ...f,
+                                    nombre: h.kind ? `${h.kind.toUpperCase()} en ${h.port}` : f.nombre,
+                                    ruta: h.port,
+                                    baudios: h.baudrate,
+                                  }],
+                                });
+                              }}
+                            >
+                              Usar
+                            </Boton>
+                          </div>
+
+                          <p className="m-0 font-mono text-[10.5px] leading-relaxed text-ink3">
+                            {h.score} {h.score === 1 ? 'trama cuadró' : 'tramas cuadraron'}
+                            {h.sample && ` · ${h.sample.slice(0, 46)}`}
+                          </p>
                         </div>
                       ))}
                     </div>

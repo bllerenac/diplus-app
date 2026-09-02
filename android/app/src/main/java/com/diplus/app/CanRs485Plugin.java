@@ -510,13 +510,25 @@ public class CanRs485Plugin extends Plugin {
      *
      * Es lo que hacia la version anterior de la aplicacion y se habia perdido:
      * cuando no se sabe donde esta conectado algo, ir probando a mano es una
-     * tarde entera. Se prueba cada puerto con cada velocidad, se escucha un
-     * momento y se cuenta lo que llega.
+     * tarde entera.
      *
-     * **Antes se paran los hilos de lectura.** Dos lectores sobre el mismo
-     * device se pisan y el escaneo devuelve resultados que no son. El aviso
-     * estaba en el codigo original —hablaba de colision JNI— y viene de haberse
-     * topado con ello.
+     * ─── Que se cuenta como «encontrado» ─────────────────────────────────────
+     *
+     * Contar bytes no vale. A la velocidad equivocada tambien llegan bytes: son
+     * la misma senal mal muestreada, basura que parece datos. La primera version
+     * de esto daba por bueno el GPS a 115200 cuando en realidad va a 921600.
+     *
+     * Asi que se comprueba que lo leido **cuadra**, y para eso estan las sumas
+     * de verificacion, que solo salen bien si los bits se leyeron a la velocidad
+     * correcta:
+     *
+     *   NMEA    $GNGGA,...*4A   XOR de todo lo que hay entre $ y *
+     *   UBX     B5 62 ...       Fletcher-8 sobre clase, id, longitud y datos
+     *   Modbus  ... CRC16       polinomio 0xA001, byte bajo primero
+     *
+     * Y se prueban **todas** las velocidades de cada puerto, no solo hasta la
+     * primera que da senales de vida: la buena es la que mas tramas validas saca,
+     * no la primera que hace ruido.
      */
     @PluginMethod
     public void scanPorts(PluginCall call) {
@@ -562,27 +574,43 @@ public class CanRs485Plugin extends Plugin {
                 File dev = new File(puerto);
                 if (!dev.exists()) continue;
 
+                int mejorBaud = 0, mejorPuntos = 0, mejorBytes = 0;
+                String mejorTipo = null, mejorMuestra = null;
+
                 for (int baud : baudios) {
                     JSObject aviso = new JSObject();
                     aviso.put("port", puerto);
                     aviso.put("baudrate", baud);
                     notifyListeners("onScanProgress", aviso);
 
-                    int leidos = escucharUnRato(dev, baud, msPorPrueba);
-                    if (leidos <= 0) continue;
+                    byte[] leido = escucharUnRato(dev, baud, msPorPrueba);
+                    if (leido == null || leido.length == 0) continue;
 
-                    JSObject h = new JSObject();
-                    h.put("port", puerto);
-                    h.put("baudrate", baud);
-                    h.put("bytes", leidos);
-                    hallazgos.put(h);
-                    Log.i(TAG, "[SCAN] " + puerto + " a " + baud + ": " + leidos + " bytes");
-
-                    /* Encontrada una velocidad que da datos, no se prueban las
-                       demas en ese puerto: a otra velocidad tambien llegarian
-                       bytes, pero serian basura. */
-                    break;
+                    Valoracion v = valorar(leido);
+                    if (v.puntos > mejorPuntos) {
+                        mejorPuntos = v.puntos;
+                        mejorBaud = baud;
+                        mejorTipo = v.tipo;
+                        mejorBytes = leido.length;
+                        mejorMuestra = v.muestra;
+                    }
                 }
+
+                /* Sin ninguna trama que cuadre no se propone nada: es preferible
+                   decir que no se encontro a mandar al usuario a configurar una
+                   velocidad inventada. */
+                if (mejorPuntos <= 0) continue;
+
+                JSObject h = new JSObject();
+                h.put("port", puerto);
+                h.put("baudrate", mejorBaud);
+                h.put("bytes", mejorBytes);
+                h.put("kind", mejorTipo);
+                h.put("score", mejorPuntos);
+                h.put("sample", mejorMuestra);
+                hallazgos.put(h);
+                Log.i(TAG, "[SCAN] " + puerto + " a " + mejorBaud + ": " + mejorTipo
+                        + " (" + mejorPuntos + " tramas validas)");
             }
 
             JSObject ret = new JSObject();
@@ -592,24 +620,231 @@ public class CanRs485Plugin extends Plugin {
         }).start();
     }
 
+   /**
+         * Cuantas tramas tienen que cuadrar para dar la velocidad por buena.
+         *
+         * Con una sola no basta: una suma de verificacion puede salir bien por
+         * azar. Dos ya es practicamente imposible, y a la velocidad correcta en
+         * tres cuartos de segundo llegan muchas mas.
+         */
+        private static final int MINIMO_TRAMAS = 2;
+    
+        /** Lo que se saco de una escucha: que parecia ser y como de seguro. */
+    private static class Valoracion {
+        int puntos = 0;
+        String tipo = null;
+        String muestra = null;
+    }
+
     /**
-     * Escucha un puerto un momento y devuelve cuantos bytes utiles llegaron.
+     * Decide si lo leido es de verdad, y de que.
      *
-     * Se descarta lo que sea todo ceros o todo 0xFF: una linea suelta flotando
-     * da eso y no significa que haya nadie al otro lado.
+     * La puntuacion es el numero de tramas cuya suma de verificacion cuadra. A
+     * la velocidad equivocada eso da cero casi siempre: que un XOR o un CRC
+     * salgan bien por casualidad sobre datos mal muestreados es muy improbable,
+     * y que salgan bien varias veces, practicamente imposible.
      */
-    private int escucharUnRato(File dev, int baudrate, int ms) {
+    private Valoracion valorar(byte[] d) {
+        Valoracion v = new Valoracion();
+
+        int nmea = contarNmea(d);
+        if (nmea >= MINIMO_TRAMAS) {
+            v.puntos = nmea;
+            v.tipo = "nmea";
+            v.muestra = primeraLinea(d);
+            return v;
+        }
+
+        int ubx = contarUbx(d);
+        if (ubx >= MINIMO_TRAMAS) {
+            v.puntos = ubx;
+            v.tipo = "ubx";
+            v.muestra = enHex(d, 16);
+            return v;
+        }
+
+        int modbus = contarModbus(d);
+        if (modbus >= MINIMO_TRAMAS) {
+            v.puntos = modbus;
+            v.tipo = "modbus";
+            v.muestra = enHex(d, 16);
+            return v;
+        }
+
+        /* Sin sumas que comprobar, queda mirar si al menos parece texto. Un
+           protocolo de texto legible a la velocidad correcta da casi todo
+           imprimible; mal muestreado, no. */
+        int imprimibles = 0;
+        for (byte b : d) {
+            int x = b & 0xff;
+            if ((x >= 32 && x <= 126) || x == 10 || x == 13) imprimibles++;
+        }
+        if (d.length >= 20 && imprimibles * 100 / d.length >= 90) {
+            v.puntos = 1;
+            v.tipo = "texto";
+            v.muestra = primeraLinea(d);
+        }
+        return v;
+    }
+
+    /** Sentencias NMEA con su XOR correcto entre `$` y `*`. */
+    private int contarNmea(byte[] d) {
+        int validas = 0;
+        for (int i = 0; i < d.length; i++) {
+            if (d[i] != '$') continue;
+
+            int xor = 0, j = i + 1;
+            while (j < d.length && d[j] != '*' && d[j] != '\n' && j - i < 90) {
+                xor ^= (d[j] & 0xff);
+                j++;
+            }
+            if (j + 2 >= d.length || d[j] != '*') continue;
+
+            int esperado = valorHex(d[j + 1]) * 16 + valorHex(d[j + 2]);
+            if (esperado >= 0 && esperado == xor) validas++;
+        }
+        return validas;
+    }
+
+    /** Mensajes UBX con su Fletcher-8 correcto. */
+    private int contarUbx(byte[] d) {
+        int validas = 0;
+        for (int i = 0; i + 8 <= d.length; i++) {
+            if ((d[i] & 0xff) != 0xb5 || (d[i + 1] & 0xff) != 0x62) continue;
+
+            int largo = (d[i + 4] & 0xff) | ((d[i + 5] & 0xff) << 8);
+            int fin = i + 6 + largo;
+            if (largo < 0 || largo > 1024 || fin + 1 >= d.length) continue;
+
+            int a = 0, b = 0;
+            for (int k = i + 2; k < fin; k++) {
+                a = (a + (d[k] & 0xff)) & 0xff;
+                b = (b + a) & 0xff;
+            }
+            if (a == (d[fin] & 0xff) && b == (d[fin + 1] & 0xff)) validas++;
+        }
+        return validas;
+    }
+
+    /**
+     * Tramas Modbus RTU: cabecera con sentido **y** CRC correcto.
+     *
+     * Con solo el CRC no basta. Son 16 bits, o sea un acierto por azar cada
+     * 65.000 intentos, y probar todas las longitudes en todas las posiciones son
+     * decenas de miles de intentos: sobre ruido salen dos o tres «tramas
+     * validas» que no lo son. Se comprobo con la senal real del GPS leida a
+     * 460800 —que es basura— y daba dos.
+     *
+     * Asi que solo se prueban las formas que Modbus admite de verdad, con su
+     * largo exacto, y ademas el esclavo tiene que estar en rango y la funcion
+     * ser una de las que existen. Eso deja el azar en algo por millon.
+     */
+    private int contarModbus(byte[] d) {
+        int validas = 0;
+        for (int i = 0; i + 5 <= d.length; i++) {
+            int sa = d[i] & 0xff;
+            int fn = d[i + 1] & 0xff;
+            if (sa < 1 || sa > 247) continue;
+
+            int largo = largoModbus(d, i, fn);
+            if (largo < 5 || i + largo > d.length) continue;
+            if (!crcCuadra(d, i, largo)) continue;
+
+            validas++;
+            i += largo - 1;
+        }
+        return validas;
+    }
+
+    /** El largo que tendria la trama que empieza en `i`, o 0 si la funcion no existe. */
+    private int largoModbus(byte[] d, int i, int fn) {
+        /* Excepcion: esclavo, funcion con el bit alto puesto, codigo, CRC. */
+        if ((fn & 0x80) != 0) {
+            int base = fn & 0x7f;
+            return (base >= 1 && base <= 16) ? 5 : 0;
+        }
+
+        switch (fn) {
+            case 1:
+            case 2:
+            case 3:
+            case 4: {
+                /* Respuesta de lectura: el tercer byte dice cuantos datos vienen.
+                   Una peticion de lectura son 8 bytes fijos; se aceptan las dos. */
+                int n = d[i + 2] & 0xff;
+                if (n > 0 && n <= 250 && i + 5 + n <= d.length && crcCuadra(d, i, 5 + n)) return 5 + n;
+                return 8;
+            }
+            case 5:
+            case 6:
+                /* Escribir uno solo: peticion y respuesta son iguales, 8 bytes. */
+                return 8;
+            case 15:
+            case 16: {
+                /* Escribir varios: la peticion lleva datos, la respuesta no. */
+                int m = i + 6 < d.length ? (d[i + 6] & 0xff) : 0;
+                if (m > 0 && m <= 246 && i + 9 + m <= d.length && crcCuadra(d, i, 9 + m)) return 9 + m;
+                return 8;
+            }
+            default:
+                return 0;
+        }
+    }
+
+    private boolean crcCuadra(byte[] d, int desde, int largo) {
+        int crc = 0xffff;
+        for (int k = desde; k < desde + largo - 2; k++) {
+            crc ^= (d[k] & 0xff);
+            for (int n = 0; n < 8; n++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xa001 : crc >> 1;
+        }
+        /* El CRC viaja con el byte bajo primero. */
+        return crc == ((d[desde + largo - 2] & 0xff) | ((d[desde + largo - 1] & 0xff) << 8));
+    }
+
+    private int valorHex(byte b) {
+        int c = b & 0xff;
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return -1;
+    }
+
+    private String primeraLinea(byte[] d) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : d) {
+            int x = b & 0xff;
+            if (x == 10 || x == 13) {
+                if (sb.length() > 5) break;
+                continue;
+            }
+            if (x >= 32 && x <= 126) sb.append((char) x);
+            if (sb.length() >= 60) break;
+        }
+        return sb.toString();
+    }
+
+    private String enHex(byte[] d, int cuantos) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(cuantos, d.length); i++) {
+            sb.append(String.format("%02X", d[i]));
+            if (i < Math.min(cuantos, d.length) - 1) sb.append(' ');
+        }
+        return sb.toString();
+    }
+
+    /** Escucha un puerto un momento y devuelve lo que llego, tal cual. */
+    private byte[] escucharUnRato(File dev, int baudrate, int ms) {
         configureStty(dev.getAbsolutePath(), baudrate);
 
-        int utiles = 0;
+        java.io.ByteArrayOutputStream acumulado = new java.io.ByteArrayOutputStream();
         long hasta = System.currentTimeMillis() + ms;
-        byte[] buffer = new byte[512];
+        byte[] buffer = new byte[1024];
 
         try (FileInputStream fis = new FileInputStream(dev)) {
-            while (System.currentTimeMillis() < hasta) {
+            while (System.currentTimeMillis() < hasta && acumulado.size() < 16384) {
                 if (fis.available() <= 0) {
                     try {
-                        Thread.sleep(30);
+                        Thread.sleep(25);
                     } catch (InterruptedException ie) {
                         break;
                     }
@@ -617,17 +852,16 @@ public class CanRs485Plugin extends Plugin {
                 }
                 int n = fis.read(buffer);
                 if (n <= 0) break;
-                for (int i = 0; i < n; i++) {
-                    int b = buffer[i] & 0xff;
-                    if (b != 0x00 && b != 0xff) utiles++;
-                }
+                acumulado.write(buffer, 0, n);
             }
         } catch (Exception e) {
             Log.w(TAG, "[SCAN] no se pudo leer " + dev + ": " + e.getMessage());
-            return 0;
+            return null;
         }
-        return utiles;
+        return acumulado.toByteArray();
     }
+
+
 
 
     private void notificarProblema(String eventName, String devicePath, String mensaje) {
