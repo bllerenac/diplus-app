@@ -8,6 +8,7 @@
 import { Fuente } from './hardware';
 import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
+import { Tarjeta, nuevaTarjeta } from './panel';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -25,8 +26,8 @@ export interface Config {
   /** Que se guarda en la base del equipo y durante cuanto. */
   registro: AjustesRegistro;
   fuentes: Fuente[];
-  /** Claves `fuenteId.senal` que se enseñan en el panel de la pantalla principal. */
-  panel: string[];
+  /** Las tarjetas del panel de la pantalla principal, en el orden en que se ven. */
+  panel: Tarjeta[];
   gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
 }
@@ -49,11 +50,30 @@ export const cargar = (): Config => {
   cargada = true;
   try {
     const crudo = localStorage.getItem(CLAVE);
-    if (crudo) memoria = { ...POR_DEFECTO, ...JSON.parse(crudo) };
+    if (crudo) memoria = alDia({ ...POR_DEFECTO, ...JSON.parse(crudo) });
   } catch {
     /* Configuracion ilegible: se sigue con la de fabrica en vez de no arrancar. */
   }
   return memoria;
+};
+
+/**
+ * Sube la configuracion vieja a la de ahora.
+ *
+ * El panel era una lista de claves y paso a ser una lista de tarjetas. Un
+ * equipo que ya estaba configurado no puede quedarse con la pantalla en blanco
+ * por eso: cada clave que hubiera se convierte en una tarjeta de numero, que es
+ * exactamente como se veia antes.
+ */
+const alDia = (c: Config): Config => {
+  const panel = (c.panel as unknown[]) ?? [];
+  if (panel.every((x) => typeof x === 'string')) {
+    return {
+      ...c,
+      panel: (panel as string[]).map((clave) => ({ ...nuevaTarjeta('numero'), id: `t${clave}`, claves: [clave] })),
+    };
+  }
+  return c;
 };
 
 export const guardar = (c: Config): Config => {

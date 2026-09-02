@@ -18,6 +18,7 @@ import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nu
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
 import { Senal } from '../nucleo/lecturas';
+import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -162,28 +163,37 @@ export default function Navegacion() {
   const velocidad = Math.max(0, Math.round((pos?.velocidad ?? 0) * 3.6));
 
   /**
-   * Las lecturas, agrupadas por la fuente de la que salen.
+   * Las tarjetas ya resueltas.
    *
-   * Sueltas no se sabia si un numero venia del RS485 o del bus CAN, y con dos
-   * fuentes dando magnitudes parecidas eso se confunde. Cada grupo lleva
-   * ademas su propio estado: una fuente puede estar muda mientras la otra va.
+   * Sin ninguna configurada se enseña todo lo que va llegando, cada señal en su
+   * numero: un equipo recien puesto tiene que enseñar algo sin que nadie lo
+   * configure, y de ahi se arma el panel a gusto.
    */
-  const grupos = useMemo(() => {
-    const elegidas = new Set(cfg.panel);
+  const tarjetas = useMemo(() => {
+    const puestas = cfg.panel.length
+      ? cfg.panel
+      : /* Lo que no es un numero se enseña como texto: si no, un estado o un
+           codigo apareceria como «sin dato», que es mentira. */
+        [...valores.entries()].map(([c, s]) => ({
+          ...nuevaTarjeta(typeof s.valor === 'string' ? 'texto' : 'numero'),
+          id: `auto.${c}`,
+          claves: [c],
+          decimales: 2,
+        }));
 
-    return cfg.fuentes.map((f) => {
-      const claves = [...valores.keys()].filter((c) => c.startsWith(`${f.id}.`));
-      const suyas = elegidas.size ? claves.filter((c) => elegidas.has(c)) : claves;
-      const ultima = claves.reduce((max, c) => Math.max(max, frescura.get(c) ?? 0), 0);
+    return puestas.map((t) => ({ t, v: calcular(t, valores, frescura) }));
+  }, [cfg.panel, valores, frescura]);
 
-      return {
-        fuente: f,
-        viva: ultima > 0 && Date.now() - ultima < 15000,
-        nunca: ultima === 0,
-        lecturas: suyas.map((c) => ({ clave: c, senal: valores.get(c), visto: frescura.get(c) })),
-      };
-    });
-  }, [cfg.fuentes, cfg.panel, valores, frescura]);
+  /** El estado de cada fuente, que en las tarjetas no se ve. */
+  const estados = useMemo(
+    () =>
+      cfg.fuentes.map((f) => {
+        const claves = [...frescura.keys()].filter((c) => c.startsWith(`${f.id}.`));
+        const ultima = claves.reduce((max, c) => Math.max(max, frescura.get(c) ?? 0), 0);
+        return { fuente: f, viva: ultima > 0 && Date.now() - ultima < 15000, nunca: ultima === 0 };
+      }),
+    [cfg.fuentes, frescura],
+  );
 
   return (
     <IonPage>
@@ -248,7 +258,7 @@ export default function Navegacion() {
         <aside className="nav-panel">
           <div className="nav-panel__cab">
             <span className="nav-rotulo">Sensores</span>
-            <span className="nav-panel__cuenta">{grupos.length}</span>
+            <span className="nav-panel__cuenta">{tarjetas.length}</span>
           </div>
 
           {problema && (
@@ -257,8 +267,21 @@ export default function Navegacion() {
             </p>
           )}
 
+          {/* Cada fuente con su propio estado: una puede estar muda mientras la
+              otra va, y en las tarjetas eso no se ve. */}
+          {estados.length > 0 && (
+            <div className="nav-fuentes">
+              {estados.map((e) => (
+                <span key={e.fuente.id} className={`nav-chip ${e.viva ? 'vivo' : e.nunca ? 'mudo' : 'viejo'}`}>
+                  <i />
+                  {e.fuente.nombre}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="nav-panel__cuerpo">
-            {grupos.length === 0 && (
+            {cfg.fuentes.length === 0 && (
               <p className="nav-vacio">
                 Todavía no hay ninguna fuente.
                 <br />
@@ -268,56 +291,53 @@ export default function Navegacion() {
               </p>
             )}
 
-            {grupos.map(({ fuente, viva, nunca, lecturas }) => (
-              <section className="nav-grupo" key={fuente.id}>
-                <header className="nav-grupo__cab">
-                  <span className="nav-grupo__nombre">{fuente.nombre}</span>
-                  <span className={`nav-estado ${viva ? 'vivo' : nunca ? 'mudo' : 'viejo'}`}>
-                    {viva ? 'recibiendo' : nunca ? 'sin datos' : 'callado'}
-                  </span>
-                </header>
+            {cfg.fuentes.length > 0 && tarjetas.length === 0 && (
+              <p className="nav-vacio">
+                Nada ha llegado todavía.
+                <br />
+                En cuanto entren lecturas se ven aquí, y en Configuración → Panel se arma
+                cómo mostrarlas.
+              </p>
+            )}
 
-                {lecturas.length === 0 ? (
-                  <p className="nav-grupo__vacio">
-                    {nunca
-                      ? 'Nada ha llegado por aquí todavía.'
-                      : 'Sin señales elegidas para esta fuente.'}
-                  </p>
-                ) : (
-                  lecturas.map(({ clave, senal, visto }) => {
-                    const edad = visto ? Date.now() - visto : Infinity;
-                    const viejo = edad > 10000;
-                    const sinDato = senal?.valor === null || senal?.valor === undefined;
+            <div className="nav-rejilla">
+              {tarjetas.map(({ t, v }) => {
+                const edad = v.visto ? Date.now() - v.visto : Infinity;
+                const viejo = edad > 10000;
 
-                    return (
-                      <article
-                        key={clave}
-                        className={`nav-lectura ${viejo ? 'viejo' : ''} ${sinDato ? 'sin' : ''}`}
-                      >
-                        <p className="nav-lectura__nombre">{senal?.nombre ?? clave}</p>
-                        <p className="nav-lectura__valor">
-                          {sinDato ? (
-                            senal?.ambiguo ? 'cero o sin dato' : 'sin dato'
-                          ) : (
-                            <>
-                              {typeof senal!.valor === 'number'
-                                ? (senal!.valor as number).toFixed(2)
-                                : String(senal!.valor)}
-                              {senal!.unidad && <small>{senal!.unidad}</small>}
-                            </>
-                          )}
-                        </p>
-                        {visto && (
-                          <p className="nav-lectura__pie">
-                            {viejo ? `HACE ${Math.round(edad / 1000)} S` : 'AHORA'}
-                          </p>
-                        )}
-                      </article>
-                    );
-                  })
-                )}
-              </section>
-            ))}
+                return (
+                  <article
+                    key={t.id}
+                    className={`nav-tarjeta ${t.grande ? 'ancha' : ''} ${viejo ? 'viejo' : ''} est-${v.estado}`}
+                  >
+                    <p className="nav-tarjeta__nombre">{titulo(t, v)}</p>
+
+                    <p className="nav-tarjeta__valor">
+                      {texto(v, t.decimales)}
+                      {v.valor !== null && v.unidad && <small>{v.unidad}</small>}
+                    </p>
+
+                    {v.fraccion !== null && (
+                      <div className="nav-barra">
+                        <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />
+                      </div>
+                    )}
+
+                    {/* En una resta hace falta ver los dos lados: un consumo raro
+                        casi siempre es un caudalímetro caído, no un motor raro. */}
+                    {v.partes.length > 1 && (
+                      <p className="nav-tarjeta__partes">
+                        {v.partes.map((p) => `${p.nombre} ${p.valor ?? '—'}`).join('   ·   ')}
+                      </p>
+                    )}
+
+                    <p className="nav-tarjeta__pie">
+                      {v.visto ? (viejo ? `HACE ${Math.round(edad / 1000)} S` : 'AHORA') : 'SIN DATOS'}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </aside>
       </div>

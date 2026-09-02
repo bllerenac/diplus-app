@@ -1,0 +1,197 @@
+/**
+ * Que se ve en la pantalla principal, y como.
+ *
+ * Antes el panel era una lista de señales: se elegian cuales salir y todas se
+ * pintaban igual, un numero detras de otro. Eso no alcanza. Un caudalimetro de
+ * ida y otro de retorno no interesan por separado —lo que se quiere leer es la
+ * resta, que es el consumo—, y un nivel de tanque sin saber cuanto cabe es un
+ * numero sin escala.
+ *
+ * Asi que el panel se arma con tarjetas. Cada tarjeta dice **que señales toma**
+ * y **como las presenta**, y las dos cosas se eligen desde Configuracion sin
+ * tocar codigo. Aqui solo esta el calculo; lo que pinta cada forma esta en la
+ * pantalla.
+ */
+import { Senal } from './lecturas';
+
+export type VistaTarjeta = 'numero' | 'diferencia' | 'suma' | 'nivel' | 'texto';
+
+export interface Tarjeta {
+  id: string;
+  titulo: string;
+  vista: VistaTarjeta;
+  /** Claves `fuenteId.senal`. Una para casi todo, dos para restar o sumar. */
+  claves: string[];
+  /** Vacia = la que traiga la señal. Se pone a mano cuando la resta cambia de unidad. */
+  unidad: string;
+  decimales: number;
+  /** Los extremos de la barra de nivel. */
+  min: number;
+  max: number;
+  /** Fuera de estos limites la tarjeta avisa. `null` = sin limite. */
+  bajo: number | null;
+  alto: number | null;
+  /** Ocupa el ancho entero del panel en vez de media columna. */
+  grande: boolean;
+}
+
+/** Cada forma de presentar, con lo que necesita. La pantalla se dibuja de aqui. */
+export const VISTAS: {
+  id: VistaTarjeta;
+  nombre: string;
+  ayuda: string;
+  /** Cuantas señales toma: exactamente esta cantidad. */
+  senales: number;
+  /** Que campos tiene sentido configurar en esta vista. */
+  usa: ('unidad' | 'decimales' | 'rango' | 'umbrales')[];
+}[] = [
+  {
+    id: 'numero',
+    nombre: 'Número',
+    ayuda: 'El valor tal cual, en grande. Para caudal, temperatura, revoluciones, horas.',
+    senales: 1,
+    usa: ['unidad', 'decimales', 'umbrales'],
+  },
+  {
+    id: 'diferencia',
+    nombre: 'Diferencia',
+    ayuda: 'La primera menos la segunda. Con dos caudalímetros, ida menos retorno es el consumo.',
+    senales: 2,
+    usa: ['unidad', 'decimales', 'umbrales'],
+  },
+  {
+    id: 'suma',
+    nombre: 'Suma',
+    ayuda: 'Las dos sumadas. Para dos tanques que se leen como uno.',
+    senales: 2,
+    usa: ['unidad', 'decimales', 'umbrales'],
+  },
+  {
+    id: 'nivel',
+    nombre: 'Nivel',
+    ayuda: 'Número y barra entre un mínimo y un máximo. Para tanques y depósitos.',
+    senales: 1,
+    usa: ['unidad', 'decimales', 'rango', 'umbrales'],
+  },
+  {
+    id: 'texto',
+    nombre: 'Texto',
+    ayuda: 'El valor sin tocar. Para estados, códigos y todo lo que no es un número.',
+    senales: 1,
+    usa: [],
+  },
+];
+
+export const vista = (id: VistaTarjeta) => VISTAS.find((v) => v.id === id) ?? VISTAS[0];
+
+export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
+  id: `t${Date.now().toString(36)}`,
+  titulo: '',
+  vista: v,
+  claves: [],
+  unidad: '',
+  decimales: 1,
+  min: 0,
+  max: 100,
+  bajo: null,
+  alto: null,
+  grande: false,
+});
+
+/** Lo que la pantalla necesita saber para pintar una tarjeta. */
+export interface ValorTarjeta {
+  /** El numero ya calculado, o el texto si la vista es de texto. */
+  valor: number | string | null;
+  unidad: string;
+  /** 0 a 1 dentro del rango, para la barra. `null` si la vista no lleva. */
+  fraccion: number | null;
+  estado: 'ok' | 'bajo' | 'alto' | 'sin';
+  /** Cuando el aparato no distingue «cero» de «no disponible». */
+  ambiguo: boolean;
+  /** De donde sale el resultado. La resta enseña los dos sumandos. */
+  partes: { clave: string; nombre: string; valor: number | string | null }[];
+  /** Cuando llego el dato mas viejo de los que usa. 0 si nunca llego nada. */
+  visto: number;
+}
+
+const numero = (s?: Senal): number | null =>
+  s && typeof s.valor === 'number' && Number.isFinite(s.valor) ? s.valor : null;
+
+/**
+ * Resuelve una tarjeta contra lo ultimo que llego.
+ *
+ * Si a la tarjeta le falta cualquiera de sus señales, no se inventa nada: el
+ * resultado queda en «sin dato». Una resta a la que le falta el sustraendo no
+ * es la primera señal, es nada.
+ */
+export const calcular = (
+  t: Tarjeta,
+  valores: Map<string, Senal>,
+  frescura: Map<string, number>,
+): ValorTarjeta => {
+  const necesita = vista(t.vista).senales;
+  const claves = t.claves.slice(0, necesita);
+
+  const partes = claves.map((c) => {
+    const s = valores.get(c);
+    return { clave: c, nombre: s?.nombre ?? c.split('.').pop() ?? c, valor: s?.valor ?? null };
+  });
+
+  const visto = claves.length
+    ? Math.min(...claves.map((c) => frescura.get(c) ?? 0))
+    : 0;
+  const ambiguo = claves.some((c) => valores.get(c)?.ambiguo === true);
+  const unidad = t.unidad || valores.get(claves[0])?.unidad || '';
+
+  const nada: ValorTarjeta = {
+    valor: null, unidad, fraccion: null, estado: 'sin', ambiguo, partes, visto,
+  };
+
+  if (claves.length < necesita) return nada;
+
+  if (t.vista === 'texto') {
+    const s = valores.get(claves[0]);
+    if (!s || s.valor === null || s.valor === undefined) return nada;
+    return { ...nada, valor: String(s.valor), estado: 'ok' };
+  }
+
+  const n = claves.map((c) => numero(valores.get(c)));
+  if (n.some((x) => x === null)) return nada;
+
+  let valor: number;
+  if (t.vista === 'diferencia') valor = (n[0] as number) - (n[1] as number);
+  else if (t.vista === 'suma') valor = (n[0] as number) + (n[1] as number);
+  else valor = n[0] as number;
+
+  let estado: ValorTarjeta['estado'] = 'ok';
+  if (t.bajo !== null && valor < t.bajo) estado = 'bajo';
+  else if (t.alto !== null && valor > t.alto) estado = 'alto';
+
+  const fraccion =
+    t.vista === 'nivel' && t.max !== t.min
+      ? Math.min(1, Math.max(0, (valor - t.min) / (t.max - t.min)))
+      : null;
+
+  return { valor, unidad, fraccion, estado, ambiguo, partes, visto };
+};
+
+/** El numero ya con sus decimales, listo para pintar. */
+export const texto = (v: ValorTarjeta, decimales: number): string => {
+  if (v.valor === null) return v.ambiguo ? 'cero o sin dato' : 'sin dato';
+  if (typeof v.valor === 'string') return v.valor;
+  return v.valor.toFixed(decimales);
+};
+
+/**
+ * El nombre que se enseña.
+ *
+ * Si no se puso ninguno se arma con las señales, que es mejor que un hueco: una
+ * tarjeta sin titulo sigue diciendo que esta midiendo.
+ */
+export const titulo = (t: Tarjeta, v: ValorTarjeta): string => {
+  if (t.titulo.trim()) return t.titulo.trim();
+  if (!v.partes.length) return 'Sin señales';
+  if (t.vista === 'diferencia') return `${v.partes[0].nombre} − ${v.partes[1]?.nombre ?? '?'}`;
+  if (t.vista === 'suma') return `${v.partes[0].nombre} + ${v.partes[1]?.nombre ?? '?'}`;
+  return v.partes[0].nombre;
+};

@@ -7,6 +7,7 @@
  * se recomponga y que una configuracion distinta de la de fabrica se reconozca.
  */
 import { describe, expect, it } from 'vitest';
+import { calcular, nuevaTarjeta, texto, titulo } from './panel';
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
@@ -217,5 +218,111 @@ describe('senales a mano', () => {
 describe('lectura de numeros', () => {
   it('devuelve null si la trama es mas corta que el tipo', () => {
     expect(leer(deHex('01 02'), 0, 'u32le')).toBeNull();
+  });
+});
+
+describe('tarjetas del panel', () => {
+  const s = (clave: string, nombre: string, unidad: string, valor: number | string | null, extra = {}) =>
+    ({ clave, nombre, unidad, valor, ...extra });
+
+  const conValores = (pares: [string, ReturnType<typeof s>][], at = 1000) => ({
+    valores: new Map(pares),
+    frescura: new Map(pares.map(([k]) => [k, at])),
+  });
+
+  it('resta dos caudalimetros para dar el consumo', () => {
+    const { valores, frescura } = conValores([
+      ['f1.ida', s('ida', 'Ida', 'L/h', 42.5)],
+      ['f1.retorno', s('retorno', 'Retorno', 'L/h', 30.2)],
+    ]);
+    const t = { ...nuevaTarjeta('diferencia'), claves: ['f1.ida', 'f1.retorno'], decimales: 1 };
+    const v = calcular(t, valores, frescura);
+
+    expect(v.valor).toBeCloseTo(12.3);
+    expect(v.unidad).toBe('L/h');
+    expect(v.estado).toBe('ok');
+    /* Los dos lados quedan a la vista: un consumo raro casi siempre es un
+       caudalimetro caido, no un motor raro. */
+    expect(v.partes.map((p) => p.valor)).toEqual([42.5, 30.2]);
+  });
+
+  it('no inventa la resta cuando falta el segundo caudalimetro', () => {
+    const { valores, frescura } = conValores([['f1.ida', s('ida', 'Ida', 'L/h', 42.5)]]);
+    const t = { ...nuevaTarjeta('diferencia'), claves: ['f1.ida', 'f1.retorno'] };
+    const v = calcular(t, valores, frescura);
+
+    expect(v.valor).toBeNull();
+    expect(v.estado).toBe('sin');
+  });
+
+  it('suma dos tanques', () => {
+    const { valores, frescura } = conValores([
+      ['f1.a', s('a', 'Tanque A', 'L', 120)],
+      ['f1.b', s('b', 'Tanque B', 'L', 80)],
+    ]);
+    const t = { ...nuevaTarjeta('suma'), claves: ['f1.a', 'f1.b'] };
+    expect(calcular(t, valores, frescura).valor).toBe(200);
+  });
+
+  it('pone el nivel en su sitio dentro del rango', () => {
+    const { valores, frescura } = conValores([['f1.n', s('n', 'Nivel', '%', 75)]]);
+    const t = { ...nuevaTarjeta('nivel'), claves: ['f1.n'], min: 50, max: 100 };
+    expect(calcular(t, valores, frescura).fraccion).toBeCloseTo(0.5);
+  });
+
+  it('no se sale de la barra con un valor fuera del rango', () => {
+    const { valores, frescura } = conValores([['f1.n', s('n', 'Nivel', '%', 250)]]);
+    const t = { ...nuevaTarjeta('nivel'), claves: ['f1.n'], min: 0, max: 100 };
+    expect(calcular(t, valores, frescura).fraccion).toBe(1);
+  });
+
+  it('avisa por debajo y por encima de los limites', () => {
+    const t = { ...nuevaTarjeta('numero'), claves: ['f1.n'], bajo: 10, alto: 90 };
+    const bajo = conValores([['f1.n', s('n', 'N', '', 5)]]);
+    const alto = conValores([['f1.n', s('n', 'N', '', 95)]]);
+    const medio = conValores([['f1.n', s('n', 'N', '', 50)]]);
+
+    expect(calcular(t, bajo.valores, bajo.frescura).estado).toBe('bajo');
+    expect(calcular(t, alto.valores, alto.frescura).estado).toBe('alto');
+    expect(calcular(t, medio.valores, medio.frescura).estado).toBe('ok');
+  });
+
+  it('la unidad puesta a mano gana a la de la señal', () => {
+    const { valores, frescura } = conValores([['f1.n', s('n', 'N', 'L/h', 5)]]);
+    const t = { ...nuevaTarjeta('numero'), claves: ['f1.n'], unidad: 'gal/h' };
+    expect(calcular(t, valores, frescura).unidad).toBe('gal/h');
+  });
+
+  it('deja pasar el texto sin convertirlo en numero', () => {
+    const { valores, frescura } = conValores([['f1.e', s('e', 'Estado', '', 'MARCHA')]]);
+    const t = { ...nuevaTarjeta('texto'), claves: ['f1.e'] };
+    expect(calcular(t, valores, frescura).valor).toBe('MARCHA');
+  });
+
+  it('avisa cuando el aparato no distingue cero de sin dato', () => {
+    const { valores, frescura } = conValores([['f1.q', s('q', 'Caudal', 'L/h', null, { ambiguo: true })]]);
+    const t = { ...nuevaTarjeta('numero'), claves: ['f1.q'] };
+    const v = calcular(t, valores, frescura);
+    expect(texto(v, 1)).toBe('cero o sin dato');
+  });
+
+  it('se queda con la señal mas vieja de las que usa', () => {
+    const valores = new Map([
+      ['f1.a', s('a', 'A', '', 1)],
+      ['f1.b', s('b', 'B', '', 2)],
+    ]);
+    const frescura = new Map([['f1.a', 9000], ['f1.b', 3000]]);
+    const t = { ...nuevaTarjeta('suma'), claves: ['f1.a', 'f1.b'] };
+    /* La tarjeta es tan actual como su dato mas atrasado. */
+    expect(calcular(t, valores, frescura).visto).toBe(3000);
+  });
+
+  it('se inventa un titulo con las señales cuando no se le puso ninguno', () => {
+    const { valores, frescura } = conValores([
+      ['f1.ida', s('ida', 'Ida', 'L/h', 10)],
+      ['f1.ret', s('ret', 'Retorno', 'L/h', 4)],
+    ]);
+    const t = { ...nuevaTarjeta('diferencia'), claves: ['f1.ida', 'f1.ret'] };
+    expect(titulo(t, calcular(t, valores, frescura))).toBe('Ida − Retorno');
   });
 });

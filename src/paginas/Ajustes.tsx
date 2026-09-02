@@ -21,6 +21,7 @@ import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
+import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, vista } from '../nucleo/panel';
 import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
@@ -212,6 +213,34 @@ export default function Ajustes() {
   const cambiarServidor = (s: Partial<Servidor>) =>
     aplicar({ ...cfg, servidor: { ...cfg.servidor, ...s } });
 
+  const cambiarPanel = (panel: Config['panel']) => aplicar({ ...cfg, panel });
+
+  const cambiarTarjeta = (id: string, cambio: Partial<Tarjeta>) =>
+    cambiarPanel(cfg.panel.map((t) => (t.id === id ? { ...t, ...cambio } : t)));
+
+  const mover = (i: number, paso: number) => {
+    const j = i + paso;
+    if (j < 0 || j >= cfg.panel.length) return;
+    const p = [...cfg.panel];
+    [p[i], p[j]] = [p[j], p[i]];
+    cambiarPanel(p);
+  };
+
+  /**
+   * Pone o quita una señal de una tarjeta.
+   *
+   * Cuando la tarjeta ya esta llena se sustituye la mas antigua en vez de no
+   * hacer nada: pulsar y que no pase nada parece que la pantalla se colgo.
+   */
+  const elegirSenal = (t: Tarjeta, clave: string) => {
+    const cabe = vista(t.vista).senales;
+    if (t.claves.includes(clave)) {
+      cambiarTarjeta(t.id, { claves: t.claves.filter((c) => c !== clave) });
+      return;
+    }
+    const claves = [...t.claves, clave];
+    cambiarTarjeta(t.id, { claves: claves.slice(-cabe) });
+  };
   const disponibles = useMemo(() => [...vistas.entries()], [vistas]);
 
   return (
@@ -443,46 +472,172 @@ export default function Ajustes() {
           {pestana === 'panel' && (
             <Bloque titulo="Qué se ve en la pantalla principal">
               <Nota>
-                Se pulsan las señales que van al panel de la derecha, en el orden en que se
-                pulsan. Sin elegir ninguna se enseña todo lo que llegue.
+                El panel se arma con tarjetas. Cada una toma las señales que se le digan y las
+                presenta de una forma: un número suelto, la resta de dos caudalímetros, un nivel
+                con su barra. Sin ninguna tarjeta se enseña todo lo que llegue.
               </Nota>
 
-              {disponibles.length === 0 ? (
+              {disponibles.length === 0 && (
                 <Vacio>
-                  Todavía no ha llegado ninguna señal. En cuanto el equipo lea algo, aparece
-                  aquí para poder elegirla.
+                  Todavía no ha llegado ninguna señal. Se pueden crear tarjetas igual, pero hasta
+                  que el equipo lea algo no hay nada que elegirles.
                 </Vacio>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {disponibles.map(([clave, s]) => {
-                    const puesta = cfg.panel.includes(clave);
-                    return (
-                      <button
-                        key={clave}
-                        onClick={() =>
-                          aplicar({
-                            ...cfg,
-                            panel: puesta ? cfg.panel.filter((c) => c !== clave) : [...cfg.panel, clave],
-                          })
-                        }
-                        className={`rounded-full border px-3.5 py-2 text-[12px] transition ${
-                          puesta ? 'border-acc bg-acc/10 text-acc' : 'border-line2 text-ink2'
-                        }`}
-                      >
-                        {s.nombre}
-                        {s.unidad && <em className="ml-1.5 font-mono text-[10.5px] not-italic opacity-60">{s.unidad}</em>}
-                      </button>
-                    );
-                  })}
-                </div>
               )}
 
-              {cfg.panel.length > 0 && (
-                <div className="rounded-xl border border-line bg-bg px-3.5 py-2.5">
-                  <p className="rotulo mb-1">Orden en el que se ven</p>
-                  <p className="m-0 font-mono text-[11.5px] text-ink2">{cfg.panel.join(' · ')}</p>
-                </div>
-              )}
+              {cfg.panel.map((t, i) => {
+                const forma = vista(t.vista);
+                const completa = t.claves.length >= forma.senales;
+
+                return (
+                  <div key={t.id} className="rounded-xl border border-line bg-bg px-3.5 py-3">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="rotulo flex-1">
+                        Tarjeta {i + 1} · {forma.nombre}
+                        {!completa && <em className="ml-2 not-italic text-warn">le faltan señales</em>}
+                      </span>
+                      <Boton variante="tenue" onClick={() => mover(i, -1)} disabled={i === 0}>↑</Boton>
+                      <Boton variante="tenue" onClick={() => mover(i, 1)} disabled={i === cfg.panel.length - 1}>↓</Boton>
+                      <Boton variante="peligro" onClick={() => cambiarPanel(cfg.panel.filter((x) => x.id !== t.id))}>
+                        Quitar
+                      </Boton>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <Campo etiqueta="Nombre">
+                        <Entrada
+                          value={t.titulo}
+                          placeholder="el de la señal"
+                          onChange={(e) => cambiarTarjeta(t.id, { titulo: e.target.value })}
+                        />
+                      </Campo>
+
+                      <Campo etiqueta="Cómo se ve">
+                        <Selector
+                          value={t.vista}
+                          onChange={(e) => {
+                            const v = e.target.value as VistaTarjeta;
+                            /* Al pasar a una forma que toma menos señales se recortan las
+                               que sobran, para no dejar una resta con tres sumandos. */
+                            cambiarTarjeta(t.id, { vista: v, claves: t.claves.slice(0, vista(v).senales) });
+                          }}
+                        >
+                          {VISTAS.map((v) => (
+                            <option key={v.id} value={v.id}>{v.nombre}</option>
+                          ))}
+                        </Selector>
+                      </Campo>
+                    </div>
+
+                    <p className="mb-2 mt-2 text-[11.5px] leading-relaxed text-ink3">{forma.ayuda}</p>
+
+                    <p className="rotulo mb-1.5">
+                      {forma.senales === 1 ? 'Señal' : 'Señales, en orden: la primera y la segunda'}
+                    </p>
+
+                    {disponibles.length === 0 ? (
+                      <p className="m-0 text-[11.5px] text-ink3">Nada ha llegado todavía.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {disponibles.map(([clave, s]) => {
+                          const puesto = t.claves.indexOf(clave);
+                          return (
+                            <button
+                              key={clave}
+                              onClick={() => elegirSenal(t, clave)}
+                              className={`rounded-full border px-3 py-1.5 text-[12px] transition ${
+                                puesto >= 0 ? 'border-acc bg-acc/10 text-acc' : 'border-line2 text-ink2'
+                              }`}
+                            >
+                              {forma.senales > 1 && puesto >= 0 && (
+                                <b className="mr-1.5 font-mono">{puesto + 1}</b>
+                              )}
+                              {s.nombre}
+                              {s.unidad && (
+                                <em className="ml-1.5 font-mono text-[10.5px] not-italic opacity-60">{s.unidad}</em>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      {forma.usa.includes('unidad') && (
+                        <Campo etiqueta="Unidad">
+                          <Entrada
+                            value={t.unidad}
+                            placeholder="la de la señal"
+                            onChange={(e) => cambiarTarjeta(t.id, { unidad: e.target.value })}
+                          />
+                        </Campo>
+                      )}
+
+                      {forma.usa.includes('decimales') && (
+                        <Campo etiqueta="Decimales">
+                          <Entrada
+                            type="number" min={0} max={4} value={t.decimales}
+                            onChange={(e) => cambiarTarjeta(t.id, { decimales: Number(e.target.value) })}
+                          />
+                        </Campo>
+                      )}
+
+                      {forma.usa.includes('rango') && (
+                        <>
+                          <Campo etiqueta="Mínimo de la barra">
+                            <Entrada
+                              type="number" value={t.min}
+                              onChange={(e) => cambiarTarjeta(t.id, { min: Number(e.target.value) })}
+                            />
+                          </Campo>
+                          <Campo etiqueta="Máximo de la barra">
+                            <Entrada
+                              type="number" value={t.max}
+                              onChange={(e) => cambiarTarjeta(t.id, { max: Number(e.target.value) })}
+                            />
+                          </Campo>
+                        </>
+                      )}
+
+                      {forma.usa.includes('umbrales') && (
+                        <>
+                          <Campo etiqueta="Avisa por debajo de">
+                            <Entrada
+                              type="number" value={t.bajo ?? ''} placeholder="sin límite"
+                              onChange={(e) =>
+                                cambiarTarjeta(t.id, { bajo: e.target.value === '' ? null : Number(e.target.value) })
+                              }
+                            />
+                          </Campo>
+                          <Campo etiqueta="Avisa por encima de">
+                            <Entrada
+                              type="number" value={t.alto ?? ''} placeholder="sin límite"
+                              onChange={(e) =>
+                                cambiarTarjeta(t.id, { alto: e.target.value === '' ? null : Number(e.target.value) })
+                              }
+                            />
+                          </Campo>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="mt-3">
+                      <Interruptor
+                        activo={t.grande}
+                        alCambiar={(v) => cambiarTarjeta(t.id, { grande: v })}
+                        etiqueta="Ocupa el ancho entero"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="flex flex-wrap gap-2">
+                {VISTAS.map((v) => (
+                  <Boton key={v.id} onClick={() => cambiarPanel([...cfg.panel, nuevaTarjeta(v.id)])}>
+                    + {v.nombre}
+                  </Boton>
+                ))}
+              </div>
             </Bloque>
           )}
 
