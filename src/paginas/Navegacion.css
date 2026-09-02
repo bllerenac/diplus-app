@@ -321,3 +321,72 @@
   line-height: 1.55;
   color: var(--ink3);
 }
+
+/* ── Grupos del panel ─────────────────────────────────────────────────────── */
+
+/* Las lecturas van agrupadas por la fuente de la que salen. Sueltas no se sabia
+   si un numero venia del RS485 o del bus CAN, y con dos fuentes dando
+   magnitudes parecidas eso se confunde. */
+.nav-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.nav-grupo + .nav-grupo {
+  margin-top: 5px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.nav-grupo__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.nav-grupo__nombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--titulo);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nav-grupo__vacio {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px dashed var(--line2);
+  border-radius: 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink3);
+}
+
+/* Cada fuente lleva su propio estado: una puede estar muda mientras la otra va,
+   y sin esto un panel a medias parece un fallo de todo. */
+.nav-estado {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.nav-estado.vivo { border-color: var(--acc); color: var(--acc); }
+.nav-estado.viejo { border-color: var(--warn); color: var(--warn); }
+
+.nav-panel__cuenta {
+  padding: 2px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink3);
+}

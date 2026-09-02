@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, useIonRouter } from '@ionic/react';
-import { Activity, Crosshair, Settings, TerminalSquare, X } from 'lucide-react';
+import { Crosshair, Settings, TerminalSquare } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
@@ -48,7 +48,6 @@ export default function Navegacion() {
   const [pos, setPos] = useState<Posicion | null>(gps.posicion());
   const [valores, setValores] = useState<Map<string, Senal>>(new Map());
   const [frescura, setFrescura] = useState<Map<string, number>>(new Map());
-  const [panelAbierto, setPanelAbierto] = useState(true);
   const [seguir, setSeguir] = useState(true);
   const [problema, setProblema] = useState<ProblemaPuerto | null>(null);
   const [, refrescar] = useState(0);
@@ -141,13 +140,6 @@ export default function Navegacion() {
     };
   }, [cfg.fuentes]);
 
-  /* Al abrir o cerrar el panel cambia el ancho del mapa. Leaflet no se entera
-     solo: sin esto queda descuadrado y los toques caen desplazados. */
-  useEffect(() => {
-    const t = setTimeout(() => mapa.current?.invalidateSize(), 280);
-    return () => clearTimeout(t);
-  }, [panelAbierto]);
-
   /* La frescura envejece sola aunque no llegue nada: un valor de hace un minuto
      tiene que dejar de parecer actual. */
   useEffect(() => {
@@ -169,16 +161,33 @@ export default function Navegacion() {
   const cal = calidad(pos?.calidad ?? 0);
   const velocidad = Math.max(0, Math.round((pos?.velocidad ?? 0) * 3.6));
 
-  const elegidas = useMemo(() => {
-    /* Sin nada elegido se enseña lo que haya llegado, para que la pantalla no
-       aparezca vacia la primera vez. */
-    const claves = cfg.panel.length ? cfg.panel : [...valores.keys()];
-    return claves.map((c) => ({ clave: c, senal: valores.get(c), visto: frescura.get(c) }));
-  }, [cfg.panel, valores, frescura]);
+  /**
+   * Las lecturas, agrupadas por la fuente de la que salen.
+   *
+   * Sueltas no se sabia si un numero venia del RS485 o del bus CAN, y con dos
+   * fuentes dando magnitudes parecidas eso se confunde. Cada grupo lleva
+   * ademas su propio estado: una fuente puede estar muda mientras la otra va.
+   */
+  const grupos = useMemo(() => {
+    const elegidas = new Set(cfg.panel);
+
+    return cfg.fuentes.map((f) => {
+      const claves = [...valores.keys()].filter((c) => c.startsWith(`${f.id}.`));
+      const suyas = elegidas.size ? claves.filter((c) => elegidas.has(c)) : claves;
+      const ultima = claves.reduce((max, c) => Math.max(max, frescura.get(c) ?? 0), 0);
+
+      return {
+        fuente: f,
+        viva: ultima > 0 && Date.now() - ultima < 15000,
+        nunca: ultima === 0,
+        lecturas: suyas.map((c) => ({ clave: c, senal: valores.get(c), visto: frescura.get(c) })),
+      };
+    });
+  }, [cfg.fuentes, cfg.panel, valores, frescura]);
 
   return (
     <IonPage>
-      <div className={`nav-pantalla ${panelAbierto ? '' : 'sin-panel'}`}>
+      <div className="nav-pantalla">
         <div className="nav-izquierda">
           <div className="nav-mapa" ref={divMapa} />
 
@@ -202,14 +211,6 @@ export default function Navegacion() {
             aria-label="Centrar en mi posición"
           >
             <Crosshair size={18} strokeWidth={1.9} />
-          </button>
-
-          <button
-            className={`nav-boton ${panelAbierto ? 'puesto' : ''}`}
-            onClick={() => setPanelAbierto((v) => !v)}
-            aria-label="Mostrar u ocultar las lecturas"
-          >
-            <Activity size={18} strokeWidth={1.9} />
           </button>
 
           <button className="nav-boton" onClick={() => router.push('/monitor')} aria-label="Monitor del bus">
@@ -244,13 +245,10 @@ export default function Navegacion() {
         )}
 
         </div>
-
-        <aside className={`nav-panel ${panelAbierto ? '' : 'oculto'}`}>
+        <aside className="nav-panel">
           <div className="nav-panel__cab">
             <span className="nav-rotulo">Sensores</span>
-            <button className="nav-boton" style={{ width: 30, height: 30 }} onClick={() => setPanelAbierto(false)}>
-              <X size={15} strokeWidth={2.2} />
-            </button>
+            <span className="nav-panel__cuenta">{grupos.length}</span>
           </div>
 
           {problema && (
@@ -260,47 +258,66 @@ export default function Navegacion() {
           )}
 
           <div className="nav-panel__cuerpo">
-            {elegidas.length === 0 && (
+            {grupos.length === 0 && (
               <p className="nav-vacio">
-                Todavía no hay lecturas.
+                Todavía no hay ninguna fuente.
                 <br />
                 {hayHardware()
-                  ? 'Da de alta una fuente en Configuración y elige qué señales ver aquí.'
+                  ? 'Da de alta el RS485 o el bus CAN en Configuración.'
                   : 'Esto es una vista previa: los puertos solo existen en el equipo.'}
               </p>
             )}
 
-            {elegidas.map(({ clave, senal, visto }) => {
-              const edad = visto ? Date.now() - visto : Infinity;
-              const viejo = edad > 10000;
-              const sinDato = senal?.valor === null || senal?.valor === undefined;
+            {grupos.map(({ fuente, viva, nunca, lecturas }) => (
+              <section className="nav-grupo" key={fuente.id}>
+                <header className="nav-grupo__cab">
+                  <span className="nav-grupo__nombre">{fuente.nombre}</span>
+                  <span className={`nav-estado ${viva ? 'vivo' : nunca ? 'mudo' : 'viejo'}`}>
+                    {viva ? 'recibiendo' : nunca ? 'sin datos' : 'callado'}
+                  </span>
+                </header>
 
-              return (
-                <article
-                  key={clave}
-                  className={`nav-lectura ${viejo ? 'viejo' : ''} ${sinDato ? 'sin' : ''}`}
-                >
-                  <p className="nav-lectura__nombre">{senal?.nombre ?? clave}</p>
-                  <p className="nav-lectura__valor">
-                    {sinDato ? (
-                      senal?.ambiguo ? 'cero o sin dato' : 'sin dato'
-                    ) : (
-                      <>
-                        {typeof senal!.valor === 'number'
-                          ? (senal!.valor as number).toFixed(2)
-                          : String(senal!.valor)}
-                        {senal!.unidad && <small>{senal!.unidad}</small>}
-                      </>
-                    )}
+                {lecturas.length === 0 ? (
+                  <p className="nav-grupo__vacio">
+                    {nunca
+                      ? 'Nada ha llegado por aquí todavía.'
+                      : 'Sin señales elegidas para esta fuente.'}
                   </p>
-                  {visto && (
-                    <p className="nav-lectura__pie">
-                      {viejo ? `HACE ${Math.round(edad / 1000)} S` : 'AHORA'}
-                    </p>
-                  )}
-                </article>
-              );
-            })}
+                ) : (
+                  lecturas.map(({ clave, senal, visto }) => {
+                    const edad = visto ? Date.now() - visto : Infinity;
+                    const viejo = edad > 10000;
+                    const sinDato = senal?.valor === null || senal?.valor === undefined;
+
+                    return (
+                      <article
+                        key={clave}
+                        className={`nav-lectura ${viejo ? 'viejo' : ''} ${sinDato ? 'sin' : ''}`}
+                      >
+                        <p className="nav-lectura__nombre">{senal?.nombre ?? clave}</p>
+                        <p className="nav-lectura__valor">
+                          {sinDato ? (
+                            senal?.ambiguo ? 'cero o sin dato' : 'sin dato'
+                          ) : (
+                            <>
+                              {typeof senal!.valor === 'number'
+                                ? (senal!.valor as number).toFixed(2)
+                                : String(senal!.valor)}
+                              {senal!.unidad && <small>{senal!.unidad}</small>}
+                            </>
+                          )}
+                        </p>
+                        {visto && (
+                          <p className="nav-lectura__pie">
+                            {viejo ? `HACE ${Math.round(edad / 1000)} S` : 'AHORA'}
+                          </p>
+                        )}
+                      </article>
+                    );
+                  })
+                )}
+              </section>
+            ))}
           </div>
         </aside>
       </div>
