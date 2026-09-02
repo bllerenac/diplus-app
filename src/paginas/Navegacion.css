@@ -1,0 +1,279 @@
+/*
+ * Paleta de D+, la misma que el resto de la plataforma, hex a hex.
+ * Sin tema claro: esto se mira en una cabina, a pleno sol o de noche.
+ */
+:root {
+  --bg: #070c10;
+  --sur: #0d151b;
+  --sur2: #121d24;
+  --line: #1f2e37;
+  --line2: #2f4450;
+  --ink: #eef6f8;
+  --ink2: #8fa6b1;
+  --ink3: #597079;
+  --acc: #2ee6b0;
+  --acc2: #ff6b4a;
+  --warn: #ffb347;
+  --bad: #ff5c47;
+  --glowa: rgba(46, 230, 176, 0.35);
+
+  --titulo: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+
+.nav-pantalla {
+  position: relative;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Mapa ─────────────────────────────────────────────────────────────────── */
+
+.nav-mapa {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Las teselas vienen claras y aquí todo es oscuro: se apagan para que la
+   información que va encima no compita con el mapa. */
+.nav-mapa .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(190deg) brightness(0.82) contrast(1.1) saturate(0.5);
+}
+.nav-mapa .leaflet-container {
+  background: var(--bg);
+}
+.nav-mapa .leaflet-control-attribution {
+  background: rgba(7, 12, 16, 0.75);
+  color: var(--ink3);
+  font-size: 9px;
+}
+.nav-mapa .leaflet-control-attribution a { color: var(--ink3); }
+
+/* La maquina: un triangulo que apunta a donde va. */
+.nav-flecha {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+}
+.nav-flecha svg {
+  filter: drop-shadow(0 0 10px var(--glowa));
+  transition: transform 0.4s ease-out;
+}
+
+/* ── Barra superior ───────────────────────────────────────────────────────── */
+
+.nav-barra {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(7, 12, 16, 0.94) 55%, transparent);
+  pointer-events: none;
+}
+.nav-barra > * { pointer-events: auto; }
+
+.nav-marca {
+  font-family: var(--titulo);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.nav-hueco { flex: 1; }
+
+.nav-boton {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line2);
+  border-radius: 11px;
+  background: rgba(18, 29, 36, 0.9);
+  color: var(--ink2);
+  cursor: pointer;
+}
+.nav-boton:active { transform: translateY(1px); }
+.nav-boton.puesto { border-color: var(--acc); color: var(--acc); }
+
+/* Insignia de calidad: es lo primero que hay que poder leer de un vistazo. */
+.nav-rtk {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  background: rgba(18, 29, 36, 0.9);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.nav-rtk.ok { border-color: var(--acc); color: var(--acc); }
+.nav-rtk.warn { border-color: var(--warn); color: var(--warn); }
+.nav-rtk.bad { border-color: var(--bad); color: var(--bad); }
+
+.nav-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.nav-rtk.ok .nav-punto { box-shadow: 0 0 8px currentColor; }
+
+/* ── Velocidad ────────────────────────────────────────────────────────────── */
+
+.nav-velocidad {
+  position: absolute;
+  left: 16px;
+  bottom: 18px;
+  z-index: 500;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(13, 21, 27, 0.92);
+  backdrop-filter: blur(10px);
+}
+.nav-velocidad b {
+  font-family: var(--mono);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+}
+.nav-velocidad span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink3);
+}
+
+.nav-precision {
+  position: absolute;
+  left: 16px;
+  bottom: 0;
+  transform: translateY(120%);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink3);
+}
+
+/* ── Panel lateral ────────────────────────────────────────────────────────── */
+
+.nav-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 600;
+  width: 320px;
+  max-width: 86vw;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: rgba(9, 15, 20, 0.95);
+  backdrop-filter: blur(16px);
+  transition: transform 0.25s ease;
+}
+.nav-panel.oculto { transform: translateX(100%); }
+
+.nav-panel__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-rotulo {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.nav-panel__cuerpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Una lectura. Grande, porque esto se mira de reojo mientras se conduce. */
+.nav-lectura {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--sur);
+  padding: 11px 13px;
+}
+.nav-lectura__nombre {
+  font-size: 11px;
+  color: var(--ink3);
+  margin: 0 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-lectura__valor {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+}
+.nav-lectura__valor small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink3);
+  margin-left: 5px;
+}
+.nav-lectura.viejo .nav-lectura__valor { color: var(--ink3); }
+.nav-lectura.sin .nav-lectura__valor { color: var(--ink3); font-size: 18px; }
+
+.nav-lectura__pie {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+}
+
+.nav-vacio {
+  margin: auto;
+  padding: 22px 14px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink3);
+}
+
+.nav-aviso {
+  margin: 0 12px 12px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--bad);
+  background: rgba(255, 92, 71, 0.08);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+@media (max-width: 640px) {
+  .nav-velocidad b { font-size: 32px; }
+  .nav-panel { width: 78vw; }
+}

@@ -1,0 +1,76 @@
+/**
+ * Configuracion del equipo, guardada en el propio aparato.
+ *
+ * Todo lo que decide que se lee, como se interpreta y que se enseña vive aqui.
+ * Nada de esto esta en el codigo: un equipo nuevo se configura desde la pantalla
+ * de ajustes, sin recompilar.
+ */
+import { Fuente } from './hardware';
+import { defectosDe, protocolo } from './protocolos';
+
+const CLAVE = 'diplus.config.v1';
+
+export interface Servidor {
+  activo: boolean;
+  url: string;
+  token: string;
+  /** Cada cuanto se manda lo leido, en segundos. */
+  cadaSeg: number;
+  /** Identificador de este equipo en el servidor. */
+  equipo: string;
+}
+
+export interface Config {
+  fuentes: Fuente[];
+  /** Claves `fuenteId.senal` que se enseñan en el panel de la pantalla principal. */
+  panel: string[];
+  gps: { ruta: string; activo: boolean };
+  servidor: Servidor;
+}
+
+const POR_DEFECTO: Config = {
+  fuentes: [],
+  panel: [],
+  gps: { ruta: '/dev/ttyHSL2', activo: true },
+  servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
+};
+
+let memoria: Config = POR_DEFECTO;
+let cargada = false;
+
+export const cargar = (): Config => {
+  if (cargada) return memoria;
+  cargada = true;
+  try {
+    const crudo = localStorage.getItem(CLAVE);
+    if (crudo) memoria = { ...POR_DEFECTO, ...JSON.parse(crudo) };
+  } catch {
+    /* Configuracion ilegible: se sigue con la de fabrica en vez de no arrancar. */
+  }
+  return memoria;
+};
+
+export const guardar = (c: Config): Config => {
+  memoria = c;
+  try {
+    localStorage.setItem(CLAVE, JSON.stringify(c));
+  } catch {
+    /* Sin sitio para guardar, al menos queda aplicada en esta sesion. */
+  }
+  return memoria;
+};
+
+export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
+  const protoId = puerto === 'rs485' ? 'helperbox-json' : 'dfm-j1939';
+  return {
+    id: `f${Date.now().toString(36)}`,
+    nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
+    puerto,
+    ruta: '/dev/ttyHSL0',
+    baudios: 9600,
+    bitrate: 250000,
+    protocoloId: protoId,
+    config: defectosDe(protocolo(protoId)),
+    activa: true,
+  };
+};

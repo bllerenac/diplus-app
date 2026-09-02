@@ -1,0 +1,208 @@
+.aj-toolbar {
+  --background: #0d151b;
+  --color: #eef6f8;
+  --border-color: #1f2e37;
+  font-family: var(--titulo);
+}
+
+.aj-contenido {
+  --background: #070c10;
+  --color: #eef6f8;
+  --padding-start: 14px;
+  --padding-end: 14px;
+  --padding-top: 14px;
+  --padding-bottom: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aj-bloque {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--sur);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.aj-bloque__cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.aj-bloque__cuerpo {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aj-rotulo {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.aj-acciones { display: flex; gap: 7px; }
+
+.aj-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 11px;
+}
+
+.aj-campo { display: flex; flex-direction: column; gap: 5px; }
+
+.aj-campo__et {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.aj-campo__ayuda { font-size: 11px; line-height: 1.45; color: var(--ink3); }
+
+.aj-entrada {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+}
+.aj-entrada:focus { border-color: var(--acc); }
+
+.aj-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  background: var(--sur2);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.aj-btn:active { transform: translateY(1px); }
+.aj-btn--peligro { border-color: transparent; color: var(--ink3); }
+.aj-btn--peligro:hover { color: var(--bad); border-color: var(--bad); }
+
+.aj-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.aj-check input { width: 17px; height: 17px; accent-color: var(--acc); }
+
+.aj-nota { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--ink3); }
+
+.aj-vacio {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink3);
+}
+
+.aj-aviso {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-left: 2px solid var(--warn);
+  border-radius: 0 10px 10px 0;
+  background: rgba(255, 179, 71, 0.08);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+/* ── Fuente ───────────────────────────────────────────────────────────────── */
+
+.aj-fuente {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--sur2);
+}
+
+.aj-fuente__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Señales a mano ───────────────────────────────────────────────────────── */
+
+.aj-senales { display: flex; flex-direction: column; gap: 10px; margin-top: 9px; }
+
+.aj-senal {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+}
+
+.aj-senal__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* ── Fichas de señal ──────────────────────────────────────────────────────── */
+
+.aj-fichas { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.aj-ficha {
+  padding: 8px 13px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--ink2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.aj-ficha em {
+  margin-left: 6px;
+  font-style: normal;
+  opacity: 0.6;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.aj-ficha.puesta {
+  border-color: var(--acc);
+  color: var(--acc);
+  background: rgba(46, 230, 176, 0.1);
+}
+
+.aj-eco {
+  margin: 0;
+  padding: 10px 0 4px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--acc);
+}

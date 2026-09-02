@@ -221,14 +221,18 @@ class Hardware {
     return Nativo.sendModbusQuery({ devicePath: ruta, address, functionCode, startRegister, registerCount });
   }
 
-  alRecibir(fn: OyenteTramas) {
+  alRecibir(fn: OyenteTramas): () => void {
     this.oyentesTrama.add(fn);
-    return () => this.oyentesTrama.delete(fn);
+    return () => {
+      this.oyentesTrama.delete(fn);
+    };
   }
 
-  alFallar(fn: OyenteProblemas) {
+  alFallar(fn: OyenteProblemas): () => void {
     this.oyentesProblema.add(fn);
-    return () => this.oyentesProblema.delete(fn);
+    return () => {
+      this.oyentesProblema.delete(fn);
+    };
   }
 
   tramas(): TramaVista[] {
