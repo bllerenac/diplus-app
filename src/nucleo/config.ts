@@ -27,14 +27,16 @@ export interface Config {
   fuentes: Fuente[];
   /** Claves `fuenteId.senal` que se enseñan en el panel de la pantalla principal. */
   panel: string[];
-  gps: { ruta: string; activo: boolean };
+  gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
 }
 
 const POR_DEFECTO: Config = {
   fuentes: [],
   panel: [],
-  gps: { ruta: '/dev/ttyHSL2', activo: true },
+  /* 921600 no es un capricho: es la velocidad a la que esta el puerto del
+     receptor en este equipo, medida con stty. A 9600 no se leeria nada. */
+  gps: { ruta: '/dev/ttyHSL2', baudios: 921600, activo: true },
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
 };

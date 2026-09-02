@@ -93,7 +93,7 @@ export default function Navegacion() {
 
   /* ── GPS ──────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (cfg.gps.activo) gps.arrancar(cfg.gps.ruta).catch(() => undefined);
+    if (cfg.gps.activo) gps.arrancar(cfg.gps.ruta, cfg.gps.baudios).catch(() => undefined);
 
     return gps.alMoverse((p) => {
       setPos(p);
@@ -109,7 +109,7 @@ export default function Navegacion() {
       traza.current?.setLatLngs(gps.camino());
       if (seguirRef.current) mapa.current?.panTo(punto, { animate: true, duration: 0.4 });
     });
-  }, [cfg.gps.activo, cfg.gps.ruta]);
+  }, [cfg.gps.activo, cfg.gps.ruta, cfg.gps.baudios]);
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {

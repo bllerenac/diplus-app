@@ -43,6 +43,7 @@ export const precisionAproximada = (c: number, hdop: number): string => {
 };
 
 interface PluginGps {
+  setPortBaudrate(o: { devicePath: string; baudrate: number }): Promise<any>;
   startGpsListener(o: { devicePath: string }): Promise<any>;
   addListener(evento: string, fn: (d: any) => void): Promise<any>;
 }
@@ -58,8 +59,17 @@ class Gps {
   /** Últimos puntos, para pintar por dónde ha ido. */
   private rastro: [number, number][] = [];
 
-  async arrancar(ruta: string) {
+  async arrancar(ruta: string, baudios = 921600) {
     if (!Capacitor.isNativePlatform()) return;
+
+    /* El puerto se configura antes de leer. Si alguien lo dejo a otra
+       velocidad, sin esto llegaria basura en vez de sentencias y pareceria que
+       el receptor esta roto. */
+    try {
+      await Nativo.setPortBaudrate({ devicePath: ruta, baudrate: baudios });
+    } catch {
+      /* si no se puede, se intenta leer con lo que haya */
+    }
 
     if (!this.enganchado) {
       this.enganchado = true;

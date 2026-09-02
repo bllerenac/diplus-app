@@ -400,12 +400,29 @@ export default function Ajustes() {
           {/* ── Posición ───────────────────────────────────────────────── */}
           {pestana === 'posicion' && (
             <Bloque titulo="GPS y RTK">
-              <Campo etiqueta="Dispositivo del receptor">
-                <Entrada
-                  value={cfg.gps.ruta}
-                  onChange={(e) => aplicar({ ...cfg, gps: { ...cfg.gps, ruta: e.target.value } })}
-                />
-              </Campo>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo etiqueta="Dispositivo del receptor">
+                  <Entrada
+                    value={cfg.gps.ruta}
+                    onChange={(e) => aplicar({ ...cfg, gps: { ...cfg.gps, ruta: e.target.value } })}
+                  />
+                </Campo>
+                <Campo
+                  etiqueta="Baudios"
+                  ayuda="En este equipo el receptor va a 921600. A otra velocidad sólo llega basura."
+                >
+                  <Selector
+                    value={cfg.gps.baudios}
+                    onChange={(e) =>
+                      aplicar({ ...cfg, gps: { ...cfg.gps, baudios: Number(e.target.value) } })
+                    }
+                  >
+                    {[9600, 38400, 57600, 115200, 230400, 460800, 921600].map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </Selector>
+                </Campo>
+              </div>
 
               <Interruptor
                 activo={cfg.gps.activo}
