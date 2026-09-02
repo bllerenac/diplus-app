@@ -6,6 +6,7 @@
  * de ajustes, sin recompilar.
  */
 import { Fuente } from './hardware';
+import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
 
 const CLAVE = 'diplus.config.v1';
@@ -21,6 +22,8 @@ export interface Servidor {
 }
 
 export interface Config {
+  /** Que se guarda en la base del equipo y durante cuanto. */
+  registro: AjustesRegistro;
   fuentes: Fuente[];
   /** Claves `fuenteId.senal` que se enseñan en el panel de la pantalla principal. */
   panel: string[];
@@ -32,6 +35,7 @@ const POR_DEFECTO: Config = {
   fuentes: [],
   panel: [],
   gps: { ruta: '/dev/ttyHSL2', activo: true },
+  registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
 };
 

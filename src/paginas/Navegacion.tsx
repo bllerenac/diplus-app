@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, useIonRouter } from '@ionic/react';
+import { Activity, Crosshair, Settings, TerminalSquare, X } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
@@ -15,6 +16,7 @@ import './Navegacion.css';
 import { Config, cargar } from '../nucleo/config';
 import { Posicion, calidad, gps, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
+import { registro } from '../nucleo/registro';
 import { Senal } from '../nucleo/lecturas';
 
 /**
@@ -114,6 +116,11 @@ export default function Navegacion() {
   useEffect(() => {
     for (const f of cfg.fuentes) hardware.arrancar(f).catch(() => undefined);
 
+    /* El guardado en la base va con la aplicacion, no con la pantalla de
+       ajustes: si solo arrancara al guardar la configuracion, un equipo que se
+       enciende y nadie toca no registraria nada. */
+    registro.aplicar(cfg.registro);
+
     const quitarTramas = hardware.alRecibir((t: TramaVista) => {
       setValores((prev) => {
         const m = new Map(prev);
@@ -194,11 +201,7 @@ export default function Navegacion() {
             }}
             aria-label="Centrar en mi posición"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-              <circle cx="12" cy="12" r="3.2" />
-              <circle cx="12" cy="12" r="8.2" />
-              <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" strokeLinecap="round" />
-            </svg>
+            <Crosshair size={18} strokeWidth={1.9} />
           </button>
 
           <button
@@ -206,23 +209,15 @@ export default function Navegacion() {
             onClick={() => setPanelAbierto((v) => !v)}
             aria-label="Mostrar u ocultar las lecturas"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-              <path d="M3 12h4l2-5 3 10 2.5-7 1.8 4H21" />
-            </svg>
+            <Activity size={18} strokeWidth={1.9} />
           </button>
 
           <button className="nav-boton" onClick={() => router.push('/monitor')} aria-label="Monitor del bus">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-              <rect x="3" y="4.5" width="18" height="13" rx="2" />
-              <path d="M8 21h8M12 17.5V21" />
-            </svg>
+            <TerminalSquare size={18} strokeWidth={1.9} />
           </button>
 
           <button className="nav-boton" onClick={() => router.push('/ajustes')} aria-label="Configuración">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2 2M7.3 16.7l-2 2M18.7 18.7l-2-2M7.3 7.3l-2-2" />
-            </svg>
+            <Settings size={18} strokeWidth={1.9} />
           </button>
         </div>
 
@@ -254,9 +249,7 @@ export default function Navegacion() {
           <div className="nav-panel__cab">
             <span className="nav-rotulo">Sensores</span>
             <button className="nav-boton" style={{ width: 30, height: 30 }} onClick={() => setPanelAbierto(false)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
+              <X size={15} strokeWidth={2.2} />
             </button>
           </div>
 

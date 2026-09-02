@@ -1,10 +1,10 @@
 /**
- * Configuracion, en cuatro pestañas.
+ * Configuracion, por pestañas.
  *
- * Van separadas porque son cuatro decisiones distintas y en una sola columna
- * habia que bajar mucho para llegar a lo de abajo. El orden es el que se sigue
- * al montar un equipo: primero de donde se lee, luego que se ve, luego la
- * posicion y por ultimo a donde se manda.
+ * Van separadas porque son decisiones distintas y en una sola columna habia que
+ * bajar mucho para llegar a lo de abajo. El orden es el que se sigue al montar
+ * un equipo: de donde se lee, que se ve, la posicion, que se guarda y a donde
+ * se manda.
  *
  * Los formularios de cada protocolo **no estan escritos aqui**: se dibujan a
  * partir de los `campos` que el propio protocolo declara necesitar. Añadir un
@@ -19,16 +19,19 @@ import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config
 import { Fuente, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
+import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
+import { registro } from '../nucleo/registro';
 import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
 
-type Pestana = 'fuentes' | 'panel' | 'posicion' | 'servidor';
+type Pestana = 'fuentes' | 'panel' | 'posicion' | 'datos' | 'servidor';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'fuentes', nombre: 'Fuentes' },
   { id: 'panel', nombre: 'Panel' },
   { id: 'posicion', nombre: 'Posición' },
+  { id: 'datos', nombre: 'Datos' },
   { id: 'servidor', nombre: 'Servidor' },
 ];
 
@@ -149,6 +152,19 @@ export default function Ajustes() {
     return m;
   });
   const [eco, setEco] = useState<string | null>(null);
+  const [peso, setPeso] = useState<{ filas: number; desde: number | null } | null>(null);
+
+  const mirarPeso = async () => {
+    try {
+      setPeso(await resumen());
+    } catch {
+      setPeso(null);
+    }
+  };
+
+  useEffect(() => {
+    if (pestana === 'datos') mirarPeso();
+  }, [pestana]);
 
   useEffect(() =>
     hardware.alRecibir((t: TramaVista) => {
@@ -162,6 +178,7 @@ export default function Ajustes() {
   const aplicar = (c: Config) => {
     setCfg(c);
     guardar(c);
+    registro.aplicar(c.registro);
     setEco(`Guardado a las ${new Date().toLocaleTimeString('es-PE')}`);
     setTimeout(() => setEco(null), 2500);
   };
@@ -407,6 +424,99 @@ export default function Ajustes() {
                 una que el receptor ya tiene con satélites. Sin satélites no hay posición, con
                 correcciones o sin ellas.
               </Aviso>
+            </Bloque>
+          )}
+
+          {/* ── Datos ──────────────────────────────────────────────────── */}
+          {pestana === 'datos' && (
+            <Bloque titulo="Lo que se guarda en el equipo">
+              <Nota>
+                Las lecturas se guardan aquí, en el propio equipo, con la posición del momento.
+                Así queda histórico aunque no haya red — y un consumo sin saber dónde se produjo
+                sirve para la mitad de las preguntas.
+              </Nota>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo
+                  etiqueta="Guardar cada (ms)"
+                  ayuda="El bus va a su ritmo; esto manda sobre lo que baja a la base."
+                >
+                  <Entrada
+                    type="number"
+                    min={500}
+                    step={500}
+                    value={cfg.registro.cadaMs}
+                    onChange={(e) =>
+                      aplicar({ ...cfg, registro: { ...cfg.registro, cadaMs: Number(e.target.value) } })
+                    }
+                  />
+                </Campo>
+                <Campo etiqueta="Conservar (horas)" ayuda="Pasado ese tiempo se borra solo.">
+                  <Entrada
+                    type="number"
+                    min={1}
+                    max={8760}
+                    value={cfg.registro.retencionHoras}
+                    onChange={(e) =>
+                      aplicar({
+                        ...cfg,
+                        registro: { ...cfg.registro, retencionHoras: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </Campo>
+              </div>
+
+              <Interruptor
+                activo={cfg.registro.activo}
+                alCambiar={(v) => aplicar({ ...cfg, registro: { ...cfg.registro, activo: v } })}
+                etiqueta="Guardar histórico"
+              />
+
+              <div className="rounded-xl border border-line bg-bg px-4 py-3">
+                <p className="rotulo mb-1.5">Ocupación</p>
+                <p className="m-0 font-mono text-[13px] text-ink">
+                  {peso === null
+                    ? '—'
+                    : `${peso.filas.toLocaleString('es-PE')} lecturas`}
+                  {peso?.desde && (
+                    <span className="ml-2 text-[11px] text-ink3">
+                      desde {new Date(peso.desde).toLocaleString('es-PE')}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Boton onClick={mirarPeso}>Actualizar</Boton>
+                <Boton
+                  onClick={async () => {
+                    const n = await podar(cfg.registro.retencionHoras);
+                    await mirarPeso();
+                    setEco(`Podadas ${n.toLocaleString('es-PE')} lecturas viejas`);
+                    setTimeout(() => setEco(null), 3000);
+                  }}
+                >
+                  Podar ahora
+                </Boton>
+                <Boton
+                  variante="peligro"
+                  onClick={async () => {
+                    await vaciar();
+                    await mirarPeso();
+                    setEco('Histórico borrado');
+                    setTimeout(() => setEco(null), 3000);
+                  }}
+                >
+                  Borrar todo
+                </Boton>
+              </div>
+
+              {!hayBase() && (
+                <Aviso tono="bad">
+                  Este navegador no tiene almacén de datos, así que no se puede guardar nada.
+                </Aviso>
+              )}
             </Bloque>
           )}
 

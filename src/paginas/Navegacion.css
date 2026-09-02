@@ -53,8 +53,9 @@
 .nav-flecha {
   width: 30px;
   height: 30px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .nav-flecha svg {
   filter: drop-shadow(0 0 10px var(--glowa));
@@ -88,8 +89,10 @@
 .nav-hueco { flex: 1; }
 
 .nav-boton {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   width: 38px;
   height: 38px;
   border: 1px solid var(--line2);

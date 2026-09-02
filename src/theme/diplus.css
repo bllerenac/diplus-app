@@ -96,6 +96,12 @@ h1, h2, h3 { font-family: var(--titulo); letter-spacing: -0.01em; }
 
 button { font-family: inherit; }
 
+/* Un SVG en linea se apoya en la linea base del texto y arrastra unos pixeles
+   por debajo: dentro de un boton cuadrado eso descoloca el icono hacia arriba.
+   En bloque no tiene linea base y queda centrado de verdad. Pasaba en todos
+   los botones de la barra. */
+svg { display: block; }
+
 :focus-visible {
   outline: 2px solid var(--acc);
   outline-offset: 2px;
