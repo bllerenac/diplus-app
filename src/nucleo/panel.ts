@@ -137,7 +137,12 @@ export const ICONOS: { id: string; nombre: string }[] = [
   { id: 'Zap', nombre: 'Rayo' },
   { id: 'Flame', nombre: 'Llama · motor' },
   { id: 'Waves', nombre: 'Olas · nivel' },
-  { id: 'CircleDot', nombre: 'Rueda · presión de aire' },
+  /* Lucide no tiene neumatico. Disc3 son circulos concentricos, que es una
+     rueda vista de frente, y se distingue de un vistazo del cuentarrevoluciones;
+     Gauge seria mas correcto —lo que se mide es presion— pero a 14 pixeles los
+     dos manometros se confunden. */
+  { id: 'Disc3', nombre: 'Rueda · presión de aire' },
+  { id: 'CircleDot', nombre: 'Punto · genérico' },
   { id: 'Timer', nombre: 'Cronómetro' },
 ];
 
@@ -159,7 +164,7 @@ export const iconoSugerido = (texto: string): string => {
   if (/hora|tiempo|horom/.test(t)) return 'Clock';
   if (/carga|load|esfuerzo/.test(t)) return 'Activity';
   if (/tonel|peso|carga util/.test(t)) return 'Weight';
-  if (/aire|neumat|rueda|llanta|presion de aire/.test(t)) return 'CircleDot';
+  if (/aire|neumat|rueda|llanta/.test(t)) return 'Disc3';
   if (/estado|status|marcha/.test(t)) return 'Truck';
   return '';
 };
