@@ -35,16 +35,33 @@ import { guardado } from '../nucleo/servidor';
 const VISTA_SIN_FIX: [number, number] = [-9.2, -75.0];
 const ZOOM_SIN_FIX = 5;
 
-const flechaDe = (rumbo: number) =>
-  L.divIcon({
-    className: '',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    html: `<div class="nav-flecha"><svg width="26" height="26" viewBox="0 0 24 24"
-      style="transform: rotate(${rumbo}deg)">
-      <path d="M12 2 L19.5 21 L12 16.5 L4.5 21 Z" fill="#2ee6b0" stroke="#07120f" stroke-width="1.2"/>
-    </svg></div>`,
-  });
+/**
+ * La flecha de la maquina.
+ *
+ * Con el mapa girando, la flecha **no rota**: siempre apunta hacia arriba,
+ * porque arriba es siempre hacia donde se va. Lleva delante un haz que abre en
+ * la direccion de marcha, que es lo que da la sensacion de ir mirando la pista
+ * y no un plano.
+ */
+const FLECHA = L.divIcon({
+  className: '',
+  iconSize: [72, 96],
+  iconAnchor: [36, 62],
+  html: `<div class="nav-yo">
+    <svg viewBox="0 0 72 96" width="72" height="96">
+      <defs>
+        <linearGradient id="haz" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#2ee6b0" stop-opacity="0.34"/>
+          <stop offset="1" stop-color="#2ee6b0" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="M36 60 L4 6 A 46 46 0 0 1 68 6 Z" fill="url(#haz)"/>
+      <circle cx="36" cy="62" r="17" fill="#07120f" opacity="0.55"/>
+      <path d="M36 46 L48 74 L36 67 L24 74 Z" fill="#2ee6b0" stroke="#07120f" stroke-width="2.5"
+        stroke-linejoin="round"/>
+    </svg>
+  </div>`,
+});
 
 /**
  * El icono de una tarjeta, buscado por nombre en lucide.
@@ -72,6 +89,30 @@ export default function Navegacion() {
   const [recargarMapa] = useState(0);
   const [cuantasGeocercas, setCuantasGeocercas] = useState(0);
 
+  const lienzo = useRef<HTMLDivElement | null>(null);
+  const rumboPuesto = useRef(0);
+
+  /**
+   * Gira el mapa para que arriba sea siempre hacia donde se va.
+   *
+   * Es lo que hace que un navegador se sienta como un navegador y no como un
+   * plano: uno no traduce «voy al sur» mirando un norte fijo, mira hacia
+   * delante. Se toca el CSS directamente y no el estado de React porque esto
+   * cambia con cada posicion y volver a dibujar la pantalla entera por un
+   * angulo seria un desperdicio.
+   *
+   * El camino corto: de 350 a 10 grados se gira 20, no 340.
+   */
+  const girar = (rumbo: number) => {
+    if (!lienzo.current) return;
+    let d = rumbo - rumboPuesto.current;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    rumboPuesto.current += d;
+    lienzo.current.style.setProperty('--giro', `${-rumboPuesto.current}deg`);
+    /* Los nombres de las geocercas se desgiran, o quedarian del reves. */
+    lienzo.current.style.setProperty('--desgiro', `${rumboPuesto.current}deg`);
+  };
   const divMapa = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<L.Map | null>(null);
   const marca = useRef<L.Marker | null>(null);
@@ -146,7 +187,11 @@ export default function Navegacion() {
           ? L.circle(g.puntos[0], { ...pinta, radius: g.radio })
           : L.polygon(g.puntos, pinta);
 
-      capa.bindTooltip(g.nombre, { direction: 'center', className: 'nav-geocerca__nombre' });
+      capa.bindTooltip(g.nombre, {
+        permanent: true,
+        direction: 'center',
+        className: 'nav-geocerca__nombre',
+      });
       capa.addTo(m);
       puestos.push(capa);
     }
@@ -172,11 +217,11 @@ export default function Navegacion() {
 
       /* La flecha nace con la primera posicion buena, no antes. */
       if (!marca.current && mapa.current) {
-        marca.current = L.marker(punto, { icon: flechaDe(p.rumbo) }).addTo(mapa.current);
+        marca.current = L.marker(punto, { icon: FLECHA, zIndexOffset: 1000 }).addTo(mapa.current);
         mapa.current.setView(punto, 17);
       }
       marca.current?.setLatLng(punto);
-      marca.current?.setIcon(flechaDe(p.rumbo));
+      girar(p.rumbo);
       traza.current?.setLatLngs(gps.camino());
       if (seguirRef.current) mapa.current?.panTo(punto, { animate: true, duration: 0.4 });
     });
@@ -278,7 +323,11 @@ export default function Navegacion() {
     <IonPage>
       <div className="nav-pantalla">
         <div className="nav-izquierda">
-          <div className="nav-mapa" ref={divMapa} />
+          {/* El mapa vive dentro de un lienzo mas grande que la pantalla: al
+              girarlo, si midiera lo mismo se verian las esquinas vacias. */}
+          <div className="nav-lienzo" ref={lienzo}>
+            <div className="nav-mapa" ref={divMapa} />
+          </div>
 
         <div className="nav-barra">
           <span className="nav-marca">DiPlus</span>

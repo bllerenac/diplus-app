@@ -26,10 +26,25 @@
 
 /* ── Mapa ─────────────────────────────────────────────────────────────────── */
 
+/* El lienzo gira con el rumbo y es mas grande que la pantalla: si midiera lo
+   mismo, al girar se verian las esquinas vacias. Y se baja un poco, para que
+   la maquina quede en el tercio inferior y se vea pista por delante, que es
+   como se conduce mirando un navegador. */
+.nav-lienzo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 190%;
+  height: 190%;
+  z-index: 0;
+  transform: translate(-50%, -50%) translateY(9%) rotate(var(--giro, 0deg));
+  transform-origin: center center;
+  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 .nav-mapa {
   position: absolute;
   inset: 0;
-  z-index: 0;
 }
 
 
@@ -512,3 +527,51 @@
 .nav-velocidad span { margin-top: 2px; font-size: 9.5px; letter-spacing: 0.18em; }
 
 .nav-precision { left: 22px; }
+
+/* ── La maquina en el mapa ──────────────────────────────────────────────────
+   La flecha no rota: con el mapa girando, arriba es siempre hacia donde se va.
+   Delante lleva un haz que abre en la direccion de marcha, que es lo que da la
+   sensacion de ir mirando la pista y no un plano. */
+
+.nav-yo {
+  filter: drop-shadow(0 0 14px var(--glowa)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
+}
+
+/* Los nombres de las geocercas se desgiran, o quedarian cabeza abajo cuando la
+   maquina va hacia el sur. */
+.nav-geocerca__nombre {
+  transform: rotate(var(--desgiro, 0deg));
+  transform-origin: center center;
+}
+
+/* Lo que flota sobre el mapa no gira: vive en la pantalla, no en el terreno. */
+.nav-barra,
+.nav-velocidad,
+.nav-precision,
+.nav-sinfix { z-index: 600; }
+
+/* Lo que flota sobre el mapa se promociona a su propia capa.
+   Sin esto la barra superior desaparecia: el lienzo del mapa lleva `transform`,
+   el navegador lo compone aparte, y en la WebView del equipo acababa pintado
+   por encima de elementos que tenian mas z-index. Se comprobo en la pantalla:
+   la barra estaba ahi, visible y con z-index 600, y aun asi no se veia. */
+.nav-barra,
+.nav-velocidad,
+.nav-precision,
+.nav-sinfix {
+  transform: translateZ(0);
+}
+
+/* ── Pantallas estrechas ────────────────────────────────────────────────────
+   La del equipo son 806 px CSS, asi que el panel mide 242. En dos columnas cada
+   tarjeta queda en 112 px y el numero se aprieta. A partir de aqui va en una
+   sola columna: menos tarjetas a la vista, pero legibles de reojo, que es de lo
+   que se trata. */
+@media (max-width: 1000px) {
+  .nav-rejilla { grid-template-columns: 1fr; }
+  .nav-tarjeta__valor b { font-size: 23px; }
+  .nav-tarjeta.ancha .nav-tarjeta__valor b { font-size: 30px; }
+  .nav-tarjeta__nombre { font-size: 9px; }
+  .nav-velocidad { width: 92px; height: 92px; }
+  .nav-velocidad b { font-size: 33px; }
+}
