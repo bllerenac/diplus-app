@@ -105,6 +105,7 @@ export const ICONOS: { id: string; nombre: string }[] = [
   { id: 'Zap', nombre: 'Rayo' },
   { id: 'Flame', nombre: 'Llama · motor' },
   { id: 'Waves', nombre: 'Olas · nivel' },
+  { id: 'CircleDot', nombre: 'Rueda · presión de aire' },
   { id: 'Timer', nombre: 'Cronómetro' },
 ];
 
@@ -126,6 +127,7 @@ export const iconoSugerido = (texto: string): string => {
   if (/hora|tiempo|horom/.test(t)) return 'Clock';
   if (/carga|load|esfuerzo/.test(t)) return 'Activity';
   if (/tonel|peso|carga util/.test(t)) return 'Weight';
+  if (/aire|neumat|rueda|llanta|presion de aire/.test(t)) return 'CircleDot';
   if (/estado|status|marcha/.test(t)) return 'Truck';
   return '';
 };

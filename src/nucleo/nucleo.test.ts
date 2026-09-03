@@ -7,6 +7,8 @@
  * se recomponga y que una configuracion distinta de la de fabrica se reconozca.
  */
 import { describe, expect, it } from 'vitest';
+import { comoVoy, dentroDelPoligono, geocercaDe, recomendacionDe } from './geo';
+import { Geocerca } from './servidor';
 import { arreglarDireccion, esMasNueva, reparo } from './actualizacion';
 import { calcular, nuevaTarjeta, texto, titulo } from './panel';
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
@@ -431,5 +433,59 @@ describe('tramas reales del emisor de pruebas', () => {
     );
     expect(s[0].valor).toBeCloseTo(41.64, 2);
     expect(s[4].valor).toBeCloseTo(158, 2);
+  });
+});
+
+describe('en que geocerca estoy', () => {
+  const poli = (id: string, puntos: [number, number][]): Geocerca =>
+    ({ id, nombre: id, tipo: 'poligono', color: '#fff', puntos, radio: 0 });
+
+  /* Un cuadrado grande con otro pequeño dentro, que es lo normal en una mina:
+     una rampa dentro de un area. */
+  const AREA = poli('area', [[0, 0], [0, 10], [10, 10], [10, 0]]);
+  const RAMPA = poli('rampa', [[4, 4], [4, 6], [6, 6], [6, 4]]);
+
+  it('sabe si un punto está dentro', () => {
+    expect(dentroDelPoligono([5, 5], AREA.puntos)).toBe(true);
+    expect(dentroDelPoligono([15, 5], AREA.puntos)).toBe(false);
+  });
+
+  it('acierta con un polígono cóncavo, que es lo que hay en una mina', () => {
+    /* Una L: el hueco de la esquina queda fuera aunque este dentro del marco. */
+    const ele = poli('L', [[0, 0], [0, 6], [2, 6], [2, 2], [6, 2], [6, 0]]);
+    expect(dentroDelPoligono([1, 1], ele.puntos)).toBe(true);
+    expect(dentroDelPoligono([4, 4], ele.puntos)).toBe(false);
+  });
+
+  it('gana la más pequeña cuando se solapan', () => {
+    /* Estando en la rampa interesa el limite de la rampa, no el del area. */
+    expect(geocercaDe([5, 5], [AREA, RAMPA])?.id).toBe('rampa');
+    expect(geocercaDe([1, 1], [AREA, RAMPA])?.id).toBe('area');
+  });
+
+  it('devuelve nada si no está en ninguna', () => {
+    expect(geocercaDe([50, 50], [AREA, RAMPA])).toBeNull();
+  });
+
+  it('mide el círculo por su radio, en metros', () => {
+    const grifo: Geocerca = {
+      id: 'g', nombre: 'Grifo', tipo: 'circulo', color: '#fff',
+      puntos: [[-6.0304, -80.8575]], radio: 69,
+    };
+    /* Unos 30 m al norte: dentro. Unos 300 m: fuera. */
+    expect(geocercaDe([-6.03013, -80.8575], [grifo])?.id).toBe('g');
+    expect(geocercaDe([-6.0277, -80.8575], [grifo])).toBeNull();
+  });
+
+  it('usa lo general cuando la geocerca no tiene nada puesto', () => {
+    expect(recomendacionDe(RAMPA, {}).velocidad).toBe(30);
+    expect(recomendacionDe(RAMPA, { rampa: { velocidad: 15, galonesHora: 8 } }).velocidad).toBe(15);
+  });
+
+  it('avisa antes de pasarse del límite, no después', () => {
+    /* Para cuando el numero se pone rojo, la maquina lleva un rato pasada. */
+    expect(comoVoy(20, 30)).toBe('bien');
+    expect(comoVoy(28, 30)).toBe('justo');
+    expect(comoVoy(31, 30)).toBe('pasado');
   });
 });

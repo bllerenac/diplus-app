@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, useIonRouter } from '@ionic/react';
-import { Crosshair, Settings, TerminalSquare } from 'lucide-react';
+import { ArrowRight, Crosshair, Settings, TerminalSquare } from 'lucide-react';
 import * as Iconos from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -22,6 +22,7 @@ import { Senal } from '../nucleo/lecturas';
 import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 import { maqueta } from '../nucleo/maqueta';
 import { guardado } from '../nucleo/servidor';
+import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -319,6 +320,47 @@ export default function Navegacion() {
     [cfg.fuentes, frescura],
   );
 
+  /* ── Viaje, geocerca y recomendación ──────────────────────────────────── */
+
+  const camion = useMemo(() => guardado()?.camion ?? null, [recargarMapa]);
+  const geocercas = useMemo(() => guardado()?.geocercas ?? [], [recargarMapa]);
+
+  /** En qué geocerca está la máquina ahora. */
+  const donde = useMemo(
+    () => (pos ? geocercaDe([pos.lat, pos.lon], geocercas) : null),
+    [pos, geocercas],
+  );
+
+  const consejo = recomendacionDe(donde, cfg.recomendaciones, cfg.recomendacionGeneral);
+
+  /**
+   * El consumo en galones por hora.
+   *
+   * Sale de la primera tarjeta que mida caudal. Si el equipo lo da en litros
+   * —que es lo normal en los caudalímetros de aquí— se convierte, porque la
+   * recomendación viene en galones y comparar dos unidades distintas sería
+   * peor que no comparar nada.
+   */
+  const galones = useMemo(() => {
+    const t = cfg.panel.find((x) => x.vista === 'diferencia' || /caudal|consumo/i.test(x.titulo));
+    if (!t) return null;
+    const v = calcular(t, valores, frescura);
+    if (typeof v.valor !== 'number') return null;
+    return /l\/h|litro/i.test(v.unidad) ? v.valor / 3.785 : v.valor;
+  }, [cfg.panel, valores, frescura]);
+
+  const vaVelocidad = comoVoy(velocidad, consejo.velocidad);
+  const vaConsumo = galones === null ? 'bien' : comoVoy(galones, consejo.galonesHora);
+
+  /**
+   * Las tarjetas que caben sin desplazar.
+   *
+   * El panel no tiene barra de desplazamiento a propósito: conduciendo no se
+   * desplaza nada. Lo que no cabe, no se enseña, así que el orden de las
+   * tarjetas en Configuración decide qué se ve.
+   */
+  const vitales = useMemo(() => tarjetas.slice(0, 6), [tarjetas]);
+
   return (
     <IonPage>
       <div className="nav-pantalla">
@@ -389,28 +431,28 @@ export default function Navegacion() {
         </div>
         <aside className="nav-panel">
           {/* Se anuncia siempre. Un caudal inventado no se distingue de uno
-              leido, y una posicion inventada tampoco: eso es exactamente lo
-              que hacia mal la version anterior. */}
+              leído, y una posición inventada tampoco. */}
           {cfg.maqueta && <p className="nav-maqueta">Datos de prueba · nada de esto es real</p>}
 
-          {/* Sin rótulo. «Sensores» encima de unos sensores no dice nada, y ese
-              renglón vale más ocupado por el estado de cada bus: una fuente
-              puede estar muda mientras la otra va, y en las tarjetas eso no se
-              ve. */}
-          {estados.length > 0 && (
-            <div className="nav-fuentes">
-              {estados.map((e) => (
-                <span
-                  key={e.fuente.id}
-                  className={`nav-chip ${e.viva ? 'vivo' : e.nunca ? 'mudo' : 'viejo'}`}
-                  title={e.viva ? 'recibiendo' : e.nunca ? 'sin datos' : 'callado'}
-                >
-                  <i />
-                  <span>{e.fuente.nombre}</span>
-                </span>
-              ))}
+          {/* ── Quién conduce y qué viaje lleva ───────────────────────────── */}
+          <header className="nav-viaje">
+            <div className="nav-viaje__quien">
+              <span className="nav-unidad">{camion?.unidad || cfg.servidor.equipo || '—'}</span>
+              <span className="nav-operador">{camion?.operador || 'Sin operador asignado'}</span>
             </div>
-          )}
+
+            <div className="nav-viaje__tramo">
+              <span className="nav-tramo__punta">
+                <em>desde</em>
+                <b>{camion?.desde || '—'}</b>
+              </span>
+              <ArrowRight size={15} strokeWidth={2.4} className="nav-tramo__flecha" />
+              <span className="nav-tramo__punta">
+                <em>hacia</em>
+                <b>{camion?.hacia || '—'}</b>
+              </span>
+            </div>
+          </header>
 
           {problema && (
             <p className="nav-aviso">
@@ -418,73 +460,73 @@ export default function Navegacion() {
             </p>
           )}
 
-          <div className="nav-panel__cuerpo">
-            {cfg.fuentes.length === 0 && tarjetas.length === 0 && (
-              <p className="nav-vacio">
-                Todavía no hay ninguna fuente.
-                <br />
-                {hayHardware()
-                  ? 'Da de alta el RS485 o el bus CAN en Configuración.'
-                  : 'Esto es una vista previa: los puertos solo existen en el equipo.'}
-              </p>
-            )}
+          {/* ── Lo que hay que vigilar ────────────────────────────────────── */}
+          <div className="nav-vitales">
+            {vitales.map(({ t, v }) => {
+              const edad = v.visto ? Date.now() - v.visto : Infinity;
+              const viejo = edad > 10000;
 
-            {cfg.fuentes.length > 0 && tarjetas.length === 0 && (
-              <p className="nav-vacio">
-                Nada ha llegado todavía.
-                <br />
-                En cuanto entren lecturas se ven aquí, y en Configuración → Panel se arma
-                cómo mostrarlas.
-              </p>
-            )}
+              return (
+                <article
+                  key={t.id}
+                  className={`nav-vital ${viejo ? 'viejo' : ''} est-${v.estado}`}
+                >
+                  <span className="nav-vital__icono">
+                    <IconoTarjeta nombre={t.icono} size={15} />
+                  </span>
 
-            <div className="nav-rejilla">
-              {tarjetas.map(({ t, v }) => {
-                const edad = v.visto ? Date.now() - v.visto : Infinity;
-                const viejo = edad > 10000;
-
-                return (
-                  <article
-                    key={t.id}
-                    className={`nav-tarjeta ${t.grande ? 'ancha' : ''} ${viejo ? 'viejo' : ''} est-${v.estado}`}
-                  >
-                    <header className="nav-tarjeta__cab">
-                      <span className="nav-tarjeta__icono">
-                        <IconoTarjeta nombre={t.icono} size={t.grande ? 16 : 13} />
-                      </span>
-                      <p className="nav-tarjeta__nombre">{titulo(t, v)}</p>
-                    </header>
-
-                    <p className="nav-tarjeta__valor">
-                      <b>{texto(v, t.decimales)}</b>
+                  <span className="nav-vital__texto">
+                    <em>{titulo(t, v)}</em>
+                    <b>
+                      {texto(v, t.decimales)}
                       {v.valor !== null && v.unidad && <small>{v.unidad}</small>}
-                    </p>
+                    </b>
+                  </span>
 
-                    {/* La barra de un nivel va debajo y a todo lo ancho, como el
-                        indicador de combustible de un tablero: de reojo se lee
-                        la posición, no el número. */}
-                    {v.fraccion !== null && (
-                      <div className="nav-nivel">
-                        <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />
-                      </div>
-                    )}
+                  {v.fraccion !== null && (
+                    <span className="nav-vital__barra">
+                      <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />
+                    </span>
+                  )}
+                </article>
+              );
+            })}
 
-                    {v.partes.length > 1 && (
-                      <p className="nav-tarjeta__partes">
-                        {v.partes.map((p) => `${p.nombre} ${p.valor ?? '—'}`).join('   ·   ')}
-                      </p>
-                    )}
-
-                    {(viejo || !v.visto) && (
-                      <p className="nav-tarjeta__pie">
-                        {v.visto ? `hace ${Math.round(edad / 1000)} s` : 'sin datos'}
-                      </p>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
+            {vitales.length === 0 && (
+              <p className="nav-vacio">
+                Todavía no llega ninguna lectura.
+                <br />
+                Da de alta una fuente, o enciende los datos de prueba.
+              </p>
+            )}
           </div>
+
+          {/* ── Lo que hay que mantener aquí ──────────────────────────────────
+              Abajo del todo y a propósito: es lo último que se mira antes de
+              volver la vista a la pista, y lo que dice si uno va bien o mal. */}
+          <footer className="nav-consejo">
+            <p className="nav-consejo__donde">
+              {donde ? donde.nombre : 'Fuera de toda geocerca'}
+            </p>
+
+            <div className="nav-consejo__pareja">
+              <div className={`nav-consejo__dato ${vaVelocidad}`}>
+                <em>Velocidad</em>
+                <b>
+                  {velocidad}
+                  <small>de {consejo.velocidad} km/h</small>
+                </b>
+              </div>
+
+              <div className={`nav-consejo__dato ${vaConsumo}`}>
+                <em>Consumo</em>
+                <b>
+                  {galones === null ? '—' : galones.toFixed(1)}
+                  <small>de {consejo.galonesHora} gal/h</small>
+                </b>
+              </div>
+            </div>
+          </footer>
         </aside>
       </div>
     </IonPage>

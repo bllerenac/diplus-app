@@ -10,7 +10,7 @@
   position: relative;
   height: 100%;
   display: grid;
-  grid-template-columns: 70% 30%;
+  grid-template-columns: 60% 40%;
   background: var(--bg);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -199,14 +199,7 @@
   overflow: hidden;
 }
 
-.nav-panel__cuerpo {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
+
 
 .nav-vacio {
   margin: auto;
@@ -575,3 +568,228 @@
   .nav-velocidad { width: 92px; height: 92px; }
   .nav-velocidad b { font-size: 33px; }
 }
+
+/* ── El panel del conductor ─────────────────────────────────────────────────
+   Tres bloques de alto fijo y **sin barra de desplazamiento**: conduciendo no
+   se desplaza nada. Arriba quien conduce y que viaje lleva, en medio lo que hay
+   que vigilar, y abajo lo que hay que mantener aqui. Lo que no cabe no se
+   enseña, asi que el orden de las tarjetas en Configuracion decide que se ve. */
+
+.nav-panel { display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Quien conduce y de donde a donde ───────────────────────────────────── */
+
+.nav-viaje {
+  flex: none;
+  padding: 11px 14px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sur2);
+}
+
+.nav-viaje__quien {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+.nav-unidad {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--acc);
+}
+.nav-operador {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-viaje__tramo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.nav-tramo__punta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-tramo__punta em {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.nav-tramo__punta b {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-tramo__flecha { flex: none; color: var(--acc); }
+
+/* ── Lo que hay que vigilar ─────────────────────────────────────────────── */
+
+.nav-vitales {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  overflow: hidden;
+}
+
+/* En fila, no en tarjeta: en una columna de 320 px caben mas lecturas asi, y
+   con el icono a la izquierda el ojo baja por una sola linea de simbolos. */
+.nav-vital {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 8px 11px;
+  border-radius: 11px;
+  background: var(--sur2);
+  overflow: hidden;
+}
+
+.nav-vital__icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgb(var(--acc-rgb) / 0.14);
+  color: var(--acc);
+}
+.nav-vital__icono:empty { display: none; }
+
+.nav-vital__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nav-vital__texto em {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-vital__texto b {
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.nav-vital__texto small { margin-left: 4px; font-size: 10px; font-weight: 400; color: var(--ink3); }
+
+/* La barra de un nivel va al pie de su fila, a todo lo ancho. */
+.nav-vital__barra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgb(var(--ink3-rgb) / 0.2);
+}
+.nav-vital__barra i { display: block; height: 100%; background: var(--acc); transition: width 0.4s ease; }
+
+.nav-vital.est-bajo, .nav-vital.est-alto { background: rgb(var(--warn-rgb) / 0.12); }
+.nav-vital.est-bajo .nav-vital__texto b, .nav-vital.est-alto .nav-vital__texto b { color: var(--warn); }
+.nav-vital.est-bajo .nav-vital__icono, .nav-vital.est-alto .nav-vital__icono {
+  background: rgb(var(--warn-rgb) / 0.2);
+  color: var(--warn);
+}
+.nav-vital.est-bajo .nav-vital__barra i, .nav-vital.est-alto .nav-vital__barra i { background: var(--warn); }
+.nav-vital.est-sin .nav-vital__texto b { font-size: 13px; color: var(--ink3); }
+.nav-vital.viejo .nav-vital__texto b { color: var(--ink3); }
+
+/* ── Lo que hay que mantener aqui ───────────────────────────────────────────
+   Abajo del todo a proposito: es lo ultimo que se mira antes de volver la vista
+   a la pista, y lo unico que dice si uno va bien o mal ahora mismo. */
+
+.nav-consejo {
+  flex: none;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--sur2);
+}
+
+.nav-consejo__donde {
+  margin: 0 0 9px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--acc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-consejo__pareja { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.nav-consejo__dato {
+  min-width: 0;
+  padding: 8px 10px 9px;
+  border-radius: 11px;
+  background: rgb(var(--acc-rgb) / 0.1);
+  border: 1px solid rgb(var(--acc-rgb) / 0.3);
+}
+.nav-consejo__dato em {
+  display: block;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.nav-consejo__dato b {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--acc);
+}
+.nav-consejo__dato small {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
+/* Se avisa antes de pasarse: en una rampa cargada, para cuando el numero se
+   pone rojo la maquina lleva un rato yendo demasiado rapido. */
+.nav-consejo__dato.justo {
+  background: rgb(var(--warn-rgb) / 0.12);
+  border-color: rgb(var(--warn-rgb) / 0.4);
+}
+.nav-consejo__dato.justo b { color: var(--warn); }
+.nav-consejo__dato.pasado {
+  background: rgb(var(--bad-rgb) / 0.15);
+  border-color: rgb(var(--bad-rgb) / 0.5);
+}
+.nav-consejo__dato.pasado b { color: var(--bad); }

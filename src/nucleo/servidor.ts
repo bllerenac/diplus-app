@@ -34,9 +34,27 @@ export interface Plano {
   centro: [number, number];
 }
 
+/**
+ * Lo que el servidor sabe del camion y el equipo no puede medir.
+ *
+ * El operador, de donde viene y a donde va salen del despacho, no de un
+ * sensor. Sin esto la pantalla no puede decirle al conductor nada sobre su
+ * viaje, que es la mitad de lo que necesita saber.
+ */
+export interface Camion {
+  unidad: string;
+  operador: string;
+  desde: string;
+  hacia: string;
+  /** Toneladas del turno. */
+  tonelaje: number;
+  estado: string;
+}
+
 export interface Descargado {
   geocercas: Geocerca[];
   plano: Plano | null;
+  camion: Camion | null;
   at: number;
 }
 
@@ -80,6 +98,29 @@ const traerPlano = (config: any[], base: string): Plano | null => {
       [Number(b.bounds[1][0]), Number(b.bounds[1][1])],
     ],
     centro: Array.isArray(b.center) ? [Number(b.center[0]), Number(b.center[1])] : [0, 0],
+  };
+};
+
+/**
+ * El camion de esta unidad, de la lista que devuelve el servidor.
+ *
+ * Se busca por el nombre de unidad que tenga configurado el equipo. Sin
+ * unidad puesta no se adivina: enseñar los datos de otro camion seria peor
+ * que no enseñar ninguno.
+ */
+const traerCamion = (lista: any[], unidad: string): Camion | null => {
+  if (!unidad.trim()) return null;
+  const c = lista.find((x) => String(x?.unit ?? '').toUpperCase() === unidad.trim().toUpperCase());
+  if (!c) return null;
+
+  return {
+    unidad: String(c.unit ?? unidad),
+    operador: String(c.currentOperator ?? ''),
+    /* El servidor guarda el tramo como «Route_PB2_PB4». */
+    desde: String(c.lastValidLocation ?? '').split('_')[1] ?? '',
+    hacia: String(c.lastValidLocation ?? '').split('_')[2] ?? '',
+    tonelaje: Number(c.currentShiftTonnage) || 0,
+    estado: String(c.status ?? ''),
   };
 };
 
@@ -132,11 +173,12 @@ export const entrar = async (base: string, email: string, clave: string): Promis
  * plano no: si una de las dos falla, se conserva lo que ya hubiera de esa parte
  * en vez de dejar la pantalla peor de como estaba.
  */
-export const descargar = async (base: string, token: string): Promise<Descargado> => {
+export const descargar = async (base: string, token: string, unidad = ''): Promise<Descargado> => {
   const antes = guardado();
 
   let geocercas = antes?.geocercas ?? [];
   let plano = antes?.plano ?? null;
+  let camion = antes?.camion ?? null;
   const fallos: string[] = [];
 
   try {
@@ -154,9 +196,19 @@ export const descargar = async (base: string, token: string): Promise<Descargado
     fallos.push(`plano: ${(e as Error).message}`);
   }
 
+  /* El camion es publico, sin token, asi que va aparte: que falle no debe
+     llevarse por delante el plano ni las geocercas. */
+  try {
+    const lista = await pedir(base, '/truck');
+    const c = traerCamion(Array.isArray(lista) ? lista : lista?.data ?? [], unidad);
+    if (c) camion = c;
+  } catch {
+    /* Se conserva el ultimo que se supo. */
+  }
+
   if (fallos.length === 2) throw new Error(fallos.join(' · '));
 
-  const d: Descargado = { geocercas, plano, at: Date.now() };
+  const d: Descargado = { geocercas, plano, camion, at: Date.now() };
   guardar(d);
   return d;
 };

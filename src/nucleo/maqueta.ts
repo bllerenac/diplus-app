@@ -148,6 +148,10 @@ class Maqueta {
       senal('presion_aceite', 'Presión de aceite', 'bar', +(3.4 + 0.9 * carga).toFixed(2)),
       senal('horas_motor', 'Horas de motor', 'h', +(7431 + t / 3600).toFixed(2)),
       senal('voltaje', 'Voltaje', 'V', +(27.4 + 0.6 * Math.sin(t / 11)).toFixed(1)),
+      senal('tonelaje', 'Tonelaje del turno', 't', +(180 + t * 0.04).toFixed(1)),
+      /* Los cuatro neumaticos no van igual: uno pierde despacio, que es como
+         se ve un pinchazo lento de verdad. */
+      senal('aire_ruedas', 'Aire en ruedas', 'bar', +(8.4 - (t % 900) * 0.0012).toFixed(2)),
       senal('carga_motor', 'Carga del motor', '%', Math.round(carga * 100)),
       senal('estado', 'Estado', '', carga > 0.75 ? 'CARGANDO' : 'EN RUTA'),
     ];

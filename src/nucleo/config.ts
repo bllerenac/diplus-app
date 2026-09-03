@@ -9,6 +9,7 @@ import { Fuente } from './hardware';
 import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
 import { Tarjeta, nuevaTarjeta } from './panel';
+import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -41,6 +42,10 @@ export interface Config {
   actualizacion: Actualizacion;
   /** Genera un camión de mentira para poder ver la pantalla sin hardware. */
   maqueta: boolean;
+  /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
+  recomendaciones: Record<string, Recomendacion>;
+  /** Lo que se aplica donde no haya nada puesto. */
+  recomendacionGeneral: Recomendacion;
 }
 
 const POR_DEFECTO: Config = {
@@ -56,6 +61,8 @@ const POR_DEFECTO: Config = {
   },
   actualizacion: { url: '' },
   maqueta: false,
+  recomendaciones: {},
+  recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
 };
 
 let memoria: Config = POR_DEFECTO;
