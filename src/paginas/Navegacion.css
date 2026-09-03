@@ -994,3 +994,40 @@
    dos lecturas relacionadas una al lado de la otra. */
 .nav-vital { grid-column: auto; }
 .nav-vital.ancha { grid-column: 1 / -1; }
+
+/* La inercial, en una línea bajo el consumo.
+   Son datos de apoyo: explican el consumo de arriba —una cuesta, una vía
+   mala—, así que se leen después y en pequeño. Si compitieran en tamaño con
+   el consumo, la tarjeta dejaría de tener una sola cosa importante. */
+.nav-consejo__inercia {
+  display: flex;
+  gap: 14px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgb(var(--line-rgb) / 0.9);
+}
+
+.nav-consejo__inercia span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nav-consejo__inercia em {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.nav-consejo__inercia b {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink2);
+  white-space: nowrap;
+}

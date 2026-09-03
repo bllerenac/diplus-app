@@ -9,14 +9,23 @@ export const Bloque = ({
   children: ReactNode;
   className?: string;
 }) => (
-  <section className={`rounded-2xl border border-line bg-sur overflow-hidden ${className}`}>
+  /* `shrink-0` no es adorno: dentro de una columna flexible con scroll, los
+     hijos se **comprimen** para caber en vez de desbordar, y como la seccion
+     recorta lo que sobra, el contenido desaparecia. En Configuracion se veian
+     los bloques aplastados unos sobre otros y el boton de calibrar no llegaba
+     a dibujarse. Se vio en el equipo. */
+  <section
+    className={
+      `shrink-0 overflow-hidden rounded-2xl border border-line bg-sur ${className}`
+    }
+  >
     {(titulo || accion) && (
       <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <span className="rotulo">{titulo}</span>
         {accion}
       </header>
     )}
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">{children}</div>
+    <div className="flex flex-col gap-4 p-4">{children}</div>
   </section>
 );
 

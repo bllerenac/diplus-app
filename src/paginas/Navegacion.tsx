@@ -510,6 +510,14 @@ export default function Navegacion() {
   }, [cfg.panel, valores, frescura]);
 
   const vaVelocidad = comoVoy(velocidad, consejo.velocidad);
+  /* Lo que la inercial aporta a la tarjeta del mapa. Se leen de las señales
+     como cualquier otra: para la pantalla no son nada especial. */
+  const num = (c: string) => valores.get(`imu.${c}`)?.valor ?? null;
+  const inclina = num('inclinacion');
+  const via = num('via');
+  const baches = num('baches');
+  const frenadas = num('frenadas');
+
   const vaConsumo = galones === null ? 'bien' : comoVoy(galones, consejo.galonesHora);
 
   /**
@@ -605,6 +613,30 @@ export default function Navegacion() {
               <small>de {consejo.galonesHora} gal/h</small>
             </b>
           </div>
+
+          {/* La inercial, en una linea y debajo. Son datos de apoyo: dicen si
+              la cuesta o la via explican el consumo de arriba, asi que se leen
+              despues de el y no compiten con el. */}
+          {cfg.movimiento.activo && (
+            <div className="nav-consejo__inercia">
+              <span>
+                <em>Cuesta</em>
+                <b>{inclina === null ? '—' : `${inclina}°`}</b>
+              </span>
+              <span>
+                <em>Vía</em>
+                <b>{via ?? '—'}</b>
+              </span>
+              <span>
+                <em>Baches</em>
+                <b>{baches ?? '—'}</b>
+              </span>
+              <span>
+                <em>Frenadas</em>
+                <b>{frenadas ?? '—'}</b>
+              </span>
+            </div>
+          )}
         </footer>
 
         </div>
