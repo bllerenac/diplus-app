@@ -35,10 +35,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * ─── Es una puerta, y se trata como tal ──────────────────────────────────────
  *
- * **Solo lee.** No cambia configuracion ni escribe en los puertos. Lo que se
- * puede hacer desde fuera es mirar como esta el equipo y pedir que busque una
- * version nueva. Cambiar cosas de lejos es otra decision, y merece pensarse
- * aparte.
+ * **Lee, y deja cambiar la configuracion.** Empezo siendo de solo lectura por
+ * prudencia, y fue un error: la puerta se hizo para no depender de que alguien
+ * este delante del equipo, y sin poder configurarlo seguia haciendo falta que
+ * alguien estuviera. Lo que se puede cambiar es exactamente lo mismo que se
+ * cambia desde la pantalla de Ajustes, ni una cosa mas: no se ejecutan ordenes
+ * del sistema ni se escribe en los puertos.
  *
  * **Pide token.** Sin el token correcto no contesta nada. Y por debajo esta
  * Tailscale, que ya limita quien puede siquiera llamar a la puerta: son dos
@@ -142,11 +144,28 @@ public class CanalRemoto extends Service {
         String[] trozos = primera.split(" ");
         String ruta = trozos.length > 1 ? trozos[1] : "/";
 
-        /* La cabecera se lee entera aunque no se use: si no, el cliente ve la
-           respuesta antes de terminar de enviar y algunos lo toman por error. */
+        /* La cabecera se lee entera: hace falta el largo del cuerpo, y ademas si
+           no se consume, el cliente ve la respuesta antes de terminar de enviar y
+           algunos lo toman por error. */
+        int largo = 0;
         String linea;
         while ((linea = in.readLine()) != null && !linea.isEmpty()) {
-            /* Se descarta. */
+            String baja = linea.toLowerCase();
+            if (baja.startsWith("content-length:")) {
+                largo = entero(linea.substring(15).trim(), 0);
+            }
+        }
+
+        String cuerpo = "";
+        if (largo > 0 && largo <= 512 * 1024) {
+            char[] buf = new char[largo];
+            int leidos = 0;
+            while (leidos < largo) {
+                int n = in.read(buf, leidos, largo - leidos);
+                if (n < 0) break;
+                leidos += n;
+            }
+            cuerpo = new String(buf, 0, Math.max(0, leidos));
         }
 
         String consulta = ruta.contains("?") ? ruta.substring(ruta.indexOf('?') + 1) : "";
@@ -174,6 +193,20 @@ public class CanalRemoto extends Service {
                         entero(parametro(consulta, "ms"), 3000)));
                 break;
 
+            case "/config":
+                /* La configuracion entera, tal como la guarda la pantalla de
+                   Ajustes. No se interpreta aqui: Java no sabe de fuentes ni de
+                   tarjetas, y si lo supiera habria dos sitios que mantener. Se
+                   deja en la cola y la aplicacion la aplica por el mismo camino
+                   que si alguien la hubiera tocado en la pantalla. */
+                if (cuerpo.isEmpty()) {
+                    responder(s, 400, "{\"error\":\"hace falta la configuración en el cuerpo\"}");
+                } else {
+                    ordenes = "config:" + cuerpo;
+                    responder(s, 200, "{\"ok\":\"la aplicación la aplicará en unos segundos\"}");
+                }
+                break;
+
             case "/actualizar":
                 ordenes = "actualizar";
                 responder(s, 200, "{\"ok\":\"la aplicación buscará una versión nueva\"}");
@@ -181,7 +214,7 @@ public class CanalRemoto extends Service {
 
             case "/":
                 responder(s, 200, "{\"soy\":\"DiPlus\",\"rutas\":"
-                        + "[\"/estado\",\"/puertos\",\"/leer\",\"/actualizar\"]}");
+                        + "[\"/estado\",\"/puertos\",\"/leer\",\"/config\",\"/actualizar\"]}");
                 break;
 
             default:

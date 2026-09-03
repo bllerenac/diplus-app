@@ -14,7 +14,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
 
-import { Config, cargar } from '../nucleo/config';
+import { Config, alCambiar, cargar, guardar } from '../nucleo/config';
 import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
@@ -375,8 +375,12 @@ export default function Navegacion() {
    * enciende y nadie toca tiene que quedar accesible y al día igual.
    */
   useEffect(() => {
-    canal.aplicar(cfg, (orden) => {
-      if (orden === 'actualizar') revisarSola(cfg.actualizacion, true);
+    canal.aplicar(cfg, {
+      alActualizar: () => revisarSola(cfg.actualizacion, true),
+      alConfigurar: (nueva) => {
+        guardar(nueva);
+        setCfg({ ...nueva });
+      },
     });
     revisarSola(cfg.actualizacion);
   }, [cfg.canal.activo, cfg.canal.puerto, cfg.canal.token, cfg.actualizacion.automatica]);
@@ -417,16 +421,15 @@ export default function Navegacion() {
     return () => clearInterval(t);
   }, []);
 
-  /* Al volver de ajustes, se recoge lo que se haya cambiado. */
-  useEffect(() => {
-    const alVolver = () => setCfg({ ...cargar() });
-    window.addEventListener('focus', alVolver);
-    document.addEventListener('ionViewWillEnter', alVolver);
-    return () => {
-      window.removeEventListener('focus', alVolver);
-      document.removeEventListener('ionViewWillEnter', alVolver);
-    };
-  }, []);
+  /**
+   * Los cambios de configuración llegan solos.
+   *
+   * Antes esto dependía de eventos de foco y de `ionViewWillEnter`, y no se
+   * disparaban: se tocaba un ajuste, se volvía, y la pantalla seguía con la
+   * configuración de cuando se abrió. Una fuente recién dada de alta no se
+   * leía. Ahora avisa la propia configuración cuando se guarda.
+   */
+  useEffect(() => alCambiar((c) => setCfg({ ...c })), []);
 
   const cal = calidad(pos?.calidad ?? 0);
   const velocidad = Math.max(0, Math.round((pos?.velocidad ?? 0) * 3.6));

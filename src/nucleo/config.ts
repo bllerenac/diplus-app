@@ -117,13 +117,32 @@ const alDia = (c: Config): Config => {
   return c;
 };
 
+/**
+ * Quien quiere enterarse cuando la configuración cambia.
+ *
+ * Sin esto la pantalla principal se quedaba con la que leyó al abrirse: se
+ * tocaba un ajuste, se volvía, y seguía con la vieja. Una fuente recién dada de
+ * alta no se leía nunca, y la maqueta apagada seguía enseñando su franja, hasta
+ * que alguien cerraba y volvía a abrir la aplicación. Se vio en el equipo.
+ */
+type Oyente = (c: Config) => void;
+const oyentes = new Set<Oyente>();
+
+export const alCambiar = (fn: Oyente): (() => void) => {
+  oyentes.add(fn);
+  return () => {
+    oyentes.delete(fn);
+  };
+};
+
 export const guardar = (c: Config): Config => {
   memoria = c;
   try {
     localStorage.setItem(CLAVE, JSON.stringify(c));
   } catch {
-    /* Sin sitio para guardar, al menos queda aplicada en esta sesion. */
+    /* Sin sitio para guardar, al menos queda aplicada en esta sesión. */
   }
+  oyentes.forEach((fn) => fn(memoria));
   return memoria;
 };
 

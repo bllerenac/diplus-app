@@ -15,7 +15,7 @@
  * llaves de lo demas.
  */
 import { registerPlugin, Capacitor } from '@capacitor/core';
-import { Config } from './config';
+import { Config, cargar } from './config';
 import { hardware } from './hardware';
 import { gps } from './gps';
 
@@ -76,12 +76,23 @@ const resumen = (cfg: Config) => {
   };
 };
 
-type AlPedir = (orden: string) => void;
+/**
+ * Lo que se puede pedir de fuera.
+ *
+ * La configuracion llega entera y se aplica por el mismo camino que si
+ * alguien la hubiera tocado en la pantalla: un solo sitio que mantener, y lo
+ * que se puede cambiar de lejos es exactamente lo que se puede cambiar de
+ * cerca.
+ */
+export interface Manos {
+  alActualizar: () => void;
+  alConfigurar: (cfg: Config) => void;
+}
 
 class Canal {
   private reloj: ReturnType<typeof setInterval> | null = null;
   private cfg: Config | null = null;
-  private alPedir: AlPedir | null = null;
+  private manos: Manos | null = null;
 
   /**
    * Enciende o apaga el canal segun la configuracion.
@@ -89,9 +100,9 @@ class Canal {
    * Sin token no se arranca: una puerta sin cerradura en un equipo que va a
    * estar en una mina no se abre, por mucho que Tailscale limite quien llama.
    */
-  async aplicar(cfg: Config, alPedir?: AlPedir) {
+  async aplicar(cfg: Config, manos?: Manos) {
     this.cfg = cfg;
-    if (alPedir) this.alPedir = alPedir;
+    if (manos) this.manos = manos;
     if (!hayCanal()) return;
 
     const quiere = cfg.canal.activo && cfg.canal.token.trim().length > 0;
@@ -113,15 +124,44 @@ class Canal {
   }
 
   private async latir() {
-    if (!this.cfg) return;
+    /* La configuración se lee del momento, no la que se pasó al arrancar.
+       Antes se publicaba una foto tomada por la pantalla principal, así que al
+       salir de ella lo que se veía desde fuera se quedaba congelado — y una
+       foto vieja engaña más que no ver nada. Se comprobó en el equipo: la
+       fuente CAN ya estaba dada de alta y desde aquí seguía sin aparecer. */
+    const cfg = cargar();
 
-    await Nativo.publicar({ estado: JSON.stringify(resumen(this.cfg)) }).catch(() => undefined);
+    await Nativo.publicar({ estado: JSON.stringify(resumen(cfg)) }).catch(() => undefined);
 
     try {
       const { ordenes } = await Nativo.ordenes();
-      if (ordenes && this.alPedir) this.alPedir(ordenes);
+      if (ordenes) this.atender(ordenes);
     } catch {
-      /* Sin canal, no hay ordenes que recoger. */
+      /* Sin canal, no hay órdenes que recoger. */
+    }
+  }
+
+  private atender(orden: string) {
+    if (!this.manos) return;
+
+    if (orden === 'actualizar') {
+      this.manos.alActualizar();
+      return;
+    }
+
+    if (orden.startsWith('config:')) {
+      try {
+        const nueva = JSON.parse(orden.slice(7)) as Config;
+
+        /* Se comprueba lo mínimo antes de aplicarla. Una configuración rota
+           dejaría el equipo sin pantalla y sin forma de arreglarlo de lejos,
+           que es justo la situación de la que esto viene a sacarnos. */
+        if (!nueva || typeof nueva !== 'object' || !Array.isArray(nueva.fuentes)) return;
+
+        this.manos.alConfigurar(nueva);
+      } catch {
+        /* JSON mal formado: se ignora, en vez de dejar el equipo a medias. */
+      }
     }
   }
 }
