@@ -36,6 +36,8 @@ export interface Config {
   gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
   actualizacion: Actualizacion;
+  /** Genera un camión de mentira para poder ver la pantalla sin hardware. */
+  maqueta: boolean;
 }
 
 const POR_DEFECTO: Config = {
@@ -47,6 +49,7 @@ const POR_DEFECTO: Config = {
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
   actualizacion: { url: '' },
+  maqueta: false,
 };
 
 let memoria: Config = POR_DEFECTO;

@@ -21,7 +21,8 @@ import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
-import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, vista } from '../nucleo/panel';
+import { maqueta } from '../nucleo/maqueta';
+import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, panelDeCamion, vista } from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
 } from '../nucleo/actualizacion';
@@ -714,6 +715,34 @@ export default function Ajustes() {
                   </Boton>
                 ))}
               </div>
+            </Bloque>
+          )}
+
+          {pestana === 'panel' && (
+            <Bloque titulo="Ver la pantalla sin hardware">
+              <Nota>
+                Genera un camión de mentira que recorre una ruta y da caudales, nivel,
+                revoluciones y temperatura. Sirve para decidir cómo se ve el panel mientras
+                no haya sensores conectados.
+              </Nota>
+
+              <Interruptor
+                activo={cfg.maqueta}
+                alCambiar={(v) => {
+                  aplicar({ ...cfg, maqueta: v });
+                  if (v) maqueta.encender();
+                  else maqueta.apagar();
+                }}
+                etiqueta="Datos de prueba"
+              />
+
+              {cfg.maqueta && (
+                <Aviso tono="warn">
+                  Mientras esté puesto, la pantalla principal enseña datos inventados y lo
+                  avisa. No se guardan en la base ni se mandan a ningún sitio, y se apaga
+                  sola al reiniciar la aplicación.
+                </Aviso>
+              )}
             </Bloque>
           )}
 

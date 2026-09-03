@@ -144,6 +144,17 @@ class Gps {
     });
   }
 
+  /**
+   * Posicion de maqueta.
+   *
+   * Solo la llama el simulador, y la pantalla avisa mientras esta encendido.
+   * Sin ese aviso esto seria justo el fallo de la version anterior: unas
+   * coordenadas inventadas que en un mapa no se distinguen de las buenas.
+   */
+  simular(p: Posicion) {
+    this.publicar(p);
+  }
+
   private publicar(p: Posicion) {
     this.ultima = p;
     this.rastro.push([p.lat, p.lon]);

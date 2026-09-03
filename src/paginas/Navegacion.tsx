@@ -19,6 +19,7 @@ import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/har
 import { registro } from '../nucleo/registro';
 import { Senal } from '../nucleo/lecturas';
 import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
+import { maqueta } from '../nucleo/maqueta';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -111,6 +112,15 @@ export default function Navegacion() {
       if (seguirRef.current) mapa.current?.panTo(punto, { animate: true, duration: 0.4 });
     });
   }, [cfg.gps.activo, cfg.gps.ruta, cfg.gps.baudios]);
+
+  /* La maqueta se enciende y se apaga con la configuracion, y no sobrevive a
+     un reinicio de la aplicacion: son datos de mentira y no deben quedarse
+     puestos sin que nadie se acuerde. */
+  useEffect(() => {
+    if (cfg.maqueta) maqueta.encender();
+    else maqueta.apagar();
+    return () => maqueta.apagar();
+  }, [cfg.maqueta]);
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -256,6 +266,11 @@ export default function Navegacion() {
 
         </div>
         <aside className="nav-panel">
+          {/* Se anuncia siempre. Un caudal inventado no se distingue de uno
+              leido, y una posicion inventada tampoco: eso es exactamente lo
+              que hacia mal la version anterior. */}
+          {cfg.maqueta && <p className="nav-maqueta">Datos de prueba · nada de esto es real</p>}
+
           {/* Sin rótulo. «Sensores» encima de unos sensores no dice nada, y ese
               renglón vale más ocupado por el estado de cada bus: una fuente
               puede estar muda mientras la otra va, y en las tarjetas eso no se
@@ -282,7 +297,7 @@ export default function Navegacion() {
           )}
 
           <div className="nav-panel__cuerpo">
-            {cfg.fuentes.length === 0 && (
+            {cfg.fuentes.length === 0 && tarjetas.length === 0 && (
               <p className="nav-vacio">
                 Todavía no hay ninguna fuente.
                 <br />

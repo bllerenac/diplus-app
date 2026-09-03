@@ -98,6 +98,60 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   grande: false,
 });
 
+/**
+ * Un panel de camion armado de una vez.
+ *
+ * Montarlo tarjeta a tarjeta la primera vez es tedioso y no enseña de que es
+ * capaz esto. Se le pasan las claves que ya han llegado y arma lo que puede:
+ * el consumo como resta de los dos caudalimetros, el nivel con su barra, y el
+ * resto en numeros. Lo que no encuentra, no lo inventa.
+ */
+export const panelDeCamion = (claves: string[]): Tarjeta[] => {
+  const busca = (...trozos: string[]) =>
+    claves.find((c) => trozos.every((t) => c.toLowerCase().includes(t)));
+
+  const tarjetas: Tarjeta[] = [];
+  const puesta = new Set<string>();
+
+  const ida = busca('caudal', 'ida');
+  const retorno = busca('caudal', 'retorno');
+  if (ida && retorno) {
+    tarjetas.push({
+      ...nuevaTarjeta('diferencia'),
+      id: 't-consumo',
+      titulo: 'Consumo',
+      claves: [ida, retorno],
+      unidad: 'L/h',
+      decimales: 1,
+      grande: true,
+    });
+    puesta.add(ida).add(retorno);
+  }
+
+  const nivel = busca('nivel');
+  if (nivel) {
+    tarjetas.push({
+      ...nuevaTarjeta('nivel'),
+      id: 't-nivel',
+      titulo: 'Tanque',
+      claves: [nivel],
+      decimales: 0,
+      min: 0,
+      max: 400,
+      bajo: 60,
+      grande: true,
+    });
+    puesta.add(nivel);
+  }
+
+  for (const c of claves) {
+    if (puesta.has(c)) continue;
+    tarjetas.push({ ...nuevaTarjeta('numero'), id: `t-${c}`, claves: [c], decimales: 1 });
+  }
+
+  return tarjetas;
+};
+
 /** Lo que la pantalla necesita saber para pintar una tarjeta. */
 export interface ValorTarjeta {
   /** El numero ya calculado, o el texto si la vista es de texto. */

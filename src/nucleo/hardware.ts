@@ -285,6 +285,32 @@ class Hardware {
     }
   }
 
+  /**
+   * Mete lecturas como si hubieran llegado por un puerto.
+   *
+   * Es lo que usa el modo maqueta para poder ver la pantalla sin hardware. No
+   * hay atajo posible: si la maqueta publicara por su cuenta, la pantalla
+   * tendria que saber de dos origenes distintos y acabaria tratandolos
+   * distinto. Entrando por aqui, para todo lo de arriba son lecturas normales.
+   */
+  inyectar(fuenteId: string, nombre: string, senales: Senal[]) {
+    for (const x of senales) this.valores.set(`${fuenteId}.${x.clave}`, x);
+
+    this.contador += 1;
+    const vista: TramaVista = {
+      n: this.contador,
+      fuenteId,
+      puerto: nombre,
+      hex: '',
+      senales,
+      at: Date.now(),
+    };
+
+    this.ultimas.push(vista);
+    if (this.ultimas.length > MAX_TRAMAS) this.ultimas = this.ultimas.slice(-MAX_TRAMAS);
+    this.oyentesTrama.forEach((fn) => fn(vista));
+  }
+
   alRecibir(fn: OyenteTramas): () => void {
     this.oyentesTrama.add(fn);
     return () => {
