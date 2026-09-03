@@ -10,7 +10,7 @@
   position: relative;
   height: 100%;
   display: grid;
-  grid-template-columns: 60% 40%;
+  grid-template-columns: 75% 25%;
   background: var(--bg);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -793,3 +793,57 @@
   border-color: rgb(var(--bad-rgb) / 0.5);
 }
 .nav-consejo__dato.pasado b { color: var(--bad); }
+
+/* ── La recomendacion, flotando sobre el mapa ───────────────────────────────
+   Abajo a la derecha y sobre el terreno, no en el panel: es lo ultimo que se
+   mira antes de volver la vista a la pista, y va junto al sitio al que se
+   refiere. */
+
+.nav-consejo {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 600;
+  width: 260px;
+  padding: 11px 13px 13px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: rgba(9, 15, 20, 0.93);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+  transform: translateZ(0);
+}
+
+.nav-consejo__donde {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--acc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── El panel, ahora en un cuarto de pantalla ───────────────────────────────
+   A 25 % son unos 200 px: el icono se encoge y el rotulo va sobre el numero,
+   porque en dos columnas de texto no cabe nada legible. */
+
+.nav-vitales { padding: 8px; gap: 5px; }
+
+.nav-vital { gap: 9px; padding: 7px 9px; border-radius: 10px; }
+.nav-vital__icono { width: 25px; height: 25px; border-radius: 8px; }
+.nav-vital__texto b { font-size: 19px; }
+.nav-vital__texto em { font-size: 7.5px; letter-spacing: 0.11em; }
+
+.nav-viaje { padding: 10px 11px 11px; }
+.nav-viaje__quien { flex-direction: column; align-items: flex-start; gap: 1px; }
+.nav-unidad { font-size: 16px; }
+.nav-operador { font-size: 11px; width: 100%; }
+.nav-viaje__tramo { margin-top: 9px; gap: 7px; }
+.nav-tramo__punta b { font-size: 12px; }

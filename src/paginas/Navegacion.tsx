@@ -427,6 +427,32 @@ export default function Navegacion() {
             {nombreOrigen(pos.origen)} · {precisionAproximada(pos)}
           </span>
         )}
+        {/* Lo que hay que mantener aquí, flotando sobre el mapa abajo a la
+            derecha: es lo último que se mira antes de volver la vista a la
+            pista, así que va sobre el terreno y no en el panel. */}
+        <footer className="nav-consejo">
+          <p className="nav-consejo__donde">
+            {donde ? donde.nombre : 'Fuera de toda geocerca'}
+          </p>
+
+          <div className="nav-consejo__pareja">
+            <div className={`nav-consejo__dato ${vaVelocidad}`}>
+            <em>Velocidad</em>
+            <b>
+              {velocidad}
+              <small>de {consejo.velocidad} km/h</small>
+            </b>
+            </div>
+
+            <div className={`nav-consejo__dato ${vaConsumo}`}>
+            <em>Consumo</em>
+            <b>
+              {galones === null ? '—' : galones.toFixed(1)}
+              <small>de {consejo.galonesHora} gal/h</small>
+            </b>
+            </div>
+          </div>
+          </footer>
 
         </div>
         <aside className="nav-panel">
@@ -501,32 +527,6 @@ export default function Navegacion() {
             )}
           </div>
 
-          {/* ── Lo que hay que mantener aquí ──────────────────────────────────
-              Abajo del todo y a propósito: es lo último que se mira antes de
-              volver la vista a la pista, y lo que dice si uno va bien o mal. */}
-          <footer className="nav-consejo">
-            <p className="nav-consejo__donde">
-              {donde ? donde.nombre : 'Fuera de toda geocerca'}
-            </p>
-
-            <div className="nav-consejo__pareja">
-              <div className={`nav-consejo__dato ${vaVelocidad}`}>
-                <em>Velocidad</em>
-                <b>
-                  {velocidad}
-                  <small>de {consejo.velocidad} km/h</small>
-                </b>
-              </div>
-
-              <div className={`nav-consejo__dato ${vaConsumo}`}>
-                <em>Consumo</em>
-                <b>
-                  {galones === null ? '—' : galones.toFixed(1)}
-                  <small>de {consejo.galonesHora} gal/h</small>
-                </b>
-              </div>
-            </div>
-          </footer>
         </aside>
       </div>
     </IonPage>
