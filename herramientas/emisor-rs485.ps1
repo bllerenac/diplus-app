@@ -42,7 +42,18 @@ param(
     [double] $Cada = 1.0,
 
     # Cuantas mandar. 0 = hasta que se corte con Ctrl+C.
-    [int] $Veces = 0
+    [int] $Veces = 0,
+
+    # Enciende el transmisor con RTS.
+    #
+    # Hay dos clases de adaptador USB-RS485: los de direccion automatica, que
+    # transmiten solos, y los que usan RTS para habilitar el driver del bus. En
+    # .NET RtsEnable viene apagado por defecto, asi que con los segundos no sale
+    # nada al cable y parece que el cableado esta mal.
+    [switch] $Rts,
+
+    # Igual que el anterior, para los que usan DTR en vez de RTS.
+    [switch] $Dtr
 )
 
 # ── CRC16 de Modbus RTU ──────────────────────────────────────────────────────
@@ -133,6 +144,9 @@ function Get-TramaModbus {
 try {
     $serie = New-Object System.IO.Ports.SerialPort $Puerto, $Baudios, 'None', 8, 'One'
     $serie.WriteTimeout = 2000
+    $serie.Handshake = 'None'
+    $serie.RtsEnable = [bool] $Rts
+    $serie.DtrEnable = [bool] $Dtr
     $serie.Open()
 }
 catch {

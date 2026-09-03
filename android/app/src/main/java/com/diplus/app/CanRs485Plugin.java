@@ -78,7 +78,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void setPortBaudrate(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
+        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
         int baudrate = call.getInt("baudrate", 9600);
 
         try {
@@ -99,7 +99,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendEurosensQuery(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
+        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
         int address = call.getInt("address", 1);
         int command = call.getInt("command", 6);
 
@@ -136,7 +136,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendModbusQuery(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
+        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
         int address = call.getInt("address", 1);
         int functionCode = call.getInt("functionCode", 3);
         int startRegister = call.getInt("startRegister", 0);
@@ -185,7 +185,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendRawBytes(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
+        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
         String hexString = call.getString("hexData", "0103000000044409");
 
         try {
@@ -403,7 +403,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void startRs485Listener(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL0");
+        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
         int baudrate = call.getInt("baudrate", 9600);
         enableRs485HardwarePower(true);
         if (!isRs485Listening.get()) {
@@ -550,8 +550,12 @@ public class CanRs485Plugin extends Plugin {
         }
 
         if (puertos.isEmpty()) {
-            /* ttyHSL2 es el GPS y ttyHSL0 el RS485 de fabrica; los otros dos son
-               los que la version anterior daba como CAN 1 y CAN 2. */
+            /* Segun el SDK del fabricante: ttyHSL0 es COM1 (RS232), ttyHSL2 es
+               el GPS, y el RS485 y el COM2 son dispositivos USB —ttyUSB0 y
+               ttyUSB1 en este equipo—. El RS485 va primero porque es el que
+               se busca casi siempre. */
+            puertos.add("/dev/ttyUSB0");
+            puertos.add("/dev/ttyUSB1");
             puertos.add("/dev/ttyHSL0");
             puertos.add("/dev/ttyHSL1");
             puertos.add("/dev/ttyHSL2");

@@ -99,7 +99,16 @@ export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
     id: `f${Date.now().toString(36)}`,
     nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
     puerto,
-    ruta: '/dev/ttyHSL0',
+    /* El RS485 es ttyUSB0, no ttyHSL0.
+
+       Segun el SDK del fabricante, ttyHSL0 es COM1 y es RS232. El RS485 y el
+       COM2 son dispositivos USB, que el demo resuelve por su ruta en el bus:
+
+         serial2 = getSerialDeviceNodeByName("2/1-1.2:1.0")   RS485
+         serial1 = getSerialDeviceNodeByName("3/1-1.3:1.0")   COM2
+
+       En este equipo 1-1.2 es ttyUSB0 y 1-1.3 es ttyUSB1. */
+    ruta: puerto === 'rs485' ? '/dev/ttyUSB0' : '/dev/ttyHSL0',
     baudios: 9600,
     bitrate: 250000,
     protocoloId: protoId,
