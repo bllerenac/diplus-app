@@ -119,6 +119,37 @@ function Tanque({ fraccion, alerta }: { fraccion: number; alerta: boolean }) {
  * dibujan los cuadrantes de un carro: la posicion de la aguja se reconoce sin
  * leer el numero, que es de lo que se trata cuando se conduce.
  */
+/**
+ * Un termometro, que es como se lee una temperatura desde siempre.
+ *
+ * Un radial no vale aqui: la aguja de un cuadrante dice «cuanto de lo que
+ * cabe», y una temperatura no se piensa asi. Se piensa como una columna que
+ * sube.
+ */
+function Termometro({ fraccion, alerta }: { fraccion: number; alerta: boolean }) {
+  const f = Math.min(1, Math.max(0, fraccion));
+  const alto = 44 * f;
+
+  return (
+    <svg className="nav-termo" viewBox="0 0 30 78" width="30" height="78" aria-hidden="true">
+      <rect x="11" y="6" width="8" height="50" rx="4" className="nav-termo__hueco" />
+      <rect
+        x="11"
+        y={54 - alto}
+        width="8"
+        height={alto + 8}
+        rx="4"
+        className={alerta ? 'nav-termo__liquido alerta' : 'nav-termo__liquido'}
+      />
+      <circle cx="15" cy="62" r="10" className={alerta ? 'nav-termo__bulbo alerta' : 'nav-termo__bulbo'} />
+      {/* Las rayas del lado, para leer la altura sin contar. */}
+      {[0.25, 0.5, 0.75, 1].map((m) => (
+        <line key={m} x1="21" x2="25" y1={54 - 46 * m} y2={54 - 46 * m} className="nav-termo__raya" />
+      ))}
+    </svg>
+  );
+}
+
 function Cuadrante({ fraccion, alerta }: { fraccion: number; alerta: boolean }) {
   const f = Math.min(1, Math.max(0, fraccion));
   const R = 27;
@@ -557,7 +588,7 @@ export default function Navegacion() {
               <b>{camion ? camion.ciclos : '—'}</b>
             </div>
             <div className="nav-cuenta__uno">
-              <em>Tonelaje</em>
+              <em>Tonelaje movido</em>
               <b>
                 {camion ? camion.tonelaje.toFixed(0) : '—'}
                 {camion && <small>t</small>}
@@ -571,18 +602,18 @@ export default function Navegacion() {
               const edad = v.visto ? Date.now() - v.visto : Infinity;
               const viejo = edad > 10000;
               const alerta = v.estado === 'bajo' || v.estado === 'alto';
-              const clases = `nav-vital ${viejo ? 'viejo' : ''} est-${v.estado} forma-${t.vista}`;
+              const clases =
+                `nav-vital ${viejo ? 'viejo' : ''} est-${v.estado} forma-${t.vista}`
+                + (t.grande ? ' ancha' : '');
 
               /* Un tanque o un cuadrante ocupan su propia caja: el dibujo manda
                  y el numero va debajo, que es como se lee un tablero. */
-              if (t.vista === 'tanque' || t.vista === 'cuadrante') {
+              if (t.vista === 'tanque' || t.vista === 'cuadrante' || t.vista === 'termometro') {
                 return (
                   <article key={t.id} className={clases}>
-                    {t.vista === 'tanque' ? (
-                      <Tanque fraccion={v.fraccion ?? 0} alerta={alerta} />
-                    ) : (
-                      <Cuadrante fraccion={v.fraccion ?? 0} alerta={alerta} />
-                    )}
+                    {t.vista === 'tanque' && <Tanque fraccion={v.fraccion ?? 0} alerta={alerta} />}
+                    {t.vista === 'cuadrante' && <Cuadrante fraccion={v.fraccion ?? 0} alerta={alerta} />}
+                    {t.vista === 'termometro' && <Termometro fraccion={v.fraccion ?? 0} alerta={alerta} />}
                     <span className="nav-vital__texto">
                       <em>{titulo(t, v)}</em>
                       <b>

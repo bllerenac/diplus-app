@@ -977,3 +977,20 @@
   font-weight: 400;
   color: var(--ink3);
 }
+
+/* ── Termómetro ─────────────────────────────────────────────────────────────
+   Un radial no sirve para una temperatura: la aguja de un cuadrante dice
+   «cuánto de lo que cabe», y una temperatura no se piensa así, se piensa como
+   una columna que sube. */
+
+.nav-termo__hueco { fill: rgb(var(--ink3-rgb) / 0.18); }
+.nav-termo__liquido { fill: var(--acc); transition: y 0.5s ease, height 0.5s ease; }
+.nav-termo__liquido.alerta { fill: var(--warn); }
+.nav-termo__bulbo { fill: var(--acc); }
+.nav-termo__bulbo.alerta { fill: var(--warn); }
+.nav-termo__raya { stroke: rgb(var(--ink3-rgb) / 0.45); stroke-width: 1.5; }
+
+/* Las filas van a media columna salvo que se marquen anchas, para poder poner
+   dos lecturas relacionadas una al lado de la otra. */
+.nav-vital { grid-column: auto; }
+.nav-vital.ancha { grid-column: 1 / -1; }

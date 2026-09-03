@@ -15,7 +15,8 @@
 import { Senal } from './lecturas';
 
 export type VistaTarjeta =
-  | 'numero' | 'diferencia' | 'suma' | 'nivel' | 'texto' | 'tanque' | 'cuadrante';
+  | 'numero' | 'diferencia' | 'suma' | 'nivel' | 'texto'
+  | 'tanque' | 'cuadrante' | 'termometro';
 
 export interface Tarjeta {
   id: string;
@@ -36,6 +37,15 @@ export interface Tarjeta {
   grande: boolean;
   /** Nombre del icono en lucide. Vacío = sin icono. */
   icono: string;
+  /**
+   * Multiplica el valor antes de enseñarlo.
+   *
+   * Un caudalímetro da litros por hora y en la mina se habla en galones. La
+   * conversión va aquí y no en el protocolo porque es cosa de cómo se quiere
+   * leer, no de cómo llega el dato: el mismo sensor puede verse en las dos
+   * unidades en dos tarjetas distintas.
+   */
+  factor: number;
 }
 
 /** Cada forma de presentar, con lo que necesita. La pantalla se dibuja de aqui. */
@@ -73,6 +83,27 @@ export const VISTAS: {
     id: 'nivel',
     nombre: 'Nivel',
     ayuda: 'Número y barra entre un mínimo y un máximo. Para tanques y depósitos.',
+    senales: 1,
+    usa: ['unidad', 'decimales', 'rango', 'umbrales'],
+  },
+  {
+    id: 'tanque',
+    nombre: 'Tanque',
+    ayuda: 'Un depósito que se ve llenarse y vaciarse. Para combustible, agua o aceite.',
+    senales: 1,
+    usa: ['unidad', 'decimales', 'rango', 'umbrales'],
+  },
+  {
+    id: 'termometro',
+    nombre: 'Termómetro',
+    ayuda: 'Columna que sube con el calor. Para temperaturas, que es como se leen desde siempre.',
+    senales: 1,
+    usa: ['unidad', 'decimales', 'rango', 'umbrales'],
+  },
+  {
+    id: 'cuadrante',
+    nombre: 'Cuadrante',
+    ayuda: 'Aguja sobre un arco, como el cuentarrevoluciones. Para revoluciones y presiones.',
     senales: 1,
     usa: ['unidad', 'decimales', 'rango', 'umbrales'],
   },
@@ -148,6 +179,7 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   alto: null,
   grande: false,
   icono: '',
+  factor: 1,
 });
 
 /**
@@ -174,7 +206,9 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
       titulo: 'Consumo',
       icono: 'Droplet',
       claves: [ida, retorno],
-      unidad: 'L/h',
+      unidad: 'gal/h',
+      /* El caudalímetro da litros; en la mina se habla en galones. */
+      factor: 1 / 3.785,
       decimales: 1,
       grande: true,
     });
@@ -184,9 +218,9 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
   const nivel = busca('nivel');
   if (nivel) {
     tarjetas.push({
-      ...nuevaTarjeta('nivel'),
+      ...nuevaTarjeta('tanque'),
       id: 't-nivel',
-      titulo: 'Tanque',
+      titulo: 'Combustible',
       icono: 'Fuel',
       claves: [nivel],
       decimales: 0,
@@ -200,11 +234,20 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
 
   for (const c of claves) {
     if (puesta.has(c)) continue;
+    /* Cada magnitud con la forma que le corresponde: la temperatura en
+       termómetro, porque no se piensa como «cuánto de lo que cabe»; las
+       revoluciones y las presiones en cuadrante, que es su instrumento de
+       toda la vida. El resto, número. */
+    const esTermometro = /temp/i.test(c);
+    const esAguja = /rpm|revoluc|presi|aire|neumat|rueda/i.test(c);
+
     tarjetas.push({
-      ...nuevaTarjeta('numero'),
+      ...nuevaTarjeta(esTermometro ? 'termometro' : esAguja ? 'cuadrante' : 'numero'),
       id: `t-${c}`,
       claves: [c],
-      decimales: 1,
+      decimales: /rpm|revoluc/i.test(c) ? 0 : 1,
+      min: 0,
+      max: /rpm|revoluc/i.test(c) ? 2500 : /temp/i.test(c) ? 120 : /aire|presi/i.test(c) ? 10 : 100,
       icono: iconoSugerido(c),
     });
   }
@@ -277,12 +320,15 @@ export const calcular = (
   else if (t.vista === 'suma') valor = (n[0] as number) + (n[1] as number);
   else valor = n[0] as number;
 
+  /* Antes de los umbrales: se compara con lo que el conductor ve. */
+  if (t.factor && t.factor !== 1) valor *= t.factor;
+
   let estado: ValorTarjeta['estado'] = 'ok';
   if (t.bajo !== null && valor < t.bajo) estado = 'bajo';
   else if (t.alto !== null && valor > t.alto) estado = 'alto';
 
   const fraccion =
-    (t.vista === 'nivel' || t.vista === 'tanque' || t.vista === 'cuadrante') && t.max !== t.min
+    ['nivel', 'tanque', 'cuadrante', 'termometro'].includes(t.vista) && t.max !== t.min
       ? Math.min(1, Math.max(0, (valor - t.min) / (t.max - t.min)))
       : null;
 
