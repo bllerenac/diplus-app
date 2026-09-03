@@ -1024,7 +1024,7 @@ export default function Ajustes() {
                   <Entrada
                     value={cfg.actualizacion.url}
                     placeholder="https://…/diplus.apk"
-                    onChange={(e) => aplicar({ ...cfg, actualizacion: { url: e.target.value } })}
+                    onChange={(e) => aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, url: e.target.value } })}
                   />
                 </Campo>
 
@@ -1038,6 +1038,31 @@ export default function Ajustes() {
                 )}
 
                 {avisoUrl && <Aviso tono="warn">{avisoUrl}</Aviso>}
+
+                <div className="flex flex-wrap items-center gap-4">
+                  <Interruptor
+                    activo={cfg.actualizacion.automatica}
+                    alCambiar={(v) =>
+                      aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, automatica: v } })
+                    }
+                    etiqueta="Buscarla sola"
+                  />
+
+                  {cfg.actualizacion.automatica && (
+                    <Campo etiqueta="Cada (horas)">
+                      <Entrada
+                        type="number" min={1} max={168}
+                        value={cfg.actualizacion.cadaHoras}
+                        onChange={(e) =>
+                          aplicar({
+                            ...cfg,
+                            actualizacion: { ...cfg.actualizacion, cadaHoras: Number(e.target.value) },
+                          })
+                        }
+                      />
+                    </Campo>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Boton
@@ -1100,6 +1125,69 @@ export default function Ajustes() {
                   <Aviso tono="warn">
                     Android todavía no deja instalar desde esta aplicación. Al pulsar «Instalar»
                     sale la pantalla del permiso; se concede una vez y ya queda.
+                  </Aviso>
+                )}
+              </Bloque>
+
+              <Bloque titulo="Acceso remoto">
+                <Nota>
+                  Abre una puerta en el equipo para poder mirarlo de lejos sin cable. No
+                  depende del ADB, que muere en cada reinicio, así que sigue en pie después
+                  de un corte de energía.
+                </Nota>
+
+                <Aviso tono="warn">
+                  <b>Solo deja mirar.</b> Se puede ver el estado, los puertos y lo que entra
+                  por ellos, y pedir que busque una versión nueva. No se puede cambiar la
+                  configuración desde fuera. Aun así es una puerta: sin token no se abre, y
+                  conviene que solo sea alcanzable por la red privada.
+                </Aviso>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Campo etiqueta="Puerto">
+                    <Entrada
+                      type="number"
+                      value={cfg.canal.puerto}
+                      onChange={(e) =>
+                        aplicar({ ...cfg, canal: { ...cfg.canal, puerto: Number(e.target.value) } })
+                      }
+                    />
+                  </Campo>
+
+                  <Campo etiqueta="Token" ayuda="Sin esto no se abre.">
+                    <Entrada
+                      value={cfg.canal.token}
+                      placeholder="una palabra larga"
+                      onChange={(e) =>
+                        aplicar({ ...cfg, canal: { ...cfg.canal, token: e.target.value } })
+                      }
+                    />
+                  </Campo>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Boton
+                    onClick={() =>
+                      aplicar({
+                        ...cfg,
+                        canal: { ...cfg.canal, token: Math.random().toString(36).slice(2)
+                          + Math.random().toString(36).slice(2) },
+                      })
+                    }
+                  >
+                    Generar token
+                  </Boton>
+
+                  <Interruptor
+                    activo={cfg.canal.activo}
+                    alCambiar={(v) => aplicar({ ...cfg, canal: { ...cfg.canal, activo: v } })}
+                    etiqueta="Dejar la puerta abierta"
+                  />
+                </div>
+
+                {cfg.canal.activo && !cfg.canal.token.trim() && (
+                  <Aviso tono="bad">
+                    Falta el token. Sin él la puerta no se abre, por mucho que esté encendida.
                   </Aviso>
                 )}
               </Bloque>

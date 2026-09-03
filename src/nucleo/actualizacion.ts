@@ -96,3 +96,48 @@ export const actualizador = {
 
   instalar: (ruta: string) => Nativo.instalar({ ruta }),
 };
+
+/**
+ * Mira si hay versión nueva por su cuenta.
+ *
+ * Es lo que hace que una flota se mantenga sola: se publica una versión y los
+ * equipos se ponen al día sin que nadie vaya camión por camión.
+ *
+ * **Baja y avisa, pero no instala.** El último paso lo da una persona, porque
+ * en Android 9 sin ser device owner no hay otra. Lo que se gana es que el APK
+ * ya esté en el equipo y aparezca el aviso: quien se suba a la cabina solo
+ * tiene que aceptar.
+ */
+const CLAVE_REVISION = 'diplus.revision.at';
+
+export const revisarSola = async (
+  cfg: { url: string; automatica: boolean; cadaHoras: number },
+  ahoraMismo = false,
+): Promise<Descarga | null> => {
+  if (!hayActualizador() || !cfg.url.trim()) return null;
+  if (!ahoraMismo && !cfg.automatica) return null;
+
+  if (!ahoraMismo) {
+    /* No en cada arranque: un equipo que se reinicia varias veces al día se
+       pasaría el turno bajando el mismo APK. */
+    const antes = Number(localStorage.getItem(CLAVE_REVISION)) || 0;
+    const cada = Math.max(1, cfg.cadaHoras) * 3600000;
+    if (Date.now() - antes < cada) return null;
+  }
+  localStorage.setItem(CLAVE_REVISION, String(Date.now()));
+
+  try {
+    const yo = await actualizador.version();
+    const d = await actualizador.descargar(cfg.url);
+
+    if (!esMasNueva(d.versionCode, yo.versionCode)) return null;
+
+    /* Se abre el instalador: en la cabina saldrá el aviso de Android y quien
+       esté delante lo acepta. Si no hay nadie, queda bajado para la próxima. */
+    await actualizador.instalar(d.ruta).catch(() => undefined);
+    return d;
+  } catch {
+    /* Sin red o con la dirección mal: se reintenta en la siguiente vuelta. */
+    return null;
+  }
+};

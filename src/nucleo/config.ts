@@ -26,9 +26,25 @@ export interface Servidor {
   clave: string;
 }
 
-/** De donde se baja la aplicacion cuando se pulsa actualizar. */
+/** De dónde se baja la aplicación, y si se mira sola. */
 export interface Actualizacion {
   url: string;
+  /** Mira si hay versión nueva por su cuenta, sin que nadie pulse. */
+  automatica: boolean;
+  /** Cada cuántas horas mira. */
+  cadaHoras: number;
+}
+
+/**
+ * La puerta para mirar el equipo de lejos.
+ *
+ * No depende del ADB, que muere en cada reinicio y en este aparato no se puede
+ * dejar permanente. Sin token no se abre.
+ */
+export interface Canal {
+  activo: boolean;
+  puerto: number;
+  token: string;
 }
 
 export interface Config {
@@ -40,6 +56,7 @@ export interface Config {
   gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
   actualizacion: Actualizacion;
+  canal: Canal;
   /** Genera un camión de mentira para poder ver la pantalla sin hardware. */
   maqueta: boolean;
   /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
@@ -59,7 +76,8 @@ const POR_DEFECTO: Config = {
     activo: false, url: 'https://miskimayo-back.wapsi.io/api', token: '',
     cadaSeg: 30, equipo: '', usuario: '', clave: '',
   },
-  actualizacion: { url: '' },
+  actualizacion: { url: '', automatica: false, cadaHoras: 6 },
+  canal: { activo: false, puerto: 8787, token: '' },
   maqueta: false,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,

@@ -24,6 +24,27 @@
 
         </activity>
 
+        <!-- Levanta la aplicacion al encender el equipo. Sin esto, un corte de
+             energia la deja cerrada y en un camion nadie va a tocar el icono. -->
+        <receiver
+            android:name=".ArranqueReceptor"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- La puerta para mirar el equipo de lejos. En primer plano porque el
+             sistema mata los servicios de fondo justo cuando el equipo va
+             justo, que es cuando hace falta que siga en pie. -->
+        <service
+            android:name=".CanalRemoto"
+            android:enabled="true"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -40,6 +61,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Para poder actualizarse sola desde una direccion propia, sin Google Play. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />

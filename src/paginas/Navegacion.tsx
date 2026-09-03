@@ -24,6 +24,8 @@ import { maqueta } from '../nucleo/maqueta';
 import { guardado } from '../nucleo/servidor';
 import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 import { planoGuardado } from '../nucleo/plano';
+import { canal } from '../nucleo/canal';
+import { revisarSola } from '../nucleo/actualizacion';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -365,6 +367,19 @@ export default function Navegacion() {
     else maqueta.apagar();
     return () => maqueta.apagar();
   }, [cfg.maqueta]);
+
+  /**
+   * El canal remoto y la revisión de versiones.
+   *
+   * Van con la aplicación y no con la pantalla de ajustes: un equipo que se
+   * enciende y nadie toca tiene que quedar accesible y al día igual.
+   */
+  useEffect(() => {
+    canal.aplicar(cfg, (orden) => {
+      if (orden === 'actualizar') revisarSola(cfg.actualizacion, true);
+    });
+    revisarSola(cfg.actualizacion);
+  }, [cfg.canal.activo, cfg.canal.puerto, cfg.canal.token, cfg.actualizacion.automatica]);
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {
