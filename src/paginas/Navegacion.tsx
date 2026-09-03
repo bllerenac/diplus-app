@@ -23,6 +23,7 @@ import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 import { maqueta } from '../nucleo/maqueta';
 import { guardado } from '../nucleo/servidor';
 import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
+import { planoGuardado } from '../nucleo/plano';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -276,10 +277,29 @@ export default function Navegacion() {
 
     if (d.plano) {
       /* Debajo de todo y algo apagado, para que las geocercas y la flecha se
-         lean por encima sin competir con el dibujo del plano. */
-      puestos.push(
-        L.imageOverlay(d.plano.url, d.plano.limites, { opacity: 0.75, zIndex: 200 }).addTo(m),
-      );
+         lean por encima sin competir con el dibujo del plano.
+
+         Primero el guardado en el equipo, que entra al instante y funciona sin
+         cobertura. El del servidor es el respaldo: son 34 MB y en una mina eso
+         puede no llegar nunca. */
+      const limites = d.plano.limites;
+      const remoto = d.plano.url;
+      let capa: L.ImageOverlay | null = null;
+      let local: string | null = null;
+
+      planoGuardado().then((u) => {
+        if (!mapa.current) return;
+        local = u;
+        capa = L.imageOverlay(u ?? remoto, limites, { opacity: 0.75, zIndex: 200 });
+        capa.addTo(mapa.current);
+      });
+
+      puestos.push({
+        remove: () => {
+          if (capa) m.removeLayer(capa);
+          if (local) URL.revokeObjectURL(local);
+        },
+      } as unknown as L.Layer);
     }
 
     for (const g of d.geocercas) {
@@ -306,7 +326,14 @@ export default function Navegacion() {
     setCuantasGeocercas(d.geocercas.length);
 
     return () => {
-      for (const c of puestos) m.removeLayer(c);
+      for (const c of puestos) {
+        /* El plano se quita solo, que ademas tiene que soltar su direccion. */
+        if ((c as unknown as { remove?: () => void }).remove && !(c as L.Layer).addTo) {
+          (c as unknown as { remove: () => void }).remove();
+        } else {
+          m.removeLayer(c);
+        }
+      }
     };
   }, [mapaListo, recargarMapa]);
 

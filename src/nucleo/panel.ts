@@ -137,11 +137,15 @@ export const ICONOS: { id: string; nombre: string }[] = [
   { id: 'Zap', nombre: 'Rayo' },
   { id: 'Flame', nombre: 'Llama · motor' },
   { id: 'Waves', nombre: 'Olas · nivel' },
-  /* Lucide no tiene neumatico. Disc3 son circulos concentricos, que es una
-     rueda vista de frente, y se distingue de un vistazo del cuentarrevoluciones;
-     Gauge seria mas correcto —lo que se mide es presion— pero a 14 pixeles los
-     dos manometros se confunden. */
-  { id: 'Disc3', nombre: 'Rueda · presión de aire' },
+  /* Lucide no tiene neumatico, asi que van los tres que mas se le acercan y
+     se elige. LifeBuoy es un aro con cubo y cuatro radios, que es lo mas
+     parecido a una rueda; Disc3 son circulos concentricos; Torus es un aro en
+     perspectiva. Gauge, mas arriba, seria lo correcto por significado —lo que
+     se mide es presion— pero las revoluciones ya llevan CircleGauge y a 14
+     pixeles los dos manometros se confunden. */
+  { id: 'LifeBuoy', nombre: 'Rueda con radios · aire' },
+  { id: 'Disc3', nombre: 'Rueda plana · aire' },
+  { id: 'Torus', nombre: 'Aro en perspectiva · aire' },
   { id: 'CircleDot', nombre: 'Punto · genérico' },
   { id: 'Timer', nombre: 'Cronómetro' },
 ];
@@ -164,7 +168,7 @@ export const iconoSugerido = (texto: string): string => {
   if (/hora|tiempo|horom/.test(t)) return 'Clock';
   if (/carga|load|esfuerzo/.test(t)) return 'Activity';
   if (/tonel|peso|carga util/.test(t)) return 'Weight';
-  if (/aire|neumat|rueda|llanta/.test(t)) return 'Disc3';
+  if (/aire|neumat|rueda|llanta/.test(t)) return 'LifeBuoy';
   if (/estado|status|marcha/.test(t)) return 'Truck';
   return '';
 };

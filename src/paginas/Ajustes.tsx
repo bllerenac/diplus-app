@@ -23,6 +23,7 @@ import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { maqueta } from '../nucleo/maqueta';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
+import { guardarPlano } from '../nucleo/plano';
 import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, panelDeCamion, vista } from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
