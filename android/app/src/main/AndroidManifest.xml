@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Se permite HTTP sin cifrar porque un equipo en una mina se actualiza
+         desde un servidor de la red privada, no desde internet: alli no hay
+         certificado que valga ni autoridad que lo firme. El servidor de
+         produccion sigue siendo HTTPS; esto solo abre la puerta a que el
+         actualizador pueda tirar de una direccion local. -->
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"

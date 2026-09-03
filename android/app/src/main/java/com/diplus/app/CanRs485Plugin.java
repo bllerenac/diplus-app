@@ -1,5 +1,6 @@
 package com.diplus.app;
 
+import android.Manifest;
 import android.content.Context;
 import android.location.Location;
 import android.location.LocationListener;
@@ -12,6 +13,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+import com.getcapacitor.PermissionState;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,8 +27,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.android.canbus.CanBusHelper;
 import com.android.canbus.CanBusHelper.CanBusCallback;
 
-@CapacitorPlugin(name = "CanRs485")
+/**
+ * Los permisos se piden, no solo se declaran.
+ *
+ * Estaban en el manifiesto y ahi me quede, que es el error clasico: Android
+ * exige pedirlos ademas en tiempo de ejecucion, y sin eso el LocationManager
+ * falla y el receptor GNSS nunca llega a fijar. Se vio en un equipo: llegaban
+ * sentencias NMEA sin parar pero todas vacias, cero satelites, y parecia una
+ * antena sin cielo cuando era un permiso que nadie habia concedido.
+ */
+@CapacitorPlugin(
+    name = "CanRs485",
+    permissions = {
+        @Permission(
+            alias = CanRs485Plugin.UBICACION,
+            strings = {
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            }
+        )
+    }
+)
 public class CanRs485Plugin extends Plugin {
+
+    static final String UBICACION = "ubicacion";
 
     private static final String TAG = "CanRs485Plugin";
     private final AtomicBoolean isGpsListening = new AtomicBoolean(false);
@@ -225,6 +251,27 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void startGpsListener(PluginCall call) {
+        /* Si el permiso no esta, se pide antes de tocar nada. Sin el, el
+           LocationManager falla y el receptor entrega sentencias vacias para
+           siempre: parece una antena sin cielo y es un permiso sin conceder. */
+        if (getPermissionState(UBICACION) != PermissionState.GRANTED) {
+            requestPermissionForAlias(UBICACION, call, "trasPedirUbicacion");
+            return;
+        }
+        arrancarGps(call);
+    }
+
+    @PermissionCallback
+    private void trasPedirUbicacion(PluginCall call) {
+        if (getPermissionState(UBICACION) != PermissionState.GRANTED) {
+            /* Se sigue igual: el puerto serie se lee sin permiso, y algo es
+               mejor que nada. Pero se dice, para que no parezca una averia. */
+            Log.w(TAG, "Sin permiso de ubicacion: el receptor no fijara posicion");
+        }
+        arrancarGps(call);
+    }
+
+    private void arrancarGps(PluginCall call) {
         String devicePath = call.getString("devicePath", "/dev/ttyHSL2");
         int baudrate = call.getInt("baudrate", 921600);
 
@@ -270,6 +317,73 @@ public class CanRs485Plugin extends Plugin {
         call.resolve(ret);
     }
 
+    /**
+     * Prueba en bucle: el equipo se habla a si mismo.
+     *
+     * Cuando el bus esta mudo hay dos culpables posibles y desde fuera se ven
+     * igual: que el driver y el microcontrolador no funcionen, o que por el
+     * cable no entre nada. El modo bucle devuelve al equipo lo que el mismo
+     * transmite sin salir al bus, asi que si aqui llegan tramas, de puertas
+     * adentro esta todo bien y hay que ir a mirar el cable.
+     */
+    @PluginMethod
+    public void probarBucle(PluginCall call) {
+        final int iface = call.getInt("interfaz", 0);
+        final int bus = call.getInt("bitrate", 250000);
+        final CanBusHelper h = (iface == 0) ? canBusHelper0 : canBusHelper1;
+        final java.util.concurrent.atomic.AtomicInteger recibidas =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+
+        new Thread(() -> {
+            try {
+                h.uninitialize(iface);
+            } catch (Exception e) {
+                /* Puede no estar abierto; da igual. */
+            }
+
+            int rb = h.setSerialBaudrate(iface, 115200, 8, 0, 1);
+            int ri = h.initialize(iface, 115200, bus, true);
+            Log.i(TAG, "BUCLE setSerialBaudrate=" + rb + " initialize=" + ri);
+
+            if (ri != 0) {
+                JSObject r = new JSObject();
+                r.put("ok", false);
+                r.put("detalle", "initialize devolvio " + ri);
+                call.resolve(r);
+                return;
+            }
+
+            new Thread(() -> h.readCan(iface, new CanBusCallback() {
+                public void onSetError() { Log.w(TAG, "BUCLE onSetError"); }
+                public void onSendError() { Log.w(TAG, "BUCLE onSendError"); }
+                public void onIdError(int c) { Log.w(TAG, "BUCLE onIdError " + c); }
+                public void onReceiveCanbusData(int FF, int RTR, int DLC, int ID, int[] DATA) {
+                    recibidas.incrementAndGet();
+                    Log.i(TAG, "BUCLE recibida ID=" + Integer.toHexString(ID) + " DLC=" + DLC);
+                }
+            })).start();
+
+            try { Thread.sleep(1200); } catch (InterruptedException e) { /* nada */ }
+
+            int enviadas = 0;
+            for (int i = 0; i < 5; i++) {
+                int rs = h.sendFrame(iface, 1, 0, 8, 0x18FEE000 + i,
+                        new int[] { 1, 2, 3, 4, 5, 6, 7, i });
+                Log.i(TAG, "BUCLE sendFrame = " + rs);
+                if (rs >= 0) enviadas++;
+                try { Thread.sleep(400); } catch (InterruptedException e) { /* nada */ }
+            }
+
+            try { Thread.sleep(2000); } catch (InterruptedException e) { /* nada */ }
+
+            JSObject r = new JSObject();
+            r.put("ok", recibidas.get() > 0);
+            r.put("enviadas", enviadas);
+            r.put("recibidas", recibidas.get());
+            call.resolve(r);
+        }).start();
+    }
+
     @PluginMethod
     public void startCan1Listener(PluginCall call) {
         int serialBaudrate = call.getInt("serialBaudrate", 115200);
@@ -305,12 +419,18 @@ public class CanRs485Plugin extends Plugin {
     private void startCanBusListening(int canInterface, CanBusHelper helper, String eventName, AtomicBoolean activeFlag, int serialBaudrate, int canBaudrate) {
         Log.i(TAG, "Iniciando CANBusHelper en Interfaz CAN" + (canInterface + 1) + " para " + eventName);
         
+        /* Se anota lo que devuelven aunque salga bien. Cuando el bus esta mudo,
+           saber si abrio o no es la diferencia entre buscar en el codigo o
+           buscar en el cable, y sin esto no se distinguen. */
         int retBaud = helper.setSerialBaudrate(canInterface, serialBaudrate, 8, 0, 1);
+        Log.i(TAG, "CAN" + (canInterface + 1) + " setSerialBaudrate(" + serialBaudrate + ") = " + retBaud);
         if (retBaud < 0) {
             Log.e(TAG, "setSerialBaudrate fallo en CAN" + (canInterface + 1) + ": " + retBaud);
         }
         
         int retInit = helper.initialize(canInterface, serialBaudrate, canBaudrate, false);
+        Log.i(TAG, "CAN" + (canInterface + 1) + " initialize(serie=" + serialBaudrate
+                + ", bus=" + canBaudrate + ") = " + retInit);
         if (retInit != 0) {
             /* Si esto falla el hilo muere y no se lee nada. Antes solo quedaba en
                el log del sistema y en la aplicacion no se notaba: la consola se
@@ -321,6 +441,8 @@ public class CanRs485Plugin extends Plugin {
             activeFlag.set(false);
             return;
         }
+
+        Log.i(TAG, "CAN" + (canInterface + 1) + " abierto; esperando tramas");
 
         helper.readCan(canInterface, new CanBusCallback() {
             @Override

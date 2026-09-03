@@ -22,6 +22,8 @@ import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { maqueta } from '../nucleo/maqueta';
+import { Eje, movimiento } from '../nucleo/movimiento';
+import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
 import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, panelDeCamion, vista } from '../nucleo/panel';
@@ -164,6 +166,20 @@ export default function Ajustes() {
   const [probando, setProbando] = useState<{ port: string; baudrate: number } | null>(null);
   const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
   const [puertos, setPuertos] = useState<PuertoDelEquipo[]>([]);
+
+  /* Que trae este equipo y que esta midiendo ahora, para poder calibrar
+     mirando numeros de verdad en vez de a ciegas. */
+  const [imu, setImu] = useState<Awaited<ReturnType<typeof movimiento.queHay>> | null>(null);
+  const [vivo, setVivo] = useState<Senal[] | null>(null);
+
+  useEffect(() => {
+    if (movimiento.hay()) movimiento.queHay().then(setImu).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!cfg.movimiento.activo) { setVivo(null); return; }
+    movimiento.aplicar(cfg.movimiento, setVivo);
+  }, [cfg.movimiento]);
 
   /* El numero de ttyUSB puede cambiar entre arranques, asi que la lista se le
      pide al equipo en vez de escribirla a fuego. */
@@ -337,12 +353,12 @@ export default function Ajustes() {
       </IonHeader>
 
       <IonContent scrollY={false} style={{ '--background': 'var(--bg)' } as never}>
-        <div className="flex h-full">
+        <div className="flex h-full min-h-0">
           <Pestanas opciones={PESTANAS} puesta={pestana} alElegir={setPestana} />
 
           {/* El contenido se para en 900 px: una línea de texto de 1100 px de
               ancho no se lee, se recorre. */}
-          <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 pb-12" style={{ maxWidth: 900 }}>
+          <div className="desplazable flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-5 pb-16" style={{ maxWidth: 900 }}>
 
           {!hayHardware() && (
             <Aviso>
@@ -785,6 +801,209 @@ export default function Ajustes() {
           {/* ── Posición ───────────────────────────────────────────────── */}
           {pestana === 'posicion' && (
             <>
+              <Bloque titulo="Movimiento e inclinación">
+                <Nota>
+                  El equipo lleva dentro una unidad inercial. No hace falta cable ni que el
+                  camión hable ningún protocolo: mide cómo está inclinado, cómo se conduce y
+                  cómo está la vía. Eso último es lo que luego permite cruzar los baches con
+                  el consumo y ver si una rampa mal mantenida está costando combustible.
+                </Nota>
+
+                {imu && !imu.acelerometro && (
+                  <Aviso tono="bad">Este equipo no tiene acelerómetro.</Aviso>
+                )}
+
+                {imu && imu.acelerometro && (
+                  <Nota>
+                    {imu.nombre} · hasta {imu.maxHz} Hz
+                    {imu.giroscopo ? ' · con giróscopo' : ' · sin giróscopo'}
+                    {imu.barometro ? ' · con barómetro' : ''}
+                  </Nota>
+                )}
+
+                <Interruptor
+                  activo={cfg.movimiento.activo}
+                  alCambiar={(v) =>
+                    aplicar({ ...cfg, movimiento: { ...cfg.movimiento, activo: v } })
+                  }
+                  etiqueta="Usar la unidad inercial"
+                />
+
+                {cfg.movimiento.activo && (
+                  <>
+                    <div className="rounded-xl border border-line bg-bg p-3.5">
+                      <div className="mb-2 text-[11px] uppercase tracking-wide text-ink3">
+                        Referencia
+                      </div>
+
+                      {cfg.movimiento.ref ? (
+                        <Nota>
+                          Calibrado. La inclinación se mide contra esta posición.
+                        </Nota>
+                      ) : (
+                        <Aviso tono="warn">
+                          Sin calibrar. Hasta que no se calibre, la inclinación no se puede
+                          calcular: el aparato no sabe cuál es el suelo.
+                        </Aviso>
+                      )}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <Boton
+                          onClick={() => {
+                            const r = movimiento.referenciaDeAhora();
+                            if (!r) {
+                              setEco('Todavía no llegan lecturas del sensor.');
+                              return;
+                            }
+                            aplicar({ ...cfg, movimiento: { ...cfg.movimiento, ref: r } });
+                            setEco('Calibrado con la posición actual.');
+                          }}
+                        >
+                          Calibrar aquí
+                        </Boton>
+
+                        {cfg.movimiento.ref && (
+                          <Boton
+                            variante="peligro"
+                            onClick={() =>
+                              aplicar({ ...cfg, movimiento: { ...cfg.movimiento, ref: null } })
+                            }
+                          >
+                            Borrar
+                          </Boton>
+                        )}
+                      </div>
+
+                      <Nota>
+                        Con el camión <b>parado y en llano</b>. Eso fija qué es «derecho»; todo
+                        lo demás se mide contra ello.
+                      </Nota>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <Campo etiqueta="Eje de avance" ayuda="Cuál apunta hacia adelante.">
+                        <Selector
+                          value={cfg.movimiento.ejeAvance}
+                          onChange={(e) =>
+                            aplicar({
+                              ...cfg,
+                              movimiento: { ...cfg.movimiento, ejeAvance: e.target.value as Eje },
+                            })
+                          }
+                        >
+                          <option value="x">X</option>
+                          <option value="y">Y</option>
+                          <option value="z">Z</option>
+                        </Selector>
+                      </Campo>
+
+                      <Campo etiqueta="Lecturas por segundo">
+                        <Selector
+                          value={String(cfg.movimiento.cadaMs)}
+                          onChange={(e) =>
+                            aplicar({
+                              ...cfg,
+                              movimiento: { ...cfg.movimiento, cadaMs: Number(e.target.value) },
+                            })
+                          }
+                        >
+                          <option value="200">5 · suave</option>
+                          <option value="100">10 · normal</option>
+                          <option value="50">20 · fino</option>
+                          <option value="20">50 · muy fino</option>
+                        </Selector>
+                      </Campo>
+                    </div>
+
+                    <Interruptor
+                      activo={cfg.movimiento.avanceInvertido}
+                      alCambiar={(v) =>
+                        aplicar({
+                          ...cfg,
+                          movimiento: { ...cfg.movimiento, avanceInvertido: v },
+                        })
+                      }
+                      etiqueta="Invertir el sentido de avance"
+                    />
+
+                    <Nota>
+                      Acelera un momento y mira «Aceleración» abajo: si al acelerar sale
+                      negativo, invierte el sentido. Si apenas se mueve, prueba otro eje.
+                    </Nota>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <Campo etiqueta="Frenada (m/s²)">
+                        <Entrada
+                          type="number" step="0.5"
+                          value={cfg.movimiento.umbralFrenada}
+                          onChange={(e) =>
+                            aplicar({
+                              ...cfg,
+                              movimiento: {
+                                ...cfg.movimiento, umbralFrenada: Number(e.target.value),
+                              },
+                            })
+                          }
+                        />
+                      </Campo>
+
+                      <Campo etiqueta="Bache (m/s²)">
+                        <Entrada
+                          type="number" step="0.5"
+                          value={cfg.movimiento.umbralBache}
+                          onChange={(e) =>
+                            aplicar({
+                              ...cfg,
+                              movimiento: {
+                                ...cfg.movimiento, umbralBache: Number(e.target.value),
+                              },
+                            })
+                          }
+                        />
+                      </Campo>
+
+                      <Campo etiqueta="Motor (m/s²)">
+                        <Entrada
+                          type="number" step="0.05"
+                          value={cfg.movimiento.umbralMotor}
+                          onChange={(e) =>
+                            aplicar({
+                              ...cfg,
+                              movimiento: {
+                                ...cfg.movimiento, umbralMotor: Number(e.target.value),
+                              },
+                            })
+                          }
+                        />
+                      </Campo>
+                    </div>
+
+                    {vivo && (
+                      <div className="rounded-xl border border-line bg-bg p-3.5">
+                        <div className="mb-2 text-[11px] uppercase tracking-wide text-ink3">
+                          Ahora mismo
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px] sm:grid-cols-3">
+                          {vivo.map((s) => (
+                            <div key={s.clave} className="flex justify-between gap-2">
+                              <span className="text-ink3">{s.nombre}</span>
+                              <b className="tabular-nums">
+                                {s.valor === null ? '—' : s.valor} {s.unidad}
+                              </b>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3">
+                          <Boton onClick={() => movimiento.reiniciarCuentas()}>
+                            Poner los contadores a cero
+                          </Boton>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Bloque>
+
             <Bloque titulo="GPS y RTK">
               <div className="grid grid-cols-2 gap-3">
                 <Campo etiqueta="Dispositivo del receptor">

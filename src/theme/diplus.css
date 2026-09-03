@@ -133,3 +133,69 @@ svg { display: block; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Controles que dibuja el sistema, no la página ──────────────────────────
+   El desplegable de un <select>, las casillas y las barras de desplazamiento
+   las pinta Android, no la hoja de estilos. Sin decírselo, los dibuja en claro
+   mientras hereda el color de texto de la página —casi blanco— y el resultado
+   es texto blanco sobre fondo blanco: ilegible. Se vio en el equipo. */
+
+:root {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--sur2);
+  color: var(--ink);
+}
+
+/* Las flechitas del campo numérico salen en claro por lo mismo. */
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Una barra de desplazamiento discreta, para que se vea que hay más abajo. */
+.desplazable::-webkit-scrollbar {
+  width: 10px;
+}
+
+.desplazable::-webkit-scrollbar-thumb {
+  background: rgb(var(--line2-rgb) / 0.8);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.desplazable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Reglas que Chrome 78 tira a la basura ─────────────────────────────────
+   El reseteo de Tailwind usa `:where()`, que llegó en Chrome 88. El WebView de
+   este equipo es Chrome 78, y en CSS un selector inválido dentro de una lista
+   **anula la regla entera**: no se pierde solo la parte del `:where()`, se
+   pierde todo. Se ve en el equipo — los botones sin fondo propio salían con el
+   gris de fábrica del sistema, y las pestañas de Configuración quedaban en gris
+   claro sobre gris claro, ilegibles.
+
+   Se reponen las dos que importan, escritas de forma que Chrome 78 entienda.
+   Es la misma trampa que obliga a quedarse en Tailwind 3; ver tailwind.config.js. */
+
+button,
+input[type='button'],
+input[type='reset'],
+input[type='submit'] {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* Sin esto, lo marcado como oculto se sigue viendo. */
+[hidden] {
+  display: none;
+}

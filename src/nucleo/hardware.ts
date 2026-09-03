@@ -130,6 +130,7 @@ class Hardware {
   private oyentesTrama = new Set<OyenteTramas>();
   private oyentesProblema = new Set<OyenteProblemas>();
   private ultimas: TramaVista[] = [];
+  private problema: ProblemaPuerto | null = null;
   private valores = new Map<string, Senal>();
   private contador = 0;
   private enganchado = false;
@@ -309,6 +310,11 @@ class Hardware {
     this.ultimas.push(vista);
     if (this.ultimas.length > MAX_TRAMAS) this.ultimas = this.ultimas.slice(-MAX_TRAMAS);
     this.oyentesTrama.forEach((fn) => fn(vista));
+  }
+
+  /** Lo ultimo que fallo al abrir un puerto, para poder contarlo de lejos. */
+  ultimoProblema(): ProblemaPuerto | null {
+    return this.problema;
   }
 
   alRecibir(fn: OyenteTramas): () => void {

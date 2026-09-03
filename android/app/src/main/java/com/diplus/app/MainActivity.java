@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CanRs485Plugin.class);
         registerPlugin(ActualizadorPlugin.class);
         registerPlugin(CanalPlugin.class);
+        registerPlugin(MovimientoPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

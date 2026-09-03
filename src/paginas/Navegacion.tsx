@@ -25,6 +25,7 @@ import { guardado } from '../nucleo/servidor';
 import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 import { planoGuardado } from '../nucleo/plano';
 import { canal } from '../nucleo/canal';
+import { movimiento } from '../nucleo/movimiento';
 import { revisarSola } from '../nucleo/actualizacion';
 
 /**
@@ -384,6 +385,18 @@ export default function Navegacion() {
     });
     revisarSola(cfg.actualizacion);
   }, [cfg.canal.activo, cfg.canal.puerto, cfg.canal.token, cfg.actualizacion.automatica]);
+
+  /**
+   * La unidad inercial, como una fuente mas.
+   *
+   * Las señales las inyecta el propio módulo, no esta pantalla: si no, al
+   * entrar en Configuración se dejaban de publicar. Entran donde lo que llega
+   * por cable, así que se pueden poner en el panel, mandar por RS485 o
+   * guardar en la base igual que las demás.
+   */
+  useEffect(() => {
+    movimiento.aplicar(cfg.movimiento);
+  }, [cfg.movimiento]);
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {
