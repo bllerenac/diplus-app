@@ -28,28 +28,34 @@ import { gps } from './gps';
 /** Cada cuanto se genera una lectura nueva. */
 const CADA_MS = 800;
 
-/** Una ruta corta por la mina, para que la flecha se mueva de verdad. */
+/**
+ * Una vuelta por la mina, entre las geocercas de verdad.
+ *
+ * Las coordenadas caen dentro del plano que viene del servidor —de -6,022 a
+ * -6,059 de latitud y de -80,835 a -80,882 de longitud—, para que al probar se
+ * vea la maquina moverse entre las zonas reales y no en mitad del oceano.
+ */
 const RUTA: [number, number][] = [
-  [-15.4520, -75.0980],
-  [-15.4508, -75.0955],
-  [-15.4491, -75.0934],
-  [-15.4470, -75.0918],
-  [-15.4448, -75.0907],
-  [-15.4425, -75.0901],
-  [-15.4402, -75.0903],
-  [-15.4381, -75.0913],
-  [-15.4364, -75.0930],
-  [-15.4352, -75.0952],
-  [-15.4347, -75.0977],
-  [-15.4350, -75.1002],
-  [-15.4361, -75.1024],
-  [-15.4378, -75.1040],
-  [-15.4399, -75.1049],
-  [-15.4422, -75.1050],
-  [-15.4445, -75.1043],
-  [-15.4466, -75.1029],
-  [-15.4485, -75.1010],
-  [-15.4504, -75.0995],
+  [-6.0470, -80.8720],
+  [-6.0452, -80.8698],
+  [-6.0431, -80.8676],
+  [-6.0408, -80.8657],
+  [-6.0384, -80.8641],
+  [-6.0359, -80.8629],
+  [-6.0334, -80.8622],
+  [-6.0308, -80.8620],
+  [-6.0304, -80.8576],
+  [-6.0326, -80.8552],
+  [-6.0352, -80.8540],
+  [-6.0380, -80.8538],
+  [-6.0407, -80.8547],
+  [-6.0432, -80.8566],
+  [-6.0453, -80.8592],
+  [-6.0470, -80.8622],
+  [-6.0483, -80.8654],
+  [-6.0490, -80.8688],
+  [-6.0487, -80.8722],
+  [-6.0479, -80.8724],
 ];
 
 /** Interpolacion entre dos puntos de la ruta, para que no vaya a saltos. */
@@ -108,7 +114,7 @@ class Maqueta {
     gps.simular({
       lat,
       lon,
-      alt: 1180 + 40 * Math.sin(this.paso / 25),
+      alt: 180 + 40 * Math.sin(this.paso / 25),
       velocidad,
       rumbo: rumboEntre(RUTA[i], RUTA[j]),
       hdop: 0.8,

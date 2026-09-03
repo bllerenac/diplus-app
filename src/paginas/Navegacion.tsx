@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, useIonRouter } from '@ionic/react';
 import { Crosshair, Settings, TerminalSquare } from 'lucide-react';
+import * as Iconos from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
@@ -20,6 +21,7 @@ import { registro } from '../nucleo/registro';
 import { Senal } from '../nucleo/lecturas';
 import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 import { maqueta } from '../nucleo/maqueta';
+import { guardado } from '../nucleo/servidor';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -44,6 +46,19 @@ const flechaDe = (rumbo: number) =>
     </svg></div>`,
   });
 
+/**
+ * El icono de una tarjeta, buscado por nombre en lucide.
+ *
+ * Se resuelve aqui y no en el nucleo porque el nucleo no sabe de React. Si el
+ * nombre no existe no se pinta nada: mejor sin icono que con uno equivocado.
+ */
+function IconoTarjeta({ nombre, size = 15 }: { nombre: string; size?: number }) {
+  if (!nombre) return null;
+  const Pieza = (Iconos as unknown as Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>>)[nombre];
+  return Pieza ? <Pieza size={size} strokeWidth={2} /> : null;
+}
+
+
 export default function Navegacion() {
   const router = useIonRouter();
   const [cfg, setCfg] = useState<Config>(cargar());
@@ -53,6 +68,9 @@ export default function Navegacion() {
   const [seguir, setSeguir] = useState(true);
   const [problema, setProblema] = useState<ProblemaPuerto | null>(null);
   const [, refrescar] = useState(0);
+  const [mapaListo, setMapaListo] = useState(false);
+  const [recargarMapa] = useState(0);
+  const [cuantasGeocercas, setCuantasGeocercas] = useState(0);
 
   const divMapa = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<L.Map | null>(null);
@@ -84,6 +102,7 @@ export default function Navegacion() {
     m.on('dragstart', () => setSeguir(false));
 
     mapa.current = m;
+    setMapaListo(true);
     /* El contenedor acaba de aparecer y Leaflet midio antes de tiempo. */
     setTimeout(() => m.invalidateSize(), 250);
 
@@ -92,6 +111,56 @@ export default function Navegacion() {
       mapa.current = null;
     };
   }, []);
+
+  /* ── Plano de la mina y geocercas ─────────────────────────────────────── */
+
+  /**
+   * Se pintan una sola vez, al arrancar, desde lo guardado en el equipo.
+   *
+   * Un mapa de calles no dice nada dentro de una mina: no hay calles. Lo que
+   * orienta es el plano propio y las geocercas dibujadas encima, que es lo que
+   * deja ver si uno esta entrando en la zona de descarga o pasando de largo.
+   */
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m) return;
+
+    const d = guardado();
+    if (!d) return;
+
+    const puestos: L.Layer[] = [];
+
+    if (d.plano) {
+      /* Debajo de todo y algo apagado, para que las geocercas y la flecha se
+         lean por encima sin competir con el dibujo del plano. */
+      puestos.push(
+        L.imageOverlay(d.plano.url, d.plano.limites, { opacity: 0.75, zIndex: 200 }).addTo(m),
+      );
+    }
+
+    for (const g of d.geocercas) {
+      const pinta = { color: g.color, weight: 2, opacity: 0.9, fillColor: g.color, fillOpacity: 0.12 };
+
+      const capa =
+        g.tipo === 'circulo'
+          ? L.circle(g.puntos[0], { ...pinta, radius: g.radio })
+          : L.polygon(g.puntos, pinta);
+
+      capa.bindTooltip(g.nombre, { direction: 'center', className: 'nav-geocerca__nombre' });
+      capa.addTo(m);
+      puestos.push(capa);
+    }
+
+    /* Sin posicion todavia, se encuadra la mina: es mas util que el pais
+       entero, y en cuanto haya fix el mapa sigue a la maquina. */
+    if (!marca.current && d.plano) m.fitBounds(d.plano.limites, { padding: [20, 20] });
+
+    setCuantasGeocercas(d.geocercas.length);
+
+    return () => {
+      for (const c of puestos) m.removeLayer(c);
+    };
+  }, [mapaListo, recargarMapa]);
 
   /* ── GPS ──────────────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -220,6 +289,10 @@ export default function Navegacion() {
             {pos?.origen === 'rtk' && <span style={{ opacity: 0.65 }}>{pos.satelites} sat</span>}
           </span>
 
+          {cuantasGeocercas > 0 && (
+            <span className="nav-geocercas">{cuantasGeocercas} geocercas</span>
+          )}
+
           <span className="nav-hueco" />
 
           <button
@@ -326,13 +399,21 @@ export default function Navegacion() {
                     key={t.id}
                     className={`nav-tarjeta ${t.grande ? 'ancha' : ''} ${viejo ? 'viejo' : ''} est-${v.estado}`}
                   >
-                    <p className="nav-tarjeta__nombre">{titulo(t, v)}</p>
+                    <header className="nav-tarjeta__cab">
+                      <span className="nav-tarjeta__icono">
+                        <IconoTarjeta nombre={t.icono} size={t.grande ? 16 : 13} />
+                      </span>
+                      <p className="nav-tarjeta__nombre">{titulo(t, v)}</p>
+                    </header>
 
                     <p className="nav-tarjeta__valor">
-                      {texto(v, t.decimales)}
+                      <b>{texto(v, t.decimales)}</b>
                       {v.valor !== null && v.unidad && <small>{v.unidad}</small>}
                     </p>
 
+                    {/* La barra de un nivel va debajo y a todo lo ancho, como el
+                        indicador de combustible de un tablero: de reojo se lee
+                        la posición, no el número. */}
                     {v.fraccion !== null && (
                       <div className="nav-nivel">
                         <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />
@@ -345,8 +426,6 @@ export default function Navegacion() {
                       </p>
                     )}
 
-                    {/* Solo cuando el dato se quedó atrás: un «ahora» debajo de
-                        cada tarjeta es una línea repetida que no dice nada. */}
                     {(viejo || !v.visto) && (
                       <p className="nav-tarjeta__pie">
                         {v.visto ? `hace ${Math.round(edad / 1000)} s` : 'sin datos'}

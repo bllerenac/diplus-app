@@ -264,21 +264,24 @@
   color: var(--ink3);
 }
 
-/* ── Panel de instrumentos ──────────────────────────────────────────────────
-   El panel no lleva rotulo. «Sensores» encima de unos sensores no dice nada, y
-   ese renglon vale mas ocupado por lo unico que hay que saber sin pensarlo:
-   que buses estan hablando. */
+/* ── Tablero ────────────────────────────────────────────────────────────────
+   No es una lista de numeros: es el tablero de una maquina, y se mira de reojo
+   desde una cabina en movimiento. De ahi las tres decisiones de aqui. Cada
+   lectura lleva su simbolo, porque de un vistazo se reconoce antes un icono que
+   un rotulo. El numero manda en tamano sobre todo lo demas. Y el nivel se pinta
+   como una barra a lo ancho, igual que el indicador de combustible de un carro,
+   porque lo que se lee es la posicion y no la cifra. */
 
 .nav-fuentes {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  padding: 13px 15px 12px;
+  padding: 12px 14px 11px;
   border-bottom: 1px solid var(--line);
 }
 
-/* Mismo idioma que la insignia de RTK de la barra: un punto y un nombre. Sin
-   recuadro, para que se lea como un estado y no como un boton que se pulsa. */
+/* Mismo idioma que la insignia de RTK: un punto y un nombre. Sin recuadro, para
+   que se lea como estado y no como un boton que se pulsa. */
 .nav-chip {
   display: inline-flex;
   align-items: center;
@@ -291,46 +294,52 @@
   text-transform: uppercase;
   color: var(--ink3);
 }
-.nav-chip span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.nav-chip i {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
+.nav-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-chip i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .nav-chip.vivo { color: var(--acc); }
 .nav-chip.vivo i { box-shadow: 0 0 7px currentColor; }
 .nav-chip.viejo { color: var(--warn); }
 
-.nav-rejilla {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
+.nav-rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 
-/* Cada tarjeta es un instrumento, no una caja. Sin borde: en una rejilla de
-   ocho, ocho recuadros son ocho lineas compitiendo con los numeros, que es lo
-   unico que hay que leer de reojo. La separacion la hace el fondo. */
 .nav-tarjeta {
   min-width: 0;
-  padding: 11px 12px 12px;
-  border-radius: 14px;
+  padding: 10px 11px 11px;
+  border-radius: 13px;
   background: var(--sur2);
 }
-.nav-tarjeta.ancha { grid-column: 1 / -1; }
+.nav-tarjeta.ancha { grid-column: 1 / -1; padding: 12px 14px 13px; }
+
+.nav-tarjeta__cab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 7px;
+}
+
+.nav-tarjeta__icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgb(var(--acc-rgb) / 0.14);
+  color: var(--acc);
+}
+.nav-tarjeta.ancha .nav-tarjeta__icono { width: 26px; height: 26px; border-radius: 8px; }
+.nav-tarjeta__icono:empty { display: none; }
 
 .nav-tarjeta__nombre {
-  margin: 0 0 7px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--ink2);
   white-space: nowrap;
@@ -338,46 +347,60 @@
   text-overflow: ellipsis;
 }
 
+/* 19 px y no mas en las tarjetas de media columna: ahi caben unos 150 px, y con
+   el valor y su unidad a mas tamano se cortaba —«1642…» en vez de «1642 rpm»—.
+   Eso solo aparece en la pantalla del equipo; en el navegador cabia. */
 .nav-tarjeta__valor {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
   margin: 0;
   font-family: var(--mono);
-  font-size: 27px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+.nav-tarjeta__valor b {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.nav-tarjeta.ancha .nav-tarjeta__valor { font-size: 35px; }
+.nav-tarjeta.ancha .nav-tarjeta__valor b { font-size: 30px; }
 .nav-tarjeta__valor small {
-  margin-left: 5px;
-  font-size: 11px;
+  flex: none;
+  font-size: 10px;
   font-weight: 400;
-  letter-spacing: 0;
-  color: var(--ink2);
-}
-
-/* Fuera de los limites que se pusieron. El fondo se tiñe ademas del numero:
-   solo en el numero se pierde cuando se mira la pantalla de refilon. */
-.nav-tarjeta.est-bajo,
-.nav-tarjeta.est-alto {
-  background: rgb(var(--warn-rgb) / 0.1);
-}
-.nav-tarjeta.est-bajo .nav-tarjeta__valor,
-.nav-tarjeta.est-alto .nav-tarjeta__valor { color: var(--warn); }
-
-.nav-tarjeta.est-sin .nav-tarjeta__valor {
-  font-size: 15px;
-  letter-spacing: 0;
   color: var(--ink3);
 }
-.nav-tarjeta.viejo .nav-tarjeta__valor { color: var(--ink3); }
+.nav-tarjeta.ancha .nav-tarjeta__valor small { font-size: 12px; }
+
+/* Fuera de los limites puestos. Se tiñe el fondo ademas del numero: solo en el
+   numero se pierde cuando se mira la pantalla de refilon. */
+.nav-tarjeta.est-bajo,
+.nav-tarjeta.est-alto { background: rgb(var(--warn-rgb) / 0.11); }
+.nav-tarjeta.est-bajo .nav-tarjeta__valor b,
+.nav-tarjeta.est-alto .nav-tarjeta__valor b { color: var(--warn); }
+.nav-tarjeta.est-bajo .nav-tarjeta__icono,
+.nav-tarjeta.est-alto .nav-tarjeta__icono {
+  background: rgb(var(--warn-rgb) / 0.2);
+  color: var(--warn);
+}
+
+.nav-tarjeta.est-sin .nav-tarjeta__valor b { font-size: 13px; color: var(--ink3); }
+.nav-tarjeta.viejo .nav-tarjeta__valor b { color: var(--ink3); }
+.nav-tarjeta.viejo .nav-tarjeta__icono,
+.nav-tarjeta.est-sin .nav-tarjeta__icono {
+  background: rgb(var(--ink3-rgb) / 0.16);
+  color: var(--ink3);
+}
 
 .nav-nivel {
-  margin-top: 10px;
-  height: 5px;
+  margin-top: 9px;
+  height: 7px;
   border-radius: 999px;
   background: rgb(var(--ink3-rgb) / 0.22);
   overflow: hidden;
@@ -385,11 +408,14 @@
 .nav-nivel i {
   display: block;
   height: 100%;
-  background: var(--acc);
-  transition: width 0.35s ease;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(var(--acc-rgb) / 0.55), var(--acc));
+  transition: width 0.4s ease;
 }
 .nav-tarjeta.est-bajo .nav-nivel i,
-.nav-tarjeta.est-alto .nav-nivel i { background: var(--warn); }
+.nav-tarjeta.est-alto .nav-nivel i {
+  background: linear-gradient(90deg, rgb(var(--warn-rgb) / 0.55), var(--warn));
+}
 
 /* Los dos lados de una resta. Un consumo raro casi siempre es un caudalimetro
    caido, y sin ver los sumandos no hay manera de saberlo. */
@@ -405,13 +431,10 @@
   text-overflow: ellipsis;
 }
 
-/* Solo aparece cuando el dato se quedo atras. Un «AHORA» debajo de cada
-   tarjeta es una linea repetida ocho veces que no dice nada: lo que hay que
-   ver es la que se salio de hora. */
 .nav-tarjeta__pie {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -419,8 +442,44 @@
 }
 .nav-tarjeta.est-sin .nav-tarjeta__pie { color: var(--ink3); }
 
-/* Datos de mentira. Se anuncia en naranja y arriba del todo, porque un caudal
-   inventado no se distingue de uno leido y una posicion inventada tampoco. */
+/* El plano viene claro y aqui todo es oscuro. Se apaga bastante: en una cabina
+   de noche un mapa a plena luz deslumbra, y encima tienen que leerse la flecha
+   y las geocercas. */
+.nav-mapa .leaflet-image-layer {
+  filter: brightness(0.55) saturate(0.7) contrast(1.1);
+}
+
+/* El nombre de cada geocerca, sobre ella. Sin globo ni flecha: encima de un
+   plano ya lleno de lineas, veinticinco globos serian ilegibles. */
+.nav-geocerca__nombre {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 7px #000, 0 1px 2px #000;
+  white-space: nowrap;
+}
+.nav-geocerca__nombre::before { display: none; }
+
+.nav-geocercas {
+  padding: 6px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  background: rgba(18, 29, 36, 0.9);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink2);
+}
+
+/* Datos de mentira. Arriba del todo y en naranja: un caudal inventado no se
+   distingue de uno leido, y una posicion inventada tampoco. */
 .nav-maqueta {
   margin: 0;
   padding: 7px 15px;
@@ -434,3 +493,22 @@
   color: var(--warn);
   text-align: center;
 }
+
+/* Redondo y grande, como en un navegador de coche: es el numero que se mira sin
+   apartar la vista de la pista. */
+.nav-velocidad {
+  width: 104px;
+  height: 104px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line2);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+}
+.nav-velocidad b { font-size: 38px; letter-spacing: -0.03em; }
+.nav-velocidad span { margin-top: 2px; font-size: 9.5px; letter-spacing: 0.18em; }
+
+.nav-precision { left: 22px; }

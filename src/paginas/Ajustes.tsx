@@ -22,6 +22,7 @@ import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { maqueta } from '../nucleo/maqueta';
+import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, panelDeCamion, vista } from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
@@ -261,6 +262,40 @@ export default function Ajustes() {
       setBajando(false);
     }
   };
+  /* ── Plano y geocercas ────────────────────────────────────────────────── */
+  const [loMio, setLoMio] = useState<Descargado | null>(() => guardado());
+  const [bajandoMapa, setBajandoMapa] = useState(false);
+
+  /**
+   * Baja el plano y las geocercas.
+   *
+   * Se entra primero para tener token fresco: el guardado caduca y renovarlo
+   * en silencio es mejor que enseñar un 401 que nadie sabe interpretar.
+   */
+  const bajarMapa = async () => {
+    const { url, usuario, clave } = cfg.servidor;
+    if (!url.trim()) {
+      setEco('Falta la dirección del servidor.');
+      return;
+    }
+    setBajandoMapa(true);
+    try {
+      let token = cfg.servidor.token;
+      if (usuario.trim() && clave) {
+        token = await entrar(url, usuario.trim(), clave);
+        aplicar({ ...cfg, servidor: { ...cfg.servidor, token } });
+      }
+      const d = await descargar(url, token);
+      setLoMio(d);
+      setEco(`${d.geocercas.length} geocercas${d.plano ? ' y el plano' : ''}`);
+    } catch (e) {
+      setEco(String((e as Error).message ?? e));
+    } finally {
+      setBajandoMapa(false);
+      setTimeout(() => setEco(null), 5000);
+    }
+  };
+
   const cambiarPanel = (panel: Config['panel']) => aplicar({ ...cfg, panel });
 
   const cambiarTarjeta = (id: string, cambio: Partial<Tarjeta>) =>
@@ -748,6 +783,7 @@ export default function Ajustes() {
 
           {/* ── Posición ───────────────────────────────────────────────── */}
           {pestana === 'posicion' && (
+            <>
             <Bloque titulo="GPS y RTK">
               <div className="grid grid-cols-2 gap-3">
                 <Campo etiqueta="Dispositivo del receptor">
@@ -791,6 +827,55 @@ export default function Ajustes() {
                 correcciones o sin ellas.
               </Aviso>
             </Bloque>
+
+            <Bloque titulo="Plano de la mina y geocercas">
+                <Nota>
+                  Un mapa de calles no dice nada dentro de una mina. Esto baja el plano de la
+                  empresa y las geocercas, y los deja guardados en el equipo: se descargan
+                  cuando hay cobertura y se siguen viendo cuando no la hay.
+                </Nota>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Campo etiqueta="Usuario">
+                    <Entrada
+                      type="email"
+                      value={cfg.servidor.usuario}
+                      placeholder="admin@…"
+                      onChange={(e) => cambiarServidor({ usuario: e.target.value })}
+                    />
+                  </Campo>
+                  <Campo etiqueta="Contraseña">
+                    <Entrada
+                      type="password"
+                      value={cfg.servidor.clave}
+                      onChange={(e) => cambiarServidor({ clave: e.target.value })}
+                    />
+                  </Campo>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Boton variante="fuerte" disabled={bajandoMapa} onClick={bajarMapa}>
+                    {bajandoMapa ? 'Bajando…' : 'Descargar plano y geocercas'}
+                  </Boton>
+
+                  {loMio && (
+                    <span className="font-mono text-[11.5px] text-ink2">
+                      {loMio.geocercas.length} geocercas
+                      {loMio.plano ? ' · plano puesto' : ' · sin plano'}
+                      {' · '}
+                      {new Date(loMio.at).toLocaleString('es-PE')}
+                    </span>
+                  )}
+                </div>
+
+                {!loMio && (
+                  <Vacio>
+                    Todavía no se ha bajado nada. Hasta que se baje, el mapa enseña calles en
+                    vez del plano de la mina.
+                  </Vacio>
+                )}
+            </Bloque>
+            </>
           )}
 
           {/* ── Datos ──────────────────────────────────────────────────── */}

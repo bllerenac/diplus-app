@@ -33,6 +33,8 @@ export interface Tarjeta {
   alto: number | null;
   /** Ocupa el ancho entero del panel en vez de media columna. */
   grande: boolean;
+  /** Nombre del icono en lucide. Vacío = sin icono. */
+  icono: string;
 }
 
 /** Cada forma de presentar, con lo que necesita. La pantalla se dibuja de aqui. */
@@ -82,6 +84,52 @@ export const VISTAS: {
   },
 ];
 
+/**
+ * Los iconos que puede llevar una tarjeta.
+ *
+ * Un tablero de camion no es una lista de numeros: se mira de reojo y lo que
+ * se reconoce primero es el simbolo, no el rotulo. El nombre que hay aqui es
+ * el del icono en lucide, y la pantalla lo resuelve.
+ */
+export const ICONOS: { id: string; nombre: string }[] = [
+  { id: 'Droplet', nombre: 'Gota · caudal' },
+  { id: 'Fuel', nombre: 'Surtidor · combustible' },
+  { id: 'Gauge', nombre: 'Aguja · presión' },
+  { id: 'Thermometer', nombre: 'Termómetro' },
+  { id: 'CircleGauge', nombre: 'Cuentarrevoluciones' },
+  { id: 'Battery', nombre: 'Batería · voltaje' },
+  { id: 'Clock', nombre: 'Reloj · horas' },
+  { id: 'Activity', nombre: 'Actividad · carga' },
+  { id: 'Weight', nombre: 'Peso · tonelaje' },
+  { id: 'Truck', nombre: 'Camión · estado' },
+  { id: 'Zap', nombre: 'Rayo' },
+  { id: 'Flame', nombre: 'Llama · motor' },
+  { id: 'Waves', nombre: 'Olas · nivel' },
+  { id: 'Timer', nombre: 'Cronómetro' },
+];
+
+/**
+ * El icono que le pega a una señal, por su nombre.
+ *
+ * Es una ayuda para no tener que elegirlos uno a uno la primera vez; siempre
+ * se puede cambiar. Si no reconoce nada, no pone ninguno: un icono equivocado
+ * confunde mas que la falta de icono.
+ */
+export const iconoSugerido = (texto: string): string => {
+  const t = texto.toLowerCase();
+  if (/consumo|caudal|flujo|flow/.test(t)) return 'Droplet';
+  if (/nivel|tanque|tank|volumen|combustible|fuel/.test(t)) return 'Fuel';
+  if (/rpm|revoluc/.test(t)) return 'CircleGauge';
+  if (/temp/.test(t)) return 'Thermometer';
+  if (/presi|bar/.test(t)) return 'Gauge';
+  if (/volt|bater|tensi/.test(t)) return 'Battery';
+  if (/hora|tiempo|horom/.test(t)) return 'Clock';
+  if (/carga|load|esfuerzo/.test(t)) return 'Activity';
+  if (/tonel|peso|carga util/.test(t)) return 'Weight';
+  if (/estado|status|marcha/.test(t)) return 'Truck';
+  return '';
+};
+
 export const vista = (id: VistaTarjeta) => VISTAS.find((v) => v.id === id) ?? VISTAS[0];
 
 export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
@@ -96,6 +144,7 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   bajo: null,
   alto: null,
   grande: false,
+  icono: '',
 });
 
 /**
@@ -120,6 +169,7 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
       ...nuevaTarjeta('diferencia'),
       id: 't-consumo',
       titulo: 'Consumo',
+      icono: 'Droplet',
       claves: [ida, retorno],
       unidad: 'L/h',
       decimales: 1,
@@ -134,6 +184,7 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
       ...nuevaTarjeta('nivel'),
       id: 't-nivel',
       titulo: 'Tanque',
+      icono: 'Fuel',
       claves: [nivel],
       decimales: 0,
       min: 0,
@@ -146,7 +197,13 @@ export const panelDeCamion = (claves: string[]): Tarjeta[] => {
 
   for (const c of claves) {
     if (puesta.has(c)) continue;
-    tarjetas.push({ ...nuevaTarjeta('numero'), id: `t-${c}`, claves: [c], decimales: 1 });
+    tarjetas.push({
+      ...nuevaTarjeta('numero'),
+      id: `t-${c}`,
+      claves: [c],
+      decimales: 1,
+      icono: iconoSugerido(c),
+    });
   }
 
   return tarjetas;

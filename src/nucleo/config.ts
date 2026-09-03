@@ -20,6 +20,9 @@ export interface Servidor {
   cadaSeg: number;
   /** Identificador de este equipo en el servidor. */
   equipo: string;
+  /** Para pedir el token cuando caduca. Se guarda en el equipo, en claro. */
+  usuario: string;
+  clave: string;
 }
 
 /** De donde se baja la aplicacion cuando se pulsa actualizar. */
@@ -47,7 +50,10 @@ const POR_DEFECTO: Config = {
      receptor en este equipo, medida con stty. A 9600 no se leeria nada. */
   gps: { ruta: '/dev/ttyHSL2', baudios: 921600, activo: true },
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
-  servidor: { activo: false, url: '', token: '', cadaSeg: 30, equipo: '' },
+  servidor: {
+    activo: false, url: 'https://miskimayo-back.wapsi.io/api', token: '',
+    cadaSeg: 30, equipo: '', usuario: '', clave: '',
+  },
   actualizacion: { url: '' },
   maqueta: false,
 };
