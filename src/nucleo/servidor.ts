@@ -48,6 +48,10 @@ export interface Camion {
   hacia: string;
   /** Toneladas del turno. */
   tonelaje: number;
+  /** Viajes del turno, del despacho. */
+  viajes: number;
+  /** Ciclos cerrados, que el equipo no puede contar por su cuenta. */
+  ciclos: number;
   estado: string;
 }
 
@@ -120,6 +124,8 @@ const traerCamion = (lista: any[], unidad: string): Camion | null => {
     desde: String(c.lastValidLocation ?? '').split('_')[1] ?? '',
     hacia: String(c.lastValidLocation ?? '').split('_')[2] ?? '',
     tonelaje: Number(c.currentShiftTonnage) || 0,
+    viajes: Number(c.currentShiftTrips) || 0,
+    ciclos: 0,
     estado: String(c.status ?? ''),
   };
 };

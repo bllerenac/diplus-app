@@ -77,6 +77,77 @@ function IconoTarjeta({ nombre, size = 15 }: { nombre: string; size?: number }) 
 }
 
 
+/**
+ * Un deposito que se ve llenarse.
+ *
+ * Un numero de litros no dice si queda mucho o poco sin saber cuanto cabe. Un
+ * tanque dibujado si: de reojo se ve la altura del liquido y ya esta, sin
+ * dividir nada mentalmente.
+ */
+function Tanque({ fraccion, alerta }: { fraccion: number; alerta: boolean }) {
+  const f = Math.min(1, Math.max(0, fraccion));
+  const alto = 62 * f;
+
+  return (
+    <svg className="nav-tanque" viewBox="0 0 46 78" width="46" height="78" aria-hidden="true">
+      <rect x="3" y="6" width="40" height="66" rx="9" className="nav-tanque__hueco" />
+      <clipPath id="dentro">
+        <rect x="3" y="6" width="40" height="66" rx="9" />
+      </clipPath>
+      <g clipPath="url(#dentro)">
+        <rect
+          x="3"
+          y={70 - alto}
+          width="40"
+          height={alto + 2}
+          className={alerta ? 'nav-tanque__liquido alerta' : 'nav-tanque__liquido'}
+        />
+      </g>
+      {/* Las marcas de un cuarto, para leer la altura sin contar. */}
+      {[0.25, 0.5, 0.75].map((m) => (
+        <line key={m} x1="3" x2="43" y1={70 - 64 * m} y2={70 - 64 * m} className="nav-tanque__marca" />
+      ))}
+      <rect x="3" y="6" width="40" height="66" rx="9" className="nav-tanque__borde" />
+    </svg>
+  );
+}
+
+/**
+ * Aguja sobre un arco, como el cuentarrevoluciones del tablero.
+ *
+ * El arco abarca 220 grados y empieza abajo a la izquierda, que es como se
+ * dibujan los cuadrantes de un carro: la posicion de la aguja se reconoce sin
+ * leer el numero, que es de lo que se trata cuando se conduce.
+ */
+function Cuadrante({ fraccion, alerta }: { fraccion: number; alerta: boolean }) {
+  const f = Math.min(1, Math.max(0, fraccion));
+  const R = 27;
+  const ABRE = 220;
+  const DESDE = 160;
+
+  const punto = (grados: number) => {
+    const r = ((grados) * Math.PI) / 180;
+    return [34 + R * Math.cos(r), 34 + R * Math.sin(r)];
+  };
+  const [x0, y0] = punto(DESDE);
+  const [x1, y1] = punto(DESDE + ABRE);
+  const largo = (Math.PI * R * ABRE) / 180;
+
+  return (
+    <svg className="nav-cuadrante" viewBox="0 0 68 60" width="68" height="60" aria-hidden="true">
+      <path
+        d={`M ${x0} ${y0} A ${R} ${R} 0 1 1 ${x1} ${y1}`}
+        className="nav-cuadrante__hueco"
+      />
+      <path
+        d={`M ${x0} ${y0} A ${R} ${R} 0 1 1 ${x1} ${y1}`}
+        className={alerta ? 'nav-cuadrante__lleno alerta' : 'nav-cuadrante__lleno'}
+        strokeDasharray={`${largo * f} ${largo}`}
+      />
+    </svg>
+  );
+}
+
 export default function Navegacion() {
   const router = useIonRouter();
   const [cfg, setCfg] = useState<Config>(cargar());
@@ -486,21 +557,52 @@ export default function Navegacion() {
             </p>
           )}
 
-          {/* ── Lo que hay que vigilar ────────────────────────────────────── */}
+          {/* ── Cuántos viajes y ciclos llevo ─────────────────────────────── */}
+          <div className="nav-cuenta">
+            <div className="nav-cuenta__uno">
+              <em>Viajes</em>
+              <b>{camion ? camion.viajes : '—'}</b>
+            </div>
+            <div className="nav-cuenta__uno">
+              <em>Ciclos</em>
+              <b>{camion ? camion.ciclos : '—'}</b>
+            </div>
+          </div>
+
+          {/* ── Los instrumentos ──────────────────────────────────────────── */}
           <div className="nav-vitales">
             {vitales.map(({ t, v }) => {
               const edad = v.visto ? Date.now() - v.visto : Infinity;
               const viejo = edad > 10000;
+              const alerta = v.estado === 'bajo' || v.estado === 'alto';
+              const clases = `nav-vital ${viejo ? 'viejo' : ''} est-${v.estado} forma-${t.vista}`;
+
+              /* Un tanque o un cuadrante ocupan su propia caja: el dibujo manda
+                 y el numero va debajo, que es como se lee un tablero. */
+              if (t.vista === 'tanque' || t.vista === 'cuadrante') {
+                return (
+                  <article key={t.id} className={clases}>
+                    {t.vista === 'tanque' ? (
+                      <Tanque fraccion={v.fraccion ?? 0} alerta={alerta} />
+                    ) : (
+                      <Cuadrante fraccion={v.fraccion ?? 0} alerta={alerta} />
+                    )}
+                    <span className="nav-vital__texto">
+                      <em>{titulo(t, v)}</em>
+                      <b>
+                        {texto(v, t.decimales)}
+                        {v.valor !== null && v.unidad && <small>{v.unidad}</small>}
+                      </b>
+                    </span>
+                  </article>
+                );
+              }
 
               return (
-                <article
-                  key={t.id}
-                  className={`nav-vital ${viejo ? 'viejo' : ''} est-${v.estado}`}
-                >
+                <article key={t.id} className={clases}>
                   <span className="nav-vital__icono">
-                    <IconoTarjeta nombre={t.icono} size={15} />
+                    <IconoTarjeta nombre={t.icono} size={14} />
                   </span>
-
                   <span className="nav-vital__texto">
                     <em>{titulo(t, v)}</em>
                     <b>
@@ -508,7 +610,6 @@ export default function Navegacion() {
                       {v.valor !== null && v.unidad && <small>{v.unidad}</small>}
                     </b>
                   </span>
-
                   {v.fraccion !== null && (
                     <span className="nav-vital__barra">
                       <i style={{ width: `${Math.round(v.fraccion * 100)}%` }} />

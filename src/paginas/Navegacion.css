@@ -847,3 +847,84 @@
 .nav-operador { font-size: 11px; width: 100%; }
 .nav-viaje__tramo { margin-top: 9px; gap: 7px; }
 .nav-tramo__punta b { font-size: 12px; }
+
+/* ── Contadores del turno ───────────────────────────────────────────────────
+   Viajes y ciclos vienen del despacho: el equipo no puede contarlos por su
+   cuenta, porque un ciclo se cierra por reglas que estan en el servidor. */
+
+.nav-cuenta {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.nav-cuenta__uno {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px 9px;
+  background: var(--sur);
+}
+.nav-cuenta__uno em {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.nav-cuenta__uno b {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--acc);
+}
+
+/* ── Instrumentos ───────────────────────────────────────────────────────────
+   Un tanque y un cuadrante ocupan su propia caja, con el dibujo mandando y el
+   numero debajo: es como se lee un tablero, mirando la forma y no la cifra. */
+
+.nav-vital.forma-tanque,
+.nav-vital.forma-cuadrante {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 6px 10px;
+}
+.nav-vital.forma-tanque .nav-vital__texto,
+.nav-vital.forma-cuadrante .nav-vital__texto { align-items: center; text-align: center; }
+.nav-vital.forma-tanque .nav-vital__texto b,
+.nav-vital.forma-cuadrante .nav-vital__texto b { font-size: 17px; }
+
+/* Los dos instrumentos van uno al lado del otro, que asi se comparan. */
+.nav-vitales { display: grid; grid-template-columns: 1fr 1fr; align-content: start; }
+.nav-vital { grid-column: 1 / -1; }
+.nav-vital.forma-tanque,
+.nav-vital.forma-cuadrante { grid-column: auto; }
+
+.nav-tanque__hueco { fill: rgb(var(--ink3-rgb) / 0.14); }
+.nav-tanque__borde { fill: none; stroke: var(--line2); stroke-width: 1.5; }
+.nav-tanque__liquido { fill: var(--acc); opacity: 0.85; transition: y 0.5s ease, height 0.5s ease; }
+.nav-tanque__liquido.alerta { fill: var(--warn); }
+.nav-tanque__marca { stroke: rgba(0, 0, 0, 0.35); stroke-width: 1; }
+
+.nav-cuadrante__hueco {
+  fill: none;
+  stroke: rgb(var(--ink3-rgb) / 0.2);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+.nav-cuadrante__lleno {
+  fill: none;
+  stroke: var(--acc);
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.45s ease;
+}
+.nav-cuadrante__lleno.alerta { stroke: var(--warn); }

@@ -14,7 +14,8 @@
  */
 import { Senal } from './lecturas';
 
-export type VistaTarjeta = 'numero' | 'diferencia' | 'suma' | 'nivel' | 'texto';
+export type VistaTarjeta =
+  | 'numero' | 'diferencia' | 'suma' | 'nivel' | 'texto' | 'tanque' | 'cuadrante';
 
 export interface Tarjeta {
   id: string;
@@ -281,7 +282,7 @@ export const calcular = (
   else if (t.alto !== null && valor > t.alto) estado = 'alto';
 
   const fraccion =
-    t.vista === 'nivel' && t.max !== t.min
+    (t.vista === 'nivel' || t.vista === 'tanque' || t.vista === 'cuadrante') && t.max !== t.min
       ? Math.min(1, Math.max(0, (valor - t.min) / (t.max - t.min)))
       : null;
 
