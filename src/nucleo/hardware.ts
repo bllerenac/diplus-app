@@ -12,6 +12,22 @@ import { Senal, pgnDe, saDe } from './lecturas';
 import { Contexto, protocolo } from './protocolos';
 import { Troceador, aHex, deHex, troceador } from './tramas';
 
+/**
+ * Un puerto serie del equipo, con el papel que cumple.
+ *
+ * El numero de ttyUSB no es fijo —depende del orden en que el kernel enumere
+ * los conversores del latiguillo—, asi que la lista se pide al equipo cada vez
+ * en lugar de escribirla a fuego.
+ */
+export interface PuertoDelEquipo {
+  ruta: string;
+  /** RS485, COM1 (RS232), COM2 (RS232), GPS… */
+  papel: string;
+  /** La rama del bus USB, o «SoC» si es del procesador. */
+  rama: string;
+  existe: boolean;
+}
+
 /** Lo que el buscador encontro en un puerto. */
 export interface Hallazgo {
   port: string;
@@ -90,6 +106,7 @@ export interface PluginNativo {
     startRegister?: number; registerCount?: number;
   }): Promise<any>;
   sendEurosensQuery(o: { devicePath: string; address: number; command?: number }): Promise<any>;
+  listarPuertos(): Promise<{ puertos: PuertoDelEquipo[] }>;
   scanPorts(o: { ports?: string[]; baudrates?: number[]; dwellMs?: number }): Promise<{
     found: Hallazgo[];
     scannedPorts: number;
@@ -245,6 +262,16 @@ class Hardware {
    * sobre el mismo device se pisan— y hay que volver a arrancar las fuentes
    * cuando termine.
    */
+  /** Los puertos que tiene el equipo ahora mismo, con su papel. */
+  async puertos(): Promise<PuertoDelEquipo[]> {
+    if (!hayHardware()) return [];
+    try {
+      return (await Nativo.listarPuertos()).puertos ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   async buscarPuertos(alProbar?: (p: { port: string; baudrate: number }) => void) {
     if (!hayHardware()) throw new Error('Buscar puertos solo funciona en el equipo.');
 

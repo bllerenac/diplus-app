@@ -16,7 +16,7 @@ import {
 } from '@ionic/react';
 
 import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config';
-import { Fuente, Hallazgo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
+import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
@@ -160,6 +160,13 @@ export default function Ajustes() {
   const [buscando, setBuscando] = useState(false);
   const [probando, setProbando] = useState<{ port: string; baudrate: number } | null>(null);
   const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
+  const [puertos, setPuertos] = useState<PuertoDelEquipo[]>([]);
+
+  /* El numero de ttyUSB puede cambiar entre arranques, asi que la lista se le
+     pide al equipo en vez de escribirla a fuego. */
+  useEffect(() => {
+    hardware.puertos().then(setPuertos).catch(() => undefined);
+  }, []);
 
   const buscar = async () => {
     setBuscando(true);
@@ -422,8 +429,33 @@ export default function Ajustes() {
 
                       {esSerie ? (
                         <>
-                          <Campo etiqueta="Dispositivo">
-                            <Entrada value={f.ruta} onChange={(e) => cambiarFuente(i, { ...f, ruta: e.target.value })} />
+                          <Campo
+                            etiqueta="Dispositivo"
+                            ayuda={puertos.find((p) => p.ruta === f.ruta)?.papel}
+                          >
+                            {puertos.length > 0 ? (
+                              <Selector
+                                value={f.ruta}
+                                onChange={(e) => cambiarFuente(i, { ...f, ruta: e.target.value })}
+                              >
+                                {/* Si lo guardado ya no existe se deja en la lista, para
+                                    no cambiarle el puerto a nadie por la espalda. */}
+                                {!puertos.some((p) => p.ruta === f.ruta) && (
+                                  <option value={f.ruta}>{f.ruta} · no está</option>
+                                )}
+                                {puertos.map((p) => (
+                                  <option key={p.ruta} value={p.ruta}>
+                                    {p.papel} · {p.ruta}
+                                    {p.rama && p.rama !== 'SoC' ? ` (${p.rama})` : ''}
+                                  </option>
+                                ))}
+                              </Selector>
+                            ) : (
+                              <Entrada
+                                value={f.ruta}
+                                onChange={(e) => cambiarFuente(i, { ...f, ruta: e.target.value })}
+                              />
+                            )}
                           </Campo>
                           <Campo etiqueta="Baudios">
                             <Selector value={f.baudios}

@@ -506,6 +506,77 @@ public class CanRs485Plugin extends Plugin {
 
     /** Un fallo del puerto tiene que llegar a la pantalla, no quedarse en el log. */
     /**
+     * Los puertos serie del equipo, con su papel, resueltos en caliente.
+     *
+     * El numero de `ttyUSB` **no es fijo**: depende del orden en que el kernel
+     * enumere los dos conversores del latiguillo, y puede cambiar de un arranque
+     * a otro. Por eso el SDK del fabricante no escribe el nombre a fuego, sino
+     * que busca el nodo por su posicion en el bus USB:
+     *
+     *   serial0 = "/dev/ttyHSL0"                            COM1  RS232
+     *   serial1 = getSerialDeviceNodeByName("3/1-1.3:1.0")  COM2  RS232
+     *   serial2 = getSerialDeviceNodeByName("2/1-1.2:1.0")  RS485
+     *
+     * Aqui se hace lo mismo: se sigue el enlace de /sys/class/tty y se mira en
+     * que rama del bus cuelga cada uno. Asi el RS485 sigue siendo el RS485
+     * aunque manana el sistema lo llame ttyUSB1.
+     */
+    @PluginMethod
+    public void listarPuertos(PluginCall call) {
+        JSArray lista = new JSArray();
+
+        /* Los USB del latiguillo, por su rama del bus. */
+        File[] enlaces = new File("/sys/class/tty").listFiles(
+                (dir, nombre) -> nombre.startsWith("ttyUSB"));
+
+        if (enlaces != null) {
+            java.util.Arrays.sort(enlaces);
+            for (File enlace : enlaces) {
+                String ruta = "/dev/" + enlace.getName();
+                String destino;
+                try {
+                    destino = enlace.getCanonicalPath();
+                } catch (Exception e) {
+                    destino = "";
+                }
+
+                String papel;
+                if (destino.contains("1-1.2")) papel = "RS485";
+                else if (destino.contains("1-1.3")) papel = "COM2 (RS232)";
+                else papel = "USB serie";
+
+                lista.put(puerto(ruta, papel, ramaDe(destino), new File(ruta).exists()));
+            }
+        }
+
+        /* Los del procesador, que si son fijos. */
+        lista.put(puerto("/dev/ttyHSL0", "COM1 (RS232)", "SoC", new File("/dev/ttyHSL0").exists()));
+        lista.put(puerto("/dev/ttyHSL1", "Reservado", "SoC", new File("/dev/ttyHSL1").exists()));
+        lista.put(puerto("/dev/ttyHSL2", "GPS", "SoC", new File("/dev/ttyHSL2").exists()));
+        lista.put(puerto("/dev/ttyHSL3", "Reservado", "SoC", new File("/dev/ttyHSL3").exists()));
+
+        JSObject ret = new JSObject();
+        ret.put("puertos", lista);
+        call.resolve(ret);
+    }
+
+    private JSObject puerto(String ruta, String papel, String rama, boolean existe) {
+        JSObject o = new JSObject();
+        o.put("ruta", ruta);
+        o.put("papel", papel);
+        o.put("rama", rama);
+        o.put("existe", existe);
+        return o;
+    }
+
+    /** La rama del bus, para poder enseñar de donde sale cada puerto. */
+    private String ramaDe(String destino) {
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("(1-1\\.[0-9]+)").matcher(destino);
+        return m.find() ? m.group(1) : "";
+    }
+
+    /**
      * Busca en que puerto y a que velocidad esta hablando un aparato.
      *
      * Es lo que hacia la version anterior de la aplicacion y se habia perdido:
