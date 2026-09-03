@@ -99,15 +99,20 @@ export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
     id: `f${Date.now().toString(36)}`,
     nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
     puerto,
-    /* El RS485 es ttyUSB0, no ttyHSL0.
+    /* Cual es el puerto del RS485 esta sin resolver, y las dos fuentes que hay
+       no coinciden. Por eso se elige desde un selector en Configuracion.
 
-       Segun el SDK del fabricante, ttyHSL0 es COM1 y es RS232. El RS485 y el
-       COM2 son dispositivos USB, que el demo resuelve por su ruta en el bus:
+       El SDK de la AT-10A dice que el RS485 es el conversor USB de la rama
+       1-1.2 del bus —hoy ttyUSB0— y que ttyHSL0 es COM1, RS232:
 
-         serial2 = getSerialDeviceNodeByName("2/1-1.2:1.0")   RS485
-         serial1 = getSerialDeviceNodeByName("3/1-1.3:1.0")   COM2
+         ComC.setPort(serial2);   // RS485 = 1-1.2
+         ComA.setPort(serial0);   // COM1  = /dev/ttyHSL0
 
-       En este equipo 1-1.2 es ttyUSB0 y 1-1.3 es ttyUSB1. */
+       Pero el codigo original de esta unidad, escrito cuando leia, usaba
+       ttyHSL0 y lo etiquetaba «P4 RS485». Y la AT-10L no es la AT-10A.
+
+       Se deja ttyUSB0 porque es lo unico documentado, pero no esta comprobado:
+       ninguno de los dos ha entregado una sola trama todavia. Ver NOTAS-RS485.md. */
     ruta: puerto === 'rs485' ? '/dev/ttyUSB0' : '/dev/ttyHSL0',
     baudios: 9600,
     bitrate: 250000,
