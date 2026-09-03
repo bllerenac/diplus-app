@@ -458,13 +458,21 @@ export default function Navegacion() {
     const puestas = cfg.panel.length
       ? cfg.panel
       : /* Lo que no es un numero se enseña como texto: si no, un estado o un
-           codigo apareceria como «sin dato», que es mentira. */
-        [...valores.entries()].map(([c, s]) => ({
-          ...nuevaTarjeta(typeof s.valor === 'string' ? 'texto' : 'numero'),
-          id: `auto.${c}`,
-          claves: [c],
-          decimales: 2,
-        }));
+           codigo apareceria como «sin dato», que es mentira.
+
+           La inercial se queda fuera. Este relleno existe para que un equipo
+           recien puesto enseñe lo que le llega por cable sin configurar nada, y
+           la inercial no llega por cable: publica siempre, asi que el panel no
+           quedaba vacio nunca y se llenaba solo con ella. Sus datos ya tienen
+           sitio propio, en la tarjeta del mapa bajo el consumo. */
+        [...valores.entries()]
+          .filter(([c]) => !c.startsWith('imu.'))
+          .map(([c, s]) => ({
+            ...nuevaTarjeta(typeof s.valor === 'string' ? 'texto' : 'numero'),
+            id: `auto.${c}`,
+            claves: [c],
+            decimales: 2,
+          }));
 
     return puestas.map((t) => ({ t, v: calcular(t, valores, frescura) }));
   }, [cfg.panel, valores, frescura]);
