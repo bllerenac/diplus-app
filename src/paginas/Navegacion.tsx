@@ -488,9 +488,14 @@ export default function Navegacion() {
         )}
 
         {pos && (
-          <div className="nav-velocidad">
+          <div className={`nav-velocidad ${vaVelocidad}`}>
             <b>{velocidad}</b>
             <span>KM/H</span>
+
+            {/* El limite, en el circulito de la esquina. Es el idioma de
+                cualquier navegador: dentro lo que llevas, al lado lo que
+                toca, y el color dice si vas bien. */}
+            <span className="nav-limite">{consejo.velocidad}</span>
           </div>
         )}
         {pos && (
@@ -502,28 +507,16 @@ export default function Navegacion() {
             derecha: es lo último que se mira antes de volver la vista a la
             pista, así que va sobre el terreno y no en el panel. */}
         <footer className="nav-consejo">
-          <p className="nav-consejo__donde">
-            {donde ? donde.nombre : 'Fuera de toda geocerca'}
-          </p>
+          {donde && <p className="nav-consejo__donde">{donde.nombre}</p>}
 
-          <div className="nav-consejo__pareja">
-            <div className={`nav-consejo__dato ${vaVelocidad}`}>
-            <em>Velocidad</em>
-            <b>
-              {velocidad}
-              <small>de {consejo.velocidad} km/h</small>
-            </b>
-            </div>
-
-            <div className={`nav-consejo__dato ${vaConsumo}`}>
+          <div className={`nav-consejo__dato ${vaConsumo}`}>
             <em>Consumo</em>
             <b>
               {galones === null ? '—' : galones.toFixed(1)}
               <small>de {consejo.galonesHora} gal/h</small>
             </b>
-            </div>
           </div>
-          </footer>
+        </footer>
 
         </div>
         <aside className="nav-panel">

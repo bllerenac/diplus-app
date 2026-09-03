@@ -742,7 +742,7 @@
   text-overflow: ellipsis;
 }
 
-.nav-consejo__pareja { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
 
 .nav-consejo__dato {
   min-width: 0;
@@ -804,7 +804,7 @@
   right: 16px;
   bottom: 16px;
   z-index: 600;
-  width: 260px;
+  width: 176px;
   padding: 11px 13px 13px;
   border: 1px solid var(--line2);
   border-radius: 18px;
@@ -928,3 +928,44 @@
   transition: stroke-dasharray 0.45s ease;
 }
 .nav-cuadrante__lleno.alerta { stroke: var(--warn); }
+
+/* ── El límite, en el círculo de la velocidad ───────────────────────────────
+   Es el idioma de cualquier navegador: dentro lo que llevas, en el circulito
+   de la esquina lo que toca. Asi no hay que compararlos leyendo dos sitios
+   distintos de la pantalla, que conduciendo es justo lo que no se hace. */
+
+.nav-velocidad { position: absolute; }
+
+.nav-limite {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid var(--ink3);
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #101820;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Se avisa antes de pasarse, desde el 90 % del limite: para cuando el numero
+   se pone rojo, la maquina lleva un rato yendo demasiado rapido. */
+.nav-velocidad.justo { border-color: var(--warn); }
+.nav-velocidad.justo b { color: var(--warn); }
+.nav-velocidad.justo .nav-limite { border-color: var(--warn); }
+
+.nav-velocidad.pasado { border-color: var(--bad); }
+.nav-velocidad.pasado b { color: var(--bad); }
+.nav-velocidad.pasado .nav-limite { border-color: var(--bad); }
+
+/* La recomendación se queda solo con el consumo. */
+.nav-consejo__dato { border: 0; background: none; padding: 0; }
+.nav-consejo__dato b { font-size: 26px; }
