@@ -969,3 +969,11 @@
 /* La recomendación se queda solo con el consumo. */
 .nav-consejo__dato { border: 0; background: none; padding: 0; }
 .nav-consejo__dato b { font-size: 26px; }
+
+/* La unidad del tonelaje, pequeña y al lado de la cifra. */
+.nav-cuenta__uno b { display: flex; align-items: baseline; gap: 3px; }
+.nav-cuenta__uno small {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--ink3);
+}

@@ -553,12 +553,15 @@ export default function Navegacion() {
           {/* ── Cuántos viajes y ciclos llevo ─────────────────────────────── */}
           <div className="nav-cuenta">
             <div className="nav-cuenta__uno">
-              <em>Viajes</em>
-              <b>{camion ? camion.viajes : '—'}</b>
-            </div>
-            <div className="nav-cuenta__uno">
               <em>Ciclos</em>
               <b>{camion ? camion.ciclos : '—'}</b>
+            </div>
+            <div className="nav-cuenta__uno">
+              <em>Tonelaje</em>
+              <b>
+                {camion ? camion.tonelaje.toFixed(0) : '—'}
+                {camion && <small>t</small>}
+              </b>
             </div>
           </div>
 
