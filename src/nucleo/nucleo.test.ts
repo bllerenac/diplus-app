@@ -368,3 +368,68 @@ describe('direcciones para actualizar', () => {
     expect(esMasNueva(1, 2)).toBe(false);
   });
 });
+
+describe('tramas reales del emisor de pruebas', () => {
+  /*
+   * Salidas de herramientas/emisor-rs485.ps1 capturadas del puerto COM5.
+   *
+   * Sirven para dos cosas: que el CRC que calcula el emisor en PowerShell es el
+   * mismo que exige la aplicacion —dos implementaciones distintas del mismo
+   * polinomio, escritas por separado—, y que lo que se emite se decodifica en
+   * los valores que se pusieron.
+   */
+  const CFG = {
+    esclavo: 1,
+    agrupacion: 'u16',
+    escala: 0.01,
+    columnas: 'caudal,retorno,temperatura,nivel',
+    exigir_crc: 'si',
+  };
+
+  it('decodifica una trama Modbus del emisor', () => {
+    const s = protocolo('modbus-rtu').decodificar(
+      deHex('01 03 08 0F F3 0B 29 1E BE 3E 1C 3D 80'), CFG, {},
+    );
+
+    expect(s.map((x) => x.clave)).toEqual(['caudal', 'retorno', 'temperatura', 'nivel']);
+    expect(s[0].valor).toBeCloseTo(40.83, 2);
+    expect(s[1].valor).toBeCloseTo(28.57, 2);
+    expect(s[2].valor).toBeCloseTo(78.7, 2);
+    expect(s[3].valor).toBeCloseTo(159.0, 2);
+  });
+
+  it('decodifica la segunda, con otros valores', () => {
+    const s = protocolo('modbus-rtu').decodificar(
+      deHex('01 03 08 10 44 0B 61 1F 04 3D B8 7A 9B'), CFG, {},
+    );
+    expect(s[0].valor).toBeCloseTo(41.64, 2);
+    expect(s[3].valor).toBeCloseTo(158.0, 2);
+  });
+
+  it('rechaza la trama si se le toca un byte', () => {
+    /* El CRC tiene que servir de algo: con un dato cambiado no debe pasar. */
+    const s = protocolo('modbus-rtu').decodificar(
+      deHex('01 03 08 0F F4 0B 29 1E BE 3E 1C 3D 80'), CFG, {},
+    );
+    expect(s).toEqual([]);
+  });
+
+  it('lee la linea JSON que emite el mismo guion', () => {
+    const linea = '{"caudal":40.83,"retorno":28.57,"temperatura":78.7,"rpm":1579,"nivel":159}';
+    const s = protocolo('helperbox-json').decodificar(
+      new TextEncoder().encode(linea), {}, {},
+    );
+    expect(s.find((x) => x.clave === 'caudal')?.valor).toBe(40.83);
+    expect(s.find((x) => x.clave === 'rpm')?.valor).toBe(1579);
+  });
+
+  it('lee la linea CSV con los nombres puestos a mano', () => {
+    const s = protocolo('helperbox-csv').decodificar(
+      new TextEncoder().encode('41.64;29.13;79.4;1656;158'),
+      { prefijo: '', columnas: 'caudal,retorno,temperatura,rpm,nivel', separador: ';' },
+      {},
+    );
+    expect(s[0].valor).toBeCloseTo(41.64, 2);
+    expect(s[4].valor).toBeCloseTo(158, 2);
+  });
+});
