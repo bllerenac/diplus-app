@@ -40,7 +40,16 @@ export interface Hallazgo {
   sample: string | null;
 }
 
-export type Puerto = 'rs485' | 'can1' | 'can2';
+/**
+ * Por donde entra lo que se lee.
+ *
+ * La de red no es un cable mas: es escuchar en un puerto UDP lo que otro equipo
+ * empuje. Hizo falta porque la boca de red de esta tablet **recibe pero no
+ * transmite** —20 de 20 tramas entrando, 0 de 20 saliendo, medido en los dos
+ * extremos—, y con eso no hay TCP posible ni se puede resolver un ARP. Para
+ * escuchar, en cambio, sobra.
+ */
+export type Puerto = 'rs485' | 'can1' | 'can2' | 'red';
 
 export interface Fuente {
   id: string;
@@ -100,6 +109,8 @@ export interface PluginNativo {
   startCan1Listener(o: { baudrate?: number; serialBaudrate?: number }): Promise<any>;
   startCan2Listener(o: { baudrate?: number; serialBaudrate?: number }): Promise<any>;
   startRs485Listener(o: { devicePath: string; baudrate?: number }): Promise<any>;
+  startRedListener(o: { puerto: number }): Promise<any>;
+  stopRedListener(): Promise<any>;
   sendRawBytes(o: { devicePath: string; hexData: string }): Promise<any>;
   sendModbusQuery(o: {
     devicePath: string; address: number; functionCode?: number;
@@ -144,6 +155,7 @@ class Hardware {
     this.enganchado = true;
 
     await Nativo.addListener('onRs485Data', (d: NativoSerie) => this.serie('rs485', d));
+    await Nativo.addListener('onRedData', (d: NativoSerie) => this.serie('red', d));
     await Nativo.addListener('onCan1Data', (d: NativoCan) => this.can('can1', d));
     await Nativo.addListener('onCan2Data', (d: NativoCan) => this.can('can2', d));
     await Nativo.addListener('onPortError', (d: ProblemaPuerto) =>
@@ -233,7 +245,11 @@ class Hardware {
 
     await this.enganchar();
 
-    if (f.puerto === 'rs485') {
+    if (f.puerto === 'red') {
+      /* Aqui `baudios` guarda el puerto UDP: es el unico numero que hace falta
+         y no merecia un campo propio en la configuracion de cada fuente. */
+      await Nativo.startRedListener({ puerto: f.baudios || 9977 });
+    } else if (f.puerto === 'rs485') {
       await Nativo.startRs485Listener({ devicePath: f.ruta, baudrate: f.baudios });
       this.ponerAPreguntar(f);
     } else if (f.puerto === 'can1') {

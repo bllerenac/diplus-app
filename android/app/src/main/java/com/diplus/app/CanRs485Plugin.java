@@ -6,6 +6,8 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import android.util.Log;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -582,6 +584,96 @@ public class CanRs485Plugin extends Plugin {
         } else {
             call.reject("Error enviando trama CAN: " + res);
         }
+    }
+
+    /* ── Escucha por red, en un solo sentido ──────────────────────────────────
+     *
+     * Este equipo **recibe** por su boca de red y **no transmite**: medido, 20
+     * de 20 tramas entrando y 0 de 20 saliendo. Con eso no se puede hablar por
+     * TCP —que necesita respuesta en cada paso— ni resolver un ARP, ni dar el
+     * ACK que exige el CAN. Pero para escuchar sobra.
+     *
+     * Asi que quien tiene los datos los empuja en UDP y aqui solo se recogen.
+     * Sin conexion que establecer, sin nada que contestar. Las tramas entran
+     * por el mismo sitio que las del cable serie, con el mismo formato, para
+     * que el resto no se entere de por donde llegaron.
+     */
+    private DatagramSocket udpSocket;
+    private Thread udpThread;
+    private final AtomicBoolean udpEscuchando = new AtomicBoolean(false);
+
+    @PluginMethod
+    public void startRedListener(PluginCall call) {
+        final int puerto = call.getInt("puerto", 9977);
+
+        if (udpEscuchando.get()) {
+            JSObject ya = new JSObject();
+            ya.put("status", "already_running");
+            ya.put("puerto", puerto);
+            call.resolve(ya);
+            return;
+        }
+
+        try {
+            udpSocket = new DatagramSocket(null);
+            udpSocket.setReuseAddress(true);
+            /* Se acepta lo que venga a cualquiera de las direcciones del equipo,
+               incluida la difusion: quien empuja no tiene por que saber cual es
+               la nuestra, y de hecho no puede averiguarla sin que contestemos. */
+            udpSocket.setBroadcast(true);
+            udpSocket.bind(new java.net.InetSocketAddress(puerto));
+        } catch (Exception e) {
+            call.reject("No se pudo abrir el puerto " + puerto + ": " + e.getMessage());
+            return;
+        }
+
+        udpEscuchando.set(true);
+        udpThread = new Thread(() -> {
+            byte[] buffer = new byte[4096];
+            while (udpEscuchando.get()) {
+                try {
+                    DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+                    udpSocket.receive(p);
+
+                    StringBuilder hex = new StringBuilder();
+                    for (int i = 0; i < p.getLength(); i++) {
+                        hex.append(String.format("%02X", buffer[i]));
+                        if (i < p.getLength() - 1) hex.append(" ");
+                    }
+
+                    JSObject data = new JSObject();
+                    data.put("raw", hex.toString());
+                    data.put("bytes", p.getLength());
+                    data.put("timestamp", System.currentTimeMillis());
+                    data.put("port", "udp:" + puerto);
+                    data.put("de", p.getAddress() == null ? "" : p.getAddress().getHostAddress());
+                    notifyListeners("onRedData", data);
+                } catch (Exception e) {
+                    if (udpEscuchando.get()) {
+                        Log.w(TAG, "Fallo escuchando en el puerto " + puerto + ": " + e.getMessage());
+                    }
+                }
+            }
+        });
+        udpThread.start();
+
+        Log.i(TAG, "Escuchando datos por red en el puerto UDP " + puerto);
+        JSObject ret = new JSObject();
+        ret.put("status", "started");
+        ret.put("puerto", puerto);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void stopRedListener(PluginCall call) {
+        udpEscuchando.set(false);
+        if (udpSocket != null) {
+            udpSocket.close();
+            udpSocket = null;
+        }
+        JSObject ret = new JSObject();
+        ret.put("status", "stopped");
+        call.resolve(ret);
     }
 
     @PluginMethod

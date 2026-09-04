@@ -370,3 +370,81 @@ bien puesto:
 
 Lo que no puede decidirse por software es cual de las dos, porque las dos se
 ven igual desde aqui: silencio absoluto.
+
+---
+
+# Donde estaba el fallo: la tablet transmite y no la oyen
+
+**4 de septiembre de 2026.** Medido en los dos extremos, con el enlace quieto:
+
+```
+tablet    envio 20  ->  HelperBox recibio  0     (0%)
+HelperBox envio 20  ->  tablet    recibio 20     (100%)
+```
+
+**El camino de recepcion de la tablet esta perfecto. El de transmision, muerto.**
+Es al reves de lo que se creyo durante todo el dia.
+
+Y con eso encaja lo que faltaba por explicar:
+
+- **RS485.** Se vio con `usbmon` la peticion Modbus saliendo del CH340 hacia el
+  cable, y al otro lado no llegaba nada. Mismo sentido.
+- **CAN.** `cansend` en el HelperBox devuelve «No buffer space available» con
+  `TX packets = 0` y el bus pasa a `ERROR-PASSIVE`. En CAN cada trama necesita
+  que otro nodo la reconozca **transmitiendo** el bit de ACK; si la tablet no
+  puede transmitir no hay ACK, el emisor no completa ni una trama y por tanto
+  la tablet tampoco recibe. Un solo fallo explica los dos sentidos.
+- **Ethernet.** El par de recepcion funciona; el de transmision, no.
+
+Tres transmisores distintos —el LAN9514 del Ethernet, el CH340 del RS485 y el
+micro RT1021 del CAN— mudos los tres, con sus tres caminos de entrada sanos.
+Que fallen tres chips independientes solo en transmision no pasa: lo unico que
+comparten son los conductores de salida del mazo Port B.
+
+## El parpadeo del enlace lo causaba nuestra propia aplicacion
+
+Lo encontro el usuario mirando el LED del RJ45: solo parpadeaba con la app
+abierta. Medido:
+
+```
+App cerrada:                                 0 cambios de portadora en 45 s
+App abierta preguntando por RS485 cada 1 s: 15 cambios en 40 s
+App abierta sin preguntar por RS485:         0 cambios en 40 s
+```
+
+**Cada transmision por RS485 tumba el enlace Ethernet.** Son dos pares
+distintos del mismo mazo: hay diafonia o un cruce entre conductores. Mas
+evidencia del mismo dano, y explica el sintoma exacto que se veia.
+
+## La salida: que la tablet solo escuche
+
+La tablet recibe el 100%, asi que no hace falta que hable. El HelperBox lee el
+CAN del caudalimetro —eso funciona y tiene 50 986 filas de historico
+probandolo— y empuja las lecturas en **UDP a la direccion de difusion**, sin
+esperar respuesta: sin TCP, sin ARP, sin ACK. Nada de lo que la tablet no puede
+hacer.
+
+En la aplicacion es un transporte mas, `red`, junto a `rs485`, `can1` y `can2`.
+La trama que viaja es la misma linea de JSON que ya emitia el puente por el
+cable serie, asi que el protocolo `helperbox-json` se reaprovecha tal cual.
+
+Probado en el equipo: las señales del HelperBox aparecen en la tablet.
+
+```
+equipo.encendido_min      145
+equipo.carga             0.43
+equipo.memoria_pct         40
+equipo.temperatura     55.385
+equipo.disco_libre_mb    3488
+```
+
+El emisor es `herramientas/empujar-a-la-tablet.py`, arrancado desde el `rcS`
+del HelperBox.
+
+## Lo que sigue pendiente
+
+Cambiar el mazo Port B de la tablet. Con el vuelven el RS485 y los dos CAN
+directos, y el Ethernet en los dos sentidos. Antes de comprarlo conviene
+desconectarlo y volver a encajarlo a fondo: un conector de 18 pines a medio
+meter hace contacto en unos pines y no en otros, que es exactamente lo que se
+ve.

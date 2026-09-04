@@ -151,7 +151,26 @@ export const guardar = (c: Config): Config => {
 };
 
 export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
-  const protoId = puerto === 'rs485' ? 'helperbox-json' : 'dfm-j1939';
+  /* Por red llegan las mismas lineas de JSON que manda el puente del HelperBox
+     por el cable serie, asi que se reaprovecha el protocolo tal cual. */
+  const protoId =
+    puerto === 'red' || puerto === 'rs485' ? 'helperbox-json' : 'dfm-j1939';
+
+  if (puerto === 'red') {
+    return {
+      id: `f${Date.now().toString(36)}`,
+      nombre: 'HelperBox por red',
+      puerto,
+      ruta: '',
+      /* Aqui `baudios` es el puerto UDP en el que se escucha. */
+      baudios: 9977,
+      bitrate: 0,
+      protocoloId: protoId,
+      config: defectosDe(protocolo(protoId)),
+      activa: true,
+    };
+  }
+
   return {
     id: `f${Date.now().toString(36)}`,
     nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
