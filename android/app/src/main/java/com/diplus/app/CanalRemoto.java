@@ -86,6 +86,7 @@ public class CanalRemoto extends Service {
 
         avisar(puerto);
         reabrirAdbPorRed();
+        levantarRedCableada();
 
         if (vivo.compareAndSet(false, true)) {
             hilo = new Thread(() -> servir(puerto, token == null ? "" : token));
@@ -271,6 +272,62 @@ public class CanalRemoto extends Service {
                 + "\"existe\":" + new File(ruta).exists() + "}";
     }
 
+    /** La direccion de este equipo en el enlace directo con el HelperBox. */
+    private static final String IP_CABLE = "192.168.60.2/24";
+
+    /**
+     * Ejecuta una orden como root, si el equipo lo permite.
+     *
+     * La orden va **por la entrada estandar**, no detras de un `-c`. El `su` de
+     * estas tablets toma lo que sigue a `-c` como el nombre de un programa, asi
+     * que `su -c "ip addr add ...; ip link set ..."` falla buscando un ejecutable
+     * que se llama asi de largo. Costo una prueba entera darse cuenta, porque
+     * la llamada no revienta: devuelve un error que nadie mira y se queda todo
+     * como estaba.
+     *
+     * Sin root no hay `su`, salta la excepcion y no pasa nada. Esto nunca es
+     * imprescindible: son mejoras sobre lo que el equipo ya hace solo.
+     */
+    private boolean comoRoot(String orden) {
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+            java.io.OutputStream o = p.getOutputStream();
+            o.write((orden + "\nexit\n").getBytes("UTF-8"));
+            o.flush();
+            o.close();
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Levanta la boca de red cableada con una direccion fija.
+     *
+     * Es el camino por el que entran las lecturas del HelperBox. No lo hace
+     * Android por su cuenta: su servicio de Ethernet pide direccion por DHCP y
+     * al otro lado no hay nadie que la reparta, porque esto es una red privada
+     * de dos y a proposito — sin router, sin servidor, sin nada que se pueda
+     * caer aparte del propio cable.
+     *
+     * Se pone en cada arranque porque una direccion puesta a mano no sobrevive
+     * a un reinicio, y este equipo se reinicia con el camion. Si no hay root,
+     * `su` no existe, la llamada falla y no pasa nada.
+     *
+     * Por que un cable y no el RS485 ni el CAN: los tres CAN y el RS485 de esta
+     * tablet salen por el mismo latiguillo y **ninguno entrega un solo byte**,
+     * ni con el demo del fabricante. Lo que no pasa por ese latiguillo —GPS,
+     * inercial, pantalla— va perfecto. La boca de red es un chip aparte, un
+     * SMSC LAN9514 colgado del hub USB interno, y tiene su propio driver.
+     */
+    private void levantarRedCableada() {
+        new Thread(() -> {
+            boolean ok = comoRoot("ip addr add " + IP_CABLE + " dev eth0; ip link set eth0 up");
+            Log.i(TAG, ok ? "Red cableada levantada en " + IP_CABLE
+                          : "Sin root: la red cableada se queda como estaba");
+        }).start();
+    }
+
     /**
      * Vuelve a abrir el ADB por red, si el equipo lo permite.
      *
@@ -287,14 +344,9 @@ public class CanalRemoto extends Service {
      */
     private void reabrirAdbPorRed() {
         new Thread(() -> {
-            try {
-                Process p = Runtime.getRuntime().exec(new String[] { "su", "-c",
-                        "setprop service.adb.tcp.port 5555; stop adbd; start adbd" });
-                p.waitFor();
-                Log.i(TAG, "ADB por red reabierto con root");
-            } catch (Exception e) {
-                Log.i(TAG, "Sin root: el ADB por red se queda como estaba");
-            }
+            boolean ok = comoRoot("setprop service.adb.tcp.port 5555; stop adbd; start adbd");
+            Log.i(TAG, ok ? "ADB por red reabierto con root"
+                          : "Sin root: el ADB por red se queda como estaba");
         }).start();
     }
 
