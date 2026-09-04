@@ -164,6 +164,61 @@ describe('protocolo Modbus RTU', () => {
   });
 });
 
+/**
+ * Lo que se pregunta, no lo que se escucha.
+ *
+ * Un esclavo callado y un cable roto se ven exactamente igual desde fuera, y
+ * eso costo dias: la version anterior de la aplicacion interrogaba al aparato y
+ * por eso leia. Estas tramas van contra vectores publicados del estandar y
+ * contra el CRC8 del equipo que si leia, no contra lo que salga de este codigo.
+ */
+describe('preguntas a los esclavos', () => {
+  it('arma la peticion Modbus de los vectores conocidos', () => {
+    expect(aHex(protocolo('modbus-rtu').pregunta!({
+      esclavo: 1, funcion: 3, registro: 0, cantidad: 10,
+    })!)).toBe('01 03 00 00 00 0A C5 CD');
+
+    expect(aHex(protocolo('modbus-rtu').pregunta!({
+      esclavo: 17, funcion: 3, registro: 107, cantidad: 3,
+    })!)).toBe('11 03 00 6B 00 03 76 87');
+  });
+
+  it('no pregunta al esclavo 0, que en Modbus es la difusion', () => {
+    expect(protocolo('modbus-rtu').pregunta!({ esclavo: 0 })).toBeNull();
+  });
+
+  it('arma la peticion Eurosens como la mandaba el equipo que leia', () => {
+    expect(aHex(protocolo('eurosens-dds').pregunta!({ direccion: 1, orden: 6 })!))
+      .toBe('31 01 06 6C');
+  });
+
+  it('los protocolos que emiten solos no preguntan nada', () => {
+    expect(protocolo('helperbox-json').pregunta).toBeUndefined();
+    expect(protocolo('dfm-j1939').pregunta).toBeUndefined();
+  });
+
+  /*
+   * La vuelta completa, con bytes que existieron.
+   *
+   * La pregunta se mando a un esclavo Modbus corriendo en un HelperBox y esta
+   * es su respuesta tal cual salio del puerto. Que el ida y vuelta este atado
+   * en la misma prueba es lo que hace que valga: comprueba que lo que
+   * preguntamos y lo que entendemos hablan el mismo idioma.
+   */
+  it('entiende la respuesta que dio un esclavo de verdad', () => {
+    const respuesta = deHex('01 03 04 04 C4 C3 54 EB F1');
+
+    const s = protocolo('modbus-rtu').decodificar(respuesta, {
+      esclavo: 1, agrupacion: 'u16', escala: 1, columnas: 'caudal,totalizador',
+    });
+
+    expect(s.map((x) => [x.clave, x.valor])).toEqual([
+      ['caudal', 1220],
+      ['totalizador', 50004],
+    ]);
+  });
+});
+
 describe('protocolo DFM sobre J1939', () => {
   it('marca el caudal como ambiguo en el valor reservado', () => {
     const d = new Uint8Array(8);

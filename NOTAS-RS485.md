@@ -225,3 +225,76 @@ queda activa a propósito, una línea por segundo a 9600):
 - Tensión entre A y B en cada extremo. En reposo un par RS485 vivo no se queda
   en 0,000 V clavado.
 - 120 Ω entre A y B, y ~60 Ω si están puestas las dos terminaciones.
+
+---
+
+# Lo que faltaba no era un cable: era preguntar
+
+**4 de septiembre de 2026.** Un caudalimetro Modbus o un Eurosens son
+**esclavos**: no dicen ni una palabra hasta que alguien les pregunta. La
+version anterior de esta aplicacion interrogaba —tenia `sendEurosensQuery` y
+`sendModbusQuery` y los llamaba en bucle— y por eso leia. Al reescribir el
+nucleo, el plugin de Java **conservo** los tres metodos de envio, pero
+`hardware.ts` dejo de llamarlos: la aplicacion se quedo escuchando un cable en
+el que nadie iba a hablar.
+
+Y un esclavo callado se ve **exactamente igual** que un cable roto. Por eso
+todas las rondas anteriores acabaron apuntando al cobre.
+
+## El arreglo
+
+Un protocolo puede ahora declarar su trama de peticion:
+
+```ts
+pregunta?(cfg: Record<string, any>): Uint8Array | null;
+```
+
+`modbus-rtu` arma `esclavo · funcion · registro(2) · cantidad(2) · CRC(lo,hi)`,
+y `eurosens-dds` arma `0x31 · direccion · orden · CRC8`. `hardware.ts` monta un
+reloj por fuente que la suelta cada `preguntar_cada_ms`. Con 0 no pregunta, que
+es lo que hace falta cuando al otro lado hay alguien emitiendo solo, como el
+puente del HelperBox.
+
+El formulario de Configuracion sale solo: los campos son declarativos.
+
+## Probado, no supuesto
+
+Las tramas de peticion van contra **vectores publicados** del estandar Modbus,
+no contra lo que salga de nuestro codigo:
+
+```
+esclavo 1,  funcion 3, registro 0,   cantidad 10  →  01 03 00 00 00 0A C5 CD
+esclavo 17, funcion 3, registro 107, cantidad 3   →  11 03 00 6B 00 03 76 87
+```
+
+Y la de Eurosens contra el CRC8 del equipo que si leia: `31 01 06 6C`.
+
+La vuelta completa se probo contra un **esclavo Modbus de verdad** —
+`herramientas/esclavo-modbus.py`, corriendo en un HelperBox — atado por un par
+de pseudo-terminales:
+
+```
+maestro pregunta:  01 03 00 00 00 02 C4 0B
+esclavo responde:  01 03 04 04C4 C354 EBF1     CRC correcto
+                   caudal=1220  totalizador=50004
+```
+
+Esos bytes de respuesta estan clavados en la prueba `entiende la respuesta que
+dio un esclavo de verdad`, atados en el mismo bloque que la pregunta: si algun
+dia dejan de hablar el mismo idioma, salta.
+
+En el equipo, con la fuente puesta en `modbus-rtu` y `preguntar_cada_ms: 1000`,
+el registro del sistema enseña la peticion saliendo cada segundo:
+
+```
+12:31:27.636  To native (Capacitor plugin): pluginId: CanRs485, methodName: sendRawBytes
+12:31:28.635  To native (Capacitor plugin): pluginId: CanRs485, methodName: sendRawBytes
+12:31:29.637  ...
+```
+
+## Lo que sigue pendiente
+
+El enlace fisico con el HelperBox sigue mudo: con el esclavo escuchando en su
+`ttyS2` y la tablet preguntando cada segundo, no llega ni un byte. Eso es
+aparte, y lo de las rondas anteriores sigue valiendo. Pero ya no hace falta ese
+cable para saber que la aplicacion pregunta y entiende lo que le contesten.

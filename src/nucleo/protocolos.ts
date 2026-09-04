@@ -73,7 +73,32 @@ export interface Protocolo {
   troceo: 'linea' | 'silencio' | 'largo';
   campos: CampoProtocolo[];
   decodificar(trama: Uint8Array, cfg: Record<string, any>, ctx?: Contexto): Senal[];
+  /**
+   * La trama de peticion, para los aparatos que solo hablan si se les pregunta.
+   *
+   * Un caudalimetro Modbus o un Eurosens son **esclavos**: no dicen nada por su
+   * cuenta, contestan. Escuchar el cable esperando a que hablen da silencio
+   * eterno, y ese silencio es indistinguible de un cable roto — se perdieron
+   * dias con eso. Quien pregunta es la aplicacion, y la trama se arma aqui
+   * porque el CRC y los registros son cosa del protocolo, no del transporte.
+   *
+   * Devuelve `null` cuando no hay que preguntar: un protocolo que emite solo,
+   * como el puente del HelperBox, o un periodo puesto a cero.
+   */
+  pregunta?(cfg: Record<string, any>): Uint8Array | null;
 }
+
+/** Cada cuanto se repite la pregunta. Con 0 no se pregunta. */
+const CAMPO_CADENCIA: CampoProtocolo = {
+  clave: 'preguntar_cada_ms',
+  etiqueta: 'Preguntar cada (ms)',
+  tipo: 'numero',
+  defecto: 1000,
+  min: 0,
+  ayuda:
+    'Un esclavo no habla si no se le pregunta. Con 0 no se pregunta nada y solo ' +
+    'se escucha, que es lo que hace falta si al otro lado hay alguien emitiendo solo.',
+};
 
 /** Respeta un 0 puesto a mano; solo cae al defecto si el campo esta vacio. */
 const num = (cfg: Record<string, any>, clave: string, defecto: number): number => {
@@ -285,7 +310,59 @@ const modbusRtu: Protocolo = {
       avanzado: true,
       ayuda: 'Con «no» se acepta la trama aunque el CRC falle. Solo para depurar.',
     },
+    CAMPO_CADENCIA,
+    {
+      clave: 'funcion',
+      etiqueta: 'Función que se pregunta',
+      tipo: 'seleccion',
+      defecto: '3',
+      opciones: ['3', '4'],
+      ayuda: '3 son registros de retención y 4 registros de entrada. Si con una no contesta, prueba la otra.',
+    },
+    {
+      clave: 'registro',
+      etiqueta: 'Registro donde empieza',
+      tipo: 'numero',
+      defecto: 0,
+      min: 0,
+      max: 65535,
+    },
+    {
+      clave: 'cantidad',
+      etiqueta: 'Cuántos registros se piden',
+      tipo: 'numero',
+      defecto: 2,
+      min: 1,
+      max: 125,
+    },
   ],
+  /**
+   * `esclavo · funcion · registro(2) · cantidad(2) · CRC(lo,hi)`.
+   *
+   * Con esclavo 0 no se pregunta: el 0 es la difusion de Modbus, a la que
+   * nadie contesta, y ademas aqui significa «acepto a cualquiera» al leer.
+   */
+  pregunta(cfg) {
+    const esclavo = num(cfg, 'esclavo', 1);
+    if (esclavo <= 0) return null;
+
+    const registro = num(cfg, 'registro', 0);
+    const cantidad = num(cfg, 'cantidad', 2);
+    const funcion = num(cfg, 'funcion', 3);
+
+    const t = new Uint8Array(8);
+    t[0] = esclavo;
+    t[1] = funcion;
+    t[2] = (registro >> 8) & 0xff;
+    t[3] = registro & 0xff;
+    t[4] = (cantidad >> 8) & 0xff;
+    t[5] = cantidad & 0xff;
+
+    const crc = crc16Modbus(t, 6);
+    t[6] = crc & 0xff;
+    t[7] = (crc >> 8) & 0xff;
+    return t;
+  },
   decodificar(trama, cfg) {
     if (trama.length < 5) return [];
 
@@ -359,7 +436,33 @@ const eurosens: Protocolo = {
       defecto: 6,
       avanzado: true,
     },
+    CAMPO_CADENCIA,
+    {
+      clave: 'direccion',
+      etiqueta: 'Dirección del sensor',
+      tipo: 'numero',
+      defecto: 1,
+      min: 0,
+      max: 255,
+    },
+    {
+      clave: 'orden',
+      etiqueta: 'Orden que se le manda',
+      tipo: 'numero',
+      defecto: 6,
+      avanzado: true,
+      ayuda: 'La 6 es la lectura de datos. Del manual del fabricante.',
+    },
   ],
+  /** `0x31 · direccion · orden · CRC8`, tal cual lo mandaba el equipo que leía. */
+  pregunta(cfg) {
+    const t = new Uint8Array(4);
+    t[0] = 0x31;
+    t[1] = num(cfg, 'direccion', 1) & 0xff;
+    t[2] = num(cfg, 'orden', 6) & 0xff;
+    t[3] = crc8Eurosens(t, 3);
+    return t;
+  },
   decodificar(trama, cfg) {
     if (trama.length < 9 || trama[0] !== 0x3e) return [];
 

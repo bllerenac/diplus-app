@@ -127,6 +127,8 @@ const MAX_TRAMAS = 300;
 class Hardware {
   private fuentes = new Map<string, Fuente>();
   private troceadores = new Map<string, Troceador>();
+  /** Un reloj por fuente que interroga a los aparatos que no hablan solos. */
+  private preguntones = new Map<string, any>();
   private oyentesTrama = new Set<OyenteTramas>();
   private oyentesProblema = new Set<OyenteProblemas>();
   private ultimas: TramaVista[] = [];
@@ -226,12 +228,14 @@ class Hardware {
   async arrancar(f: Fuente) {
     this.fuentes.set(f.id, f);
     this.troceadores.delete(f.id); // el protocolo pudo cambiar
+    this.dejarDePreguntar(f.id);
     if (!f.activa || !hayHardware()) return;
 
     await this.enganchar();
 
     if (f.puerto === 'rs485') {
       await Nativo.startRs485Listener({ devicePath: f.ruta, baudrate: f.baudios });
+      this.ponerAPreguntar(f);
     } else if (f.puerto === 'can1') {
       await Nativo.startCan1Listener({ baudrate: f.bitrate });
     } else {
@@ -239,9 +243,45 @@ class Hardware {
     }
   }
 
+  /**
+   * Interroga al aparato cada tantos milisegundos.
+   *
+   * Un caudalimetro Modbus o un Eurosens son esclavos: no dicen nada hasta que
+   * se les pregunta. La version anterior de esta aplicacion preguntaba y por
+   * eso leia; al reescribir el nucleo se quedo solo escuchando, y un esclavo
+   * callado no se distingue de un cable roto. Se perdieron dias buscandolo en
+   * el cobre.
+   */
+  private ponerAPreguntar(f: Fuente) {
+    const p = protocolo(f.protocoloId);
+    if (!p.pregunta) return;
+
+    const cada = Number(f.config?.preguntar_cada_ms ?? 0);
+    if (!Number.isFinite(cada) || cada <= 0) return;
+
+    const soltar = () => {
+      const trama = p.pregunta?.(f.config ?? {});
+      if (!trama?.length) return;
+      /* Si el puerto no traga, se calla y se reintenta a la vuelta siguiente:
+         una peticion perdida no es motivo para dejar de preguntar. */
+      Nativo.sendRawBytes({ devicePath: f.ruta, hexData: aHex(trama).replace(/ /g, '') })
+        .catch(() => undefined);
+    };
+
+    soltar();
+    this.preguntones.set(f.id, setInterval(soltar, Math.max(100, cada)));
+  }
+
+  private dejarDePreguntar(id: string) {
+    const t = this.preguntones.get(id);
+    if (t) clearInterval(t);
+    this.preguntones.delete(id);
+  }
+
   quitar(id: string) {
     this.fuentes.delete(id);
     this.troceadores.delete(id);
+    this.dejarDePreguntar(id);
   }
 
   /** Manda bytes por el puerto: para interrogar a un esclavo Modbus. */
