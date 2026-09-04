@@ -85,6 +85,7 @@ public class CanalRemoto extends Service {
         String token = intent != null ? intent.getStringExtra(EXTRA_TOKEN) : null;
 
         avisar(puerto);
+        reabrirAdbPorRed();
 
         if (vivo.compareAndSet(false, true)) {
             hilo = new Thread(() -> servir(puerto, token == null ? "" : token));
@@ -268,6 +269,33 @@ public class CanalRemoto extends Service {
     private String uno(String ruta, String papel) {
         return "{\"ruta\":\"" + ruta + "\",\"papel\":\"" + papel + "\","
                 + "\"existe\":" + new File(ruta).exists() + "}";
+    }
+
+    /**
+     * Vuelve a abrir el ADB por red, si el equipo lo permite.
+     *
+     * El `adb tcpip 5555` no sobrevive a un reinicio: la propiedad que lo
+     * gobierna no es persistente, y ponerla persistente exige permisos que una
+     * aplicacion no tiene. Asi que cada arranque dejaba el equipo alcanzable
+     * solo por este canal, y para volver a entrar por ADB habia que ir con un
+     * cable USB hasta la cabina.
+     *
+     * Estas tablets traen un interruptor de root en sus ajustes —viene
+     * documentado por el fabricante—. Cuando esta puesto, esto lo arregla solo
+     * en cada arranque. Cuando no lo esta, `su` no existe, la llamada falla y
+     * no pasa nada: el canal sigue siendo la puerta de siempre.
+     */
+    private void reabrirAdbPorRed() {
+        new Thread(() -> {
+            try {
+                Process p = Runtime.getRuntime().exec(new String[] { "su", "-c",
+                        "setprop service.adb.tcp.port 5555; stop adbd; start adbd" });
+                p.waitFor();
+                Log.i(TAG, "ADB por red reabierto con root");
+            } catch (Exception e) {
+                Log.i(TAG, "Sin root: el ADB por red se queda como estaba");
+            }
+        }).start();
     }
 
     /**

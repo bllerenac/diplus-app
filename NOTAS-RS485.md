@@ -298,3 +298,75 @@ El enlace fisico con el HelperBox sigue mudo: con el esclavo escuchando en su
 `ttyS2` y la tablet preguntando cada segundo, no llega ni un byte. Eso es
 aparte, y lo de las rondas anteriores sigue valiendo. Pero ya no hace falta ese
 cable para saber que la aplicacion pregunta y entiende lo que le contesten.
+
+---
+
+# Diagnostico con instrumentos, en los dos extremos
+
+**4 de septiembre de 2026.** Con root en las dos maquinas se puede dejar de
+razonar y empezar a medir. El root de la tablet no hay que buscarlo: viene
+documentado en §3.7 de su manual, en Ajustes → Accesibilidad → *System root*,
+con contraseña inicial `qwertyuiop`. Al activarlo el equipo se reinicia.
+
+## Lo que sale del lado de la tablet
+
+Con `usbmon` sobre el bus del chip RS485 —un CH341 `1a86:7523` en `1-1.2`, que
+es `/dev/ttyUSB0`— se ve la peticion Modbus de la aplicacion saliendo:
+
+```
+S Bo:1:004:2 -115 8 = 01030000 0002c40b
+C Bo:1:004:2   0  8 >
+```
+
+Cincuenta transferencias en veinticinco segundos, todas completadas sin error.
+Y antes de cada una, el control `40 a4 ff9f`, que en el CH341 es poner DTR y
+RTS activos.
+
+**En sentido contrario, nada de nada**: cero transferencias de entrada y **cero
+eventos del canal de interrupcion**, que es por donde el CH341 avisa de errores
+de trama y de cambios en las patas. No es que llegue basura: es que la linea de
+recepcion no se ha movido ni una vez.
+
+## Lo que sale del lado del HelperBox
+
+Contadores del propio kernel, tras dos horas encendido:
+
+```
+1: uart:SUNXI 0x05000400  tx:137323  rx:0  CTS
+2: uart:SUNXI 0x05000800  tx:175113  rx:0  RTS|DTR
+5: uart:SUNXI 0x05001400  tx:137323  rx:0
+```
+
+Transmite —175 113 bytes por UART2— y **no ha recibido un solo byte por ningun
+puerto desde que arranco**. Se le mandaron 34 tramas desde la tablet mientras
+capturaba por los tres puertos a la vez, alternando la pata `gpio209` (PG17,
+pegada a PG15/PG16 del UART2, el candidato a control de sentido) entre 0 y 1
+por si fuera activa a nivel bajo: los contadores `rx` no se movieron ni una
+unidad.
+
+Ademas, su driver `SUNXI` **rechaza `TIOCSRS485`**: no sabe conmutar el sentido
+de un transceptor half-duplex, tal como avisaba el §7 de su propio README.
+
+## El diagnostico
+
+Los dos extremos transmiten, medido con instrumentos y no por deduccion. Los
+dos extremos tienen la recepcion abierta y funcionando —el mismo codigo lee el
+GPS de la tablet sin problema—. Y **ninguno de los dos ha recibido jamas ni un
+bit, ni siquiera un error de trama**.
+
+Cuando dos aparatos sanos no se oyen y ni siquiera se oyen mal, lo que hay
+entre ellos no esta llevando señal. Las dos formas de que eso pase con el cable
+bien puesto:
+
+1. **Los dos extremos no hablan la misma capa fisica.** El bornero de la tablet
+   —`P4 [RS485]`, pines `RS485_A` y `RS485_B`— es un par diferencial de verdad.
+   Los puertos del HelperBox son UART del SoC en crudo, sin soporte de RS485 en
+   el driver. Si esos pines salen en TTL a 3,3 V en vez de por un transceptor,
+   conectarlos a un par diferencial da exactamente esto: los dos transmiten
+   bien y no se oyen.
+
+2. **El transceptor de alguno de los dos no esta alimentado.** En la tablet lo
+   dice su manual: los puertos serie exigen los 8~36 V del latiguillo.
+
+Lo que no puede decidirse por software es cual de las dos, porque las dos se
+ven igual desde aqui: silencio absoluto.
