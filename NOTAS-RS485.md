@@ -138,3 +138,90 @@ Y engancharlo a mano, si es lo que parece:
 modprobe ch341
 echo "a8a5 2255" > /sys/bus/usb-serial/drivers/ch341-uart/new_id
 ```
+
+---
+
+# Tercera ronda: con root en el HelperBox, 4 de septiembre de 2026
+
+Con acceso a las dos cajas a la vez, el problema queda acotado del todo.
+
+## Las dos partes están sanas, y está medido
+
+La prueba que zanja cada lado es la del **reloj**: 12000 bytes a 9600 baudios
+tienen que tardar 12,5 s. Si el puerto se los traga en un buffer y vuelve al
+instante, el UART no está relojando nada.
+
+| Equipo | Puerto | Medido |
+|---|---|---|
+| Tablet | `ttyUSB0` | **12 579 ms** |
+| HelperBox | `ttyS1` | **12 501 ms** |
+| HelperBox | `ttyS2` | **11 989 ms** |
+| HelperBox | `ttyS5` | **12 496 ms** |
+
+Los cuatro relojean a la velocidad exacta. Los dos UART sacan bits de verdad.
+
+## El puerto es el correcto, y está bien montado
+
+- `serial2` en el device-tree es `uart@05000800`, o sea **UART2 = `/dev/ttyS2`**,
+  que es donde el cable está puesto. Los `uart0/1/2/5` están en `okay`, el 3 y
+  el 4 en `disabled`, que es justo por qué los nodos son `ttyS0,1,2,5`.
+- El mux está hecho: `pin 207 (PG15)` y `pin 208 (PG16)` con `function uart2`.
+- En la tablet, el demo del fabricante abre el RS485 como `serial2 = 1-1.2`,
+  que por `sysfs` es `/dev/ttyUSB0`. Es el que usamos.
+
+## Lo que se descartó por el camino
+
+**No hay ningún USB-serie en el HelperBox.** El `a8a5:2255` que aparece en
+`lsusb` está enganchado a **`usbhid`**, con tres interfaces: es un HID, no un
+adaptador. El driver `ch341-uart` está cargado y sin usar. Así que el
+`ttyUSB2` que se buscaba no existe ni puede existir.
+
+**El software anterior tampoco leía RS485.** En `/root` están
+`canbus-scania`, `canbus-volvo` y `retirado-dfm-2026-09-02`, y los tres son
+solo CAN: ni una referencia a un puerto serie. Este enlace **nunca ha
+funcionado**; no es que se haya roto.
+
+**El `gpio209` no era la respuesta.** Aparece en `/sys/kernel/debug/gpio` como
+`gpio-209 (sysfs) out lo`, y PG17 es el pin justo al lado de PG15/PG16 — tenía
+toda la pinta del control de sentido del transceptor. Se probó a 1 y a 0, en
+las dos direcciones. Nada. Se dejó como estaba, en 0.
+
+**Tampoco hay eco.** Ninguno de los dos oye lo que él mismo emite, cosa que en
+half-duplex algunos transceptores sí hacen. No prueba nada por sí solo, pero
+acompaña.
+
+## La barrida final
+
+HelperBox emitiendo por `ttyS1`, `ttyS2` y `ttyS5` a la vez, quince rondas,
+alternando el `gpio209` entre 0 y 1. Tablet escuchando sus **cinco** puertos a
+la vez durante 35 s:
+
+```
+ttyUSB0: 0    ttyUSB1: 0    ttyHSL0: 0    ttyHSL1: 0    ttyHSL3: 0
+```
+
+Y en el sentido contrario, tablet emitiendo 15 s y HelperBox capturando sus
+tres puertos: 0 bytes en los tres.
+
+## Lo que queda, y ya no es software
+
+Con los dos UART relojando bien y cero bytes en los dos sentidos, lo que falla
+está **entre los dos borneros**. Por orden de probabilidad:
+
+1. **Falta la masa común.** Es lo que mejor explica el silencio absoluto: sin
+   referencia, los dos receptores pueden quedarse fuera del rango de modo
+   común y no responder a nada. Da silencio, no basura — el síntoma exacto.
+2. **El UART2 del HelperBox sale en TTL, sin transceptor.** Si esos PG15/PG16
+   van a un header a 3,3 V y no a un chip RS485, conectarlos a un par
+   diferencial no puede funcionar de ninguna manera. **Esto no se puede
+   comprobar por software: hay que mirar la placa.**
+3. **A y B cruzadas, o los 120 Ω.** Menos probable, porque cruzarlas suele dar
+   basura antes que silencio, pero es de lo más barato de descartar.
+
+Lo que hay que medir, con el HelperBox emitiendo (la salida «PRUEBA ttyS2»
+queda activa a propósito, una línea por segundo a 9600):
+
+- Continuidad de masa entre los dos borneros.
+- Tensión entre A y B en cada extremo. En reposo un par RS485 vivo no se queda
+  en 0,000 V clavado.
+- 120 Ω entre A y B, y ~60 Ω si están puestas las dos terminaciones.
