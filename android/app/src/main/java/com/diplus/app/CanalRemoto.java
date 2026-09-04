@@ -271,6 +271,34 @@ public class CanalRemoto extends Service {
     }
 
     /**
+     * El transceptor RS485 de esta placa cuelga del gpio40.
+     *
+     * Sin esto la escucha de aqui abria el puerto con el chip apagado y no
+     * entraba nada, dijera lo que dijera el otro extremo. Se descubrio probando
+     * contra un HelperBox que se sabia que estaba emitiendo: cero bytes por los
+     * seis puertos, y el lector de verdad de la aplicacion —que si lo enciende—
+     * no tenia ese problema. Un diagnostico que miente es peor que no tenerlo.
+     */
+    private String alimentarRs485() {
+        try {
+            Runtime.getRuntime()
+                    .exec(new String[] { "sh", "-c", "echo out > /sys/class/gpio/gpio40/direction" })
+                    .waitFor();
+            Runtime.getRuntime()
+                    .exec(new String[] { "sh", "-c", "echo 1 > /sys/class/gpio/gpio40/value" })
+                    .waitFor();
+        } catch (Exception e) {
+            return "no";
+        }
+        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                new java.io.FileReader("/sys/class/gpio/gpio40/value"))) {
+            return r.readLine();
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    /**
      * Escucha un puerto un momento y devuelve lo que llego, en hexadecimal.
      *
      * Es lo que mas falta hace de lejos: sin esto, para saber si por el cable
@@ -282,6 +310,8 @@ public class CanalRemoto extends Service {
         }
         File dev = new File(ruta);
         if (!dev.exists()) return "{\"error\":\"ese puerto no existe\"}";
+
+        String gpio = alimentarRs485();
 
         try {
             Runtime.getRuntime()
@@ -319,6 +349,7 @@ public class CanalRemoto extends Service {
         }
 
         return "{\"puerto\":\"" + ruta + "\",\"baudios\":" + baudios
+                + ",\"gpio40\":\"" + gpio + "\""
                 + ",\"bytes\":" + datos.length
                 + ",\"hex\":\"" + hex + "\",\"texto\":\"" + escapar(texto.toString()) + "\"}";
     }
