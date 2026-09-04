@@ -73,3 +73,68 @@ E:\Claude\herramientas\scrcpy-win64-v3.1\scrcpy.exe -s 192.168.18.121:5555 --sta
 En la app: Configuración → Fuentes → + RS485, elegir el puerto en el selector, y
 mirar el Monitor, que enseña los bytes en crudo aunque el protocolo esté mal
 elegido.
+
+---
+
+# Segunda ronda: contra un HelperBox, 4 de septiembre de 2026
+
+Se repitió todo con **otro emisor**, un HelperBox por red, para quitar de en
+medio el adaptador USB-RS485 del PC —que era la pieza que nunca se había podido
+verificar y la número uno de la lista de arriba—.
+
+## Lo que quedó probado de la tablet
+
+| Qué | Cómo |
+|---|---|
+| El camino de lectura funciona | Las tramas NMEA del GPS entran limpias por `ttyHSL2` a 921600 con el mismo `stty` + `cat` |
+| El puerto es el correcto | El demo del fabricante abre el RS485 como `serial2 = 1-1.2`, que en esta unidad es `/dev/ttyUSB0`. Comprobado por `readlink` del `sysfs` |
+| El puerto queda bien configurado | `stty -a`: 9600, `cs8`, `-parenb`, `-cstopb`, `cread`, `clocal` |
+| **El UART transmite de verdad** | 12000 bytes a 9600 tardan **12 579 ms**. Lo esperado son 12 500. El chip está relojando bits, no tragándoselos en un buffer |
+| No había nadie robando el puerto | La aplicación estaba parada (`ps` sin `com.diplus.app`) durante las escuchas |
+| El `gpio40` no es el culpable | Escuchado con 0 y con 1. Silencio en los dos |
+
+Y aun así: **cero bytes** en los seis puertos, a 9600, 19200 y 115200, con
+escuchas de hasta 20 s seguidos.
+
+## Lo que apareció del lado del HelperBox
+
+Dos cosas que no cuadran con lo que se creía:
+
+**No existe ningún `/dev/ttyUSB` en el HelperBox.** Se le preguntó al propio
+equipo creando salidas contra `ttyUSB0` a `ttyUSB3`; las cuatro contestan
+`No such file or directory`. Sus únicos puertos son `ttyS1`, `ttyS2` y `ttyS5`.
+En `lsusb` solo hay un hub Terminus y un `a8a5:2255` sin descripción: un
+adaptador enchufado al que **no se le ha enganchado driver**, que es justo lo
+que se pierde en cada reinicio.
+
+**La salida RS485 del HelperBox nunca ha emitido.** La salida «Sistema RTK» de
+`ttyS2`, creada el 1 de septiembre, lleva `emitidas: 0` porque su disparo es
+«en cuanto llega del bus» y sin caudalímetro no llega nada. O sea que no hay
+ninguna prueba de que ese camino haya funcionado alguna vez.
+
+## La hipótesis que queda, y está escrita en el propio README
+
+El README del HelperBox avisa de esto en §7, antes de que pasara:
+
+> Si la placa exige controlar el sentido por **RTS**, este módulo se queda
+> corto: `stty` + `fs.writeSync` no manejan la conmutación.
+
+Un transceptor half-duplex que espera que alguien le suba la pata de dirección
+y no la ve **nunca saca nada al par**, y el que escribe no se entera: la
+escritura le sale bien, sin error, exactamente lo que se observa.
+
+## Lo que hay que mirar, y necesita shell en el HelperBox
+
+```sh
+dmesg | grep -iE 'usb|ch34|pl2303|ftdi|cp210'   # por que no hay ttyUSB
+lsusb -t                                         # donde cuelga el a8a5:2255
+ls /sys/bus/usb-serial/drivers/                  # que drivers hay cargados
+cat /dev/ttyS2                                   # con la tablet emitiendo
+```
+
+Y engancharlo a mano, si es lo que parece:
+
+```sh
+modprobe ch341
+echo "a8a5 2255" > /sys/bus/usb-serial/drivers/ch341-uart/new_id
+```
