@@ -318,14 +318,75 @@ public class CanRs485Plugin extends Plugin {
     }
 
     /**
-     * Prueba en bucle: el equipo se habla a si mismo.
+     * Manda unas tramas y cuenta las que vuelven.
      *
-     * Cuando el bus esta mudo hay dos culpables posibles y desde fuera se ven
-     * igual: que el driver y el microcontrolador no funcionen, o que por el
-     * cable no entre nada. El modo bucle devuelve al equipo lo que el mismo
-     * transmite sin salir al bus, asi que si aqui llegan tramas, de puertas
-     * adentro esta todo bien y hay que ir a mirar el cable.
+     * **No es una prueba en bucle**, aunque se llamaba asi y durante un tiempo
+     * se dio por buena. El cuarto parametro de `initialize` no es un modo bucle
+     * sino `Test_Mode`, que solo vigila la secuencia de identificadores de lo
+     * que entra; el manual del fabricante lo dice y esta libreria no ofrece
+     * ningun bucle interno.
+     *
+     * Asi que un cero aqui **no prueba que el equipo este averiado**: prueba
+     * que en el bus no hay nadie contestando, que es exactamente lo que pasa
+     * con el caudalimetro desconectado. Para juzgar el equipo por dentro sirve
+     * `diagnosticoCan`, que le pregunta al micro directamente.
      */
+    /**
+     * Le pregunta al micro del bus si esta vivo.
+     *
+     * `initialize` devuelve 0 aunque al otro lado no conteste nadie, asi que un
+     * bus mudo y un micro muerto se ven igual. `getVersion` no: si vuelve con
+     * una cadena, el micro esta ahi y habla, y lo que falle esta en el cable
+     * del bus. Si no vuelve nada, el problema esta antes del conector y no hay
+     * cableado que arreglar.
+     *
+     * Se prueban tambien las velocidades del enlace serie con `trySerialBaudrate`,
+     * que **comprueba** en vez de imponer. Las que acepta el fabricante estan en
+     * su manual; se recorren todas porque ir a ciegas fue justo lo que nos tuvo
+     * dando vueltas.
+     */
+    @PluginMethod
+    public void diagnosticoCan(PluginCall call) {
+        JSObject ret = new JSObject();
+
+        for (int iface = 0; iface <= 1; iface++) {
+            CanBusHelper h = (iface == 0) ? canBusHelper0 : canBusHelper1;
+            JSObject uno = new JSObject();
+
+            try {
+                String v = h.getVersion(iface);
+                uno.put("version", v == null ? "" : v);
+                uno.put("microVivo", v != null && !v.trim().isEmpty());
+            } catch (Throwable e) {
+                uno.put("version", "");
+                uno.put("microVivo", false);
+                uno.put("fallo", e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+
+            try {
+                uno.put("rtc", h.getMcuRtcValue(iface));
+            } catch (Throwable e) {
+                uno.put("rtc", -1);
+            }
+
+            JSArray acepta = new JSArray();
+            for (int b : new int[] { 4800, 9600, 19200, 38400, 57600, 100000,
+                                     115200, 230400, 460800, 921600 }) {
+                try {
+                    if (h.trySerialBaudrate(iface, b, 8, 0, 1) == 0) acepta.put(b);
+                } catch (Throwable e) {
+                    /* Si el simbolo no esta, no hay nada que recorrer. */
+                    break;
+                }
+            }
+            uno.put("velocidadesQueAcepta", acepta);
+
+            ret.put("can" + (iface + 1), uno);
+        }
+
+        call.resolve(ret);
+    }
+
     @PluginMethod
     public void probarBucle(PluginCall call) {
         final int iface = call.getInt("interfaz", 0);

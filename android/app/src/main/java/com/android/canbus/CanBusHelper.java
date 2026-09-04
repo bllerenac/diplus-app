@@ -72,35 +72,78 @@ public class CanBusHelper {
     /**
      * Abre el bus.
      *
+     * El cuarto parametro **no es un modo bucle**, aunque se llamaba asi aqui y
+     * eso nos costo una prueba entera dada por buena. El manual del fabricante
+     * dice que es `Test_Mode`: cuando va a `true`, la libreria comprueba que los
+     * identificadores de las tramas que **entran** vayan en secuencia y avisa
+     * por `onIdError` si no. No devuelve nada al equipo ni desconecta el bus.
+     *
+     * O sea que con esto no se puede probar el bus sin tener algo enfrente que
+     * emita: esta API no ofrece ningun bucle interno.
+     *
      * @param canBaudrate el bitrate del CAN, ese si: 250000 para J1939
      * @return 0 si salio bien; cualquier otra cosa es que no se pudo abrir
      */
-    public native int initialize(int canInterface, int serialBaudrate, int canBaudrate, boolean loopback);
+    public native int initialize(int canInterface, int serialBaudrate, int canBaudrate, boolean modoPrueba);
 
     /** Cierra el bus. Conviene llamarlo al salir para no dejar el puerto tomado. */
     public native int uninitialize(int canInterface);
 
-    /** Se queda escuchando y llama al callback por cada trama. */
-    public native void readCan(int canInterface, CanBusCallback callback);
+    /**
+     * Se queda escuchando y llama al callback por cada trama.
+     *
+     * Devuelve `int`, no `void`. Estaba declarado `void` y eso **no funciona**:
+     * el JNI empareja por nombre y por firma, y `()V` no es `()I`, asi que la
+     * llamada no encontraba el simbolo. Se descubrio sacando la firma real del
+     * `canbus_api.aar` del fabricante con `javap`, que es la unica forma de
+     * saberla: adivinarla compila igual y falla al llamar.
+     */
+    public native int readCan(int canInterface, CanBusCallback callback);
 
     /** Manda una trama al bus. */
     public native int sendFrame(int canInterface, int ff, int rtr, int dlc, int id, int[] data);
 
-    /* ── Lo demas que trae la libreria ─────────────────────────────────────────
+    /* ── El resto de la libreria, con la firma del fabricante ──────────────────
      *
-     * Estos simbolos estan en el `.so` pero no los usaba la version anterior,
-     * asi que su firma no esta comprobada y no se declaran a ojo:
-     *
-     *   clearFlag            closeCanbusIdFilter   closeSendLogFile
-     *   getAdcValue          getGpioValue          getMcuRtcValue
-     *   getVersion           openSendLogFile       setGpioValue
-     *   setListIdFilter      setMaskIdFilter       setMcuRtcValue
-     *   trySerialBaudrate    updateFirmware
-     *
-     * Para usar cualquiera de ellos hace falta la firma real del fabricante.
-     * Añadirlo aqui adivinando compila igual y revienta al llamarlo.
-     *
-     * Los GPIO, por cierto, ya se leen y se escriben por sysfs en
-     * `CanRs485Plugin`, sin pasar por esta libreria.
+     * Ya no se adivinan: salen de `javap` sobre el `canbus_api.aar` que viene
+     * en el SDK. Las que importan para saber si el micro esta vivo son las dos
+     * primeras.
      */
+
+    /**
+     * La version del firmware del micro que hace de puente al bus.
+     *
+     * Es la pregunta mas util que se le puede hacer al aparato: si contesta,
+     * el micro esta vivo y hablando con la tablet, y lo que falle esta en el
+     * cable del bus. Si no contesta, lo que falla esta antes, entre la tablet
+     * y el micro, y no hay cableado de CAN que arreglar.
+     */
+    public native String getVersion(int canInterface);
+
+    /**
+     * Prueba una velocidad del enlace serie con el micro.
+     *
+     * `setSerialBaudrate` la impone y devuelve 0 aunque al otro lado no haya
+     * nadie escuchando; esta la **comprueba**. Sirve para encontrar a que
+     * velocidad habla el micro sin ir a ciegas.
+     */
+    public native int trySerialBaudrate(int canInterface, int baudrate, int dataBits, int parity, int stopBits);
+
+    /** Los GPIO del propio micro, que no son los del SoC. */
+    public native int getGpioValue(int canInterface, int pin);
+    public native int setGpioValue(int canInterface, int pin, int value);
+
+    /** Entrada analogica del micro. */
+    public native float getAdcValue(int canInterface, int canal, float escala);
+
+    /** El reloj del micro. Otra forma de ver si responde. */
+    public native long getMcuRtcValue(int canInterface);
+
+    public native int clearFlag(int canInterface);
+    public native int closeCanbusIdFilter(int canInterface, int filtro);
+    public native int setMaskIdFilter(int canInterface, int n, int[] ids, int[] mascaras);
+    public native int setListIdFilter(int canInterface, int n, int[] ids, int[] mascaras);
+    public native int openSendLogFile(int canInterface);
+    public native int closeSendLogFile(int canInterface);
+    public native int updateFirmware(int canInterface, int modo, UpdateReturnCallback cb, String ruta);
 }
