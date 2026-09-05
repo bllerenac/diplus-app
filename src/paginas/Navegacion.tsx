@@ -450,32 +450,16 @@ export default function Navegacion() {
   /**
    * Las tarjetas ya resueltas.
    *
-   * Sin ninguna configurada se enseña todo lo que va llegando, cada señal en su
-   * numero: un equipo recien puesto tiene que enseñar algo sin que nadie lo
-   * configure, y de ahi se arma el panel a gusto.
+   * El panel trae sus huecos puestos de fabrica y siempre estan los mismos, asi
+   * que aqui no hay nada que rellenar. Antes, si no habia ninguna tarjeta
+   * configurada, se enseñaba todo lo que llegara: el panel cambiaba de forma
+   * segun lo que hubiera conectado y nunca se veia igual dos veces. Ahora un
+   * hueco sin señal se queda con su icono y una raya, que dice mas.
    */
-  const tarjetas = useMemo(() => {
-    const puestas = cfg.panel.length
-      ? cfg.panel
-      : /* Lo que no es un numero se enseña como texto: si no, un estado o un
-           codigo apareceria como «sin dato», que es mentira.
-
-           La inercial se queda fuera. Este relleno existe para que un equipo
-           recien puesto enseñe lo que le llega por cable sin configurar nada, y
-           la inercial no llega por cable: publica siempre, asi que el panel no
-           quedaba vacio nunca y se llenaba solo con ella. Sus datos ya tienen
-           sitio propio, en la tarjeta del mapa bajo el consumo. */
-        [...valores.entries()]
-          .filter(([c]) => !c.startsWith('imu.'))
-          .map(([c, s]) => ({
-            ...nuevaTarjeta(typeof s.valor === 'string' ? 'texto' : 'numero'),
-            id: `auto.${c}`,
-            claves: [c],
-            decimales: 2,
-          }));
-
-    return puestas.map((t) => ({ t, v: calcular(t, valores, frescura) }));
-  }, [cfg.panel, valores, frescura]);
+  const tarjetas = useMemo(
+    () => cfg.panel.map((t) => ({ t, v: calcular(t, valores, frescura) })),
+    [cfg.panel, valores, frescura],
+  );
 
   /** El estado de cada fuente, que en las tarjetas no se ve. */
   const estados = useMemo(

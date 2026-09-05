@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { comoVoy, dentroDelPoligono, geocercaDe, recomendacionDe } from './geo';
 import { Geocerca } from './servidor';
 import { arreglarDireccion, esMasNueva, reparo } from './actualizacion';
-import { calcular, nuevaTarjeta, texto, titulo } from './panel';
+import { HUECOS, calcular, nuevaTarjeta, panelFijo, texto, titulo } from './panel';
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
@@ -542,5 +542,33 @@ describe('en que geocerca estoy', () => {
     expect(comoVoy(20, 30)).toBe('bien');
     expect(comoVoy(28, 30)).toBe('justo');
     expect(comoVoy(31, 30)).toBe('pasado');
+  });
+});
+
+/**
+ * Un cuadro vacio y uno que espera y no recibe no son lo mismo.
+ *
+ * El panel tiene los cuadros puestos siempre, con sensor o sin el. Que los dos
+ * casos se escribieran igual confundia: parecia averiado lo que solo estaba sin
+ * configurar.
+ */
+describe('cuadros del panel sin señal', () => {
+  const vacios = new Map(), sinFecha = new Map();
+
+  it('un cuadro sin sensor elegido enseña una raya', () => {
+    const t = { ...nuevaTarjeta('numero'), claves: [] };
+    expect(texto(calcular(t, vacios, sinFecha), 1)).toBe('—');
+  });
+
+  it('un cuadro con sensor elegido que no llega avisa', () => {
+    const t = { ...nuevaTarjeta('numero'), claves: ['f1.caudal'] };
+    expect(texto(calcular(t, vacios, sinFecha), 1)).toBe('sin dato');
+  });
+
+  it('el panel de fabrica trae sus huecos, todos vacios', () => {
+    const p = panelFijo();
+    expect(p).toHaveLength(HUECOS);
+    expect(p.every((t) => t.claves.length === 0)).toBe(true);
+    expect(new Set(p.map((t) => t.id)).size).toBe(HUECOS);
   });
 });

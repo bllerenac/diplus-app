@@ -8,7 +8,7 @@
 import { Fuente } from './hardware';
 import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
-import { Tarjeta, nuevaTarjeta } from './panel';
+import { Tarjeta, nuevaTarjeta, panelFijo } from './panel';
 import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 
@@ -70,7 +70,7 @@ export interface Config {
 
 const POR_DEFECTO: Config = {
   fuentes: [],
-  panel: [],
+  panel: panelFijo(),
   /* 921600 no es un capricho: es la velocidad a la que esta el puerto del
      receptor en este equipo, medida con stty. A 9600 no se leeria nada. */
   gps: { ruta: '/dev/ttyHSL2', baudios: 921600, activo: true },
@@ -112,12 +112,19 @@ export const cargar = (): Config => {
  */
 const alDia = (c: Config): Config => {
   const panel = (c.panel as unknown[]) ?? [];
-  if (panel.every((x) => typeof x === 'string')) {
+
+  if (panel.length && panel.every((x) => typeof x === 'string')) {
     return {
       ...c,
       panel: (panel as string[]).map((clave) => ({ ...nuevaTarjeta('numero'), id: `t${clave}`, claves: [clave] })),
     };
   }
+
+  /* Un panel vacio ya no significa «enseñalo todo»: significa que nadie ha
+     puesto los huecos todavia. Se ponen aqui para que la pantalla tenga
+     siempre la misma cara, con o sin sensores conectados. */
+  if (!panel.length) return { ...c, panel: panelFijo() };
+
   return c;
 };
 

@@ -26,7 +26,9 @@ import { Eje, movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
-import { Tarjeta, VISTAS, VistaTarjeta, nuevaTarjeta, panelDeCamion, vista } from '../nucleo/panel';
+import {
+  ICONOS, Tarjeta, VISTAS, VistaTarjeta, iconoSugerido, nuevaTarjeta, panelDeCamion, panelFijo, vista,
+} from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
 } from '../nucleo/actualizacion';
@@ -48,7 +50,16 @@ const PUERTOS: { id: Fuente['puerto']; nombre: string }[] = [
   { id: 'rs485', nombre: 'RS485 (serie)' },
   { id: 'can1', nombre: 'Bus CAN 1' },
   { id: 'can2', nombre: 'Bus CAN 2' },
+  { id: 'red', nombre: 'Por red (escucha)' },
 ];
+
+/** El nombre corto de cada puerto, para decir de donde viene una señal. */
+const NOMBRE_PUERTO: Record<string, string> = {
+  rs485: 'RS485',
+  can1: 'CAN 1',
+  can2: 'CAN 2',
+  red: 'red',
+};
 
 const BAUDIOS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
 const BITRATES = [125000, 250000, 500000, 1000000];
@@ -155,9 +166,12 @@ export default function Ajustes() {
   const [cfg, setCfg] = useState<Config>({ ...cargar() });
   const [pestana, setPestana] = useState<Pestana>('fuentes');
   const [avanzado, setAvanzado] = useState(false);
-  const [vistas, setVistas] = useState<Map<string, { nombre: string; unidad: string }>>(() => {
-    const m = new Map<string, { nombre: string; unidad: string }>();
-    for (const s of hardware.senales()) m.set(s.clave, { nombre: s.nombre, unidad: s.unidad });
+  /* Se guarda tambien el valor, no solo el nombre: al elegir el sensor de un
+     cuadro hay que poder ver lo que vale ahora mismo, que es lo unico que
+     distingue una clave util de una que ya no llega. */
+  const [vistas, setVistas] = useState<Map<string, Senal>>(() => {
+    const m = new Map<string, Senal>();
+    for (const s of hardware.senales()) m.set(s.clave, s);
     return m;
   });
   const [eco, setEco] = useState<string | null>(null);
@@ -221,7 +235,7 @@ export default function Ajustes() {
     hardware.alRecibir((t: TramaVista) => {
       setVistas((prev) => {
         const m = new Map(prev);
-        for (const s of t.senales) m.set(`${t.fuenteId}.${s.clave}`, { nombre: s.nombre, unidad: s.unidad });
+        for (const s of t.senales) m.set(`${t.fuenteId}.${s.clave}`, s);
         return m;
       });
     }), []);
@@ -597,47 +611,149 @@ export default function Ajustes() {
             </Bloque>
           )}
 
-          {/* ── Panel ──────────────────────────────────────────────────── */}
+          {/* ── Qué está llegando ──────────────────────────────────────── */}
           {pestana === 'panel' && (
-            <Bloque titulo="Qué se ve en la pantalla principal">
+            <Bloque titulo="Qué está llegando ahora mismo">
               <Nota>
-                El panel se arma con tarjetas. Cada una toma las señales que se le digan y las
-                presenta de una forma: un número suelto, la resta de dos caudalímetros, un nivel
-                con su barra. Sin ninguna tarjeta se enseña todo lo que llegue.
+                Todo lo que el equipo esté leyendo, venga por donde venga. La columna de la
+                izquierda es el nombre con el que hay que buscarlo abajo; la de la derecha, lo
+                último que se recibió. Si algo no aparece aquí, no se puede poner en el panel.
               </Nota>
 
-              {disponibles.length === 0 && (
+              {disponibles.length === 0 ? (
                 <Vacio>
-                  Todavía no ha llegado ninguna señal. Se pueden crear tarjetas igual, pero hasta
-                  que el equipo lea algo no hay nada que elegirles.
+                  Todavía no llega nada. Da de alta una fuente en la pestaña Fuentes, o
+                  enciende los datos de prueba más abajo para ver cómo queda el panel.
                 </Vacio>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-line">
+                  {disponibles.map(([clave, s], i) => {
+                    const f = cfg.fuentes.find((x) => clave.startsWith(`${x.id}.`));
+                    const de = clave.startsWith('imu.')
+                      ? 'inercial del equipo'
+                      : f
+                        ? `${f.nombre} · ${NOMBRE_PUERTO[f.puerto] ?? f.puerto}`
+                        : 'sin fuente';
+
+                    return (
+                      <div
+                        key={clave}
+                        className={`flex items-center gap-3 px-3.5 py-2 ${i % 2 ? 'bg-bg' : 'bg-sur2'}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] text-ink">{s.nombre}</div>
+                          <div className="truncate font-mono text-[10.5px] text-ink3">
+                            {clave} · {de}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <b className="tabular-nums text-[15px] text-ink">
+                            {s.valor === null || s.valor === undefined ? '—' : String(s.valor)}
+                          </b>
+                          {s.unidad && (
+                            <em className="ml-1 font-mono text-[11px] not-italic text-ink3">{s.unidad}</em>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
+            </Bloque>
+          )}
+
+          {/* ── Los huecos del panel ───────────────────────────────────── */}
+          {pestana === 'panel' && (
+            <Bloque titulo="Qué va en cada cuadro del panel">
+              <Nota>
+                El panel tiene siempre estos cuadros, con sensor o sin él. Elige qué señal va en
+                cada uno y con qué icono; el que dejes vacío se queda con su icono y una raya, y
+                la pantalla no cambia de forma.
+              </Nota>
 
               {cfg.panel.map((t, i) => {
                 const forma = vista(t.vista);
-                const completa = t.claves.length >= forma.senales;
+                const puesta = t.claves[0] ? vistas.get(t.claves[0]) : undefined;
 
                 return (
                   <div key={t.id} className="rounded-xl border border-line bg-bg px-3.5 py-3">
                     <div className="mb-3 flex items-center gap-2">
                       <span className="rotulo flex-1">
-                        Tarjeta {i + 1} · {forma.nombre}
-                        {!completa && <em className="ml-2 not-italic text-warn">le faltan señales</em>}
+                        Cuadro {i + 1}
+                        {t.claves.length === 0 && (
+                          <em className="ml-2 not-italic text-ink3">vacío</em>
+                        )}
                       </span>
                       <Boton variante="tenue" onClick={() => mover(i, -1)} disabled={i === 0}>↑</Boton>
                       <Boton variante="tenue" onClick={() => mover(i, 1)} disabled={i === cfg.panel.length - 1}>↓</Boton>
-                      <Boton variante="peligro" onClick={() => cambiarPanel(cfg.panel.filter((x) => x.id !== t.id))}>
-                        Quitar
-                      </Boton>
+                      {cfg.panel.length > 1 && (
+                        <Boton variante="peligro" onClick={() => cambiarPanel(cfg.panel.filter((x) => x.id !== t.id))}>
+                          Quitar
+                        </Boton>
+                      )}
                     </div>
 
+                    <Campo
+                      etiqueta="Sensor que se muestra"
+                      ayuda={
+                        forma.senales > 1
+                          ? 'Esta forma usa dos señales; la segunda se elige más abajo.'
+                          : undefined
+                      }
+                    >
+                      <Selector
+                        value={t.claves[0] ?? ''}
+                        onChange={(e) => {
+                          const c = e.target.value;
+                          const s = c ? vistas.get(c) : undefined;
+                          cambiarTarjeta(t.id, {
+                            claves: c ? [c, ...t.claves.slice(1, forma.senales)] : [],
+                            /* Se propone el icono que le pega al nombre de la señal, pero
+                               solo si no habia uno elegido: si el usuario ya puso el suyo,
+                               cambiar de sensor no tiene por que quitarselo. */
+                            icono: t.icono || (s ? iconoSugerido(s.nombre) : ''),
+                            vista: !t.claves.length && s && typeof s.valor === 'string' ? 'texto' : t.vista,
+                          });
+                        }}
+                      >
+                        <option value="">— ninguno, el cuadro queda vacío —</option>
+                        {disponibles.map(([clave, s]) => (
+                          <option key={clave} value={clave}>
+                            {s.nombre}{s.unidad ? ` (${s.unidad})` : ''}
+                          </option>
+                        ))}
+                      </Selector>
+                    </Campo>
+
+                    {puesta && (
+                      <p className="mb-2 mt-1 text-[11.5px] text-ink3">
+                        Ahora vale{' '}
+                        <b className="tabular-nums text-ink2">
+                          {puesta.valor === null || puesta.valor === undefined ? '—' : String(puesta.valor)}
+                        </b>
+                        {puesta.unidad ? ` ${puesta.unidad}` : ''}
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-2 gap-3">
-                      <Campo etiqueta="Nombre">
+                      <Campo etiqueta="Nombre" ayuda="Vacío = el de la señal.">
                         <Entrada
                           value={t.titulo}
-                          placeholder="el de la señal"
+                          placeholder={puesta?.nombre ?? 'el de la señal'}
                           onChange={(e) => cambiarTarjeta(t.id, { titulo: e.target.value })}
                         />
+                      </Campo>
+
+                      <Campo etiqueta="Icono">
+                        <Selector
+                          value={t.icono}
+                          onChange={(e) => cambiarTarjeta(t.id, { icono: e.target.value })}
+                        >
+                          <option value="">— sin icono —</option>
+                          {ICONOS.map((ic) => (
+                            <option key={ic.id} value={ic.id}>{ic.nombre}</option>
+                          ))}
+                        </Selector>
                       </Campo>
 
                       <Campo etiqueta="Cómo se ve">
@@ -645,8 +761,6 @@ export default function Ajustes() {
                           value={t.vista}
                           onChange={(e) => {
                             const v = e.target.value as VistaTarjeta;
-                            /* Al pasar a una forma que toma menos señales se recortan las
-                               que sobran, para no dejar una resta con tres sumandos. */
                             cambiarTarjeta(t.id, { vista: v, claves: t.claves.slice(0, vista(v).senales) });
                           }}
                         >
@@ -655,47 +769,12 @@ export default function Ajustes() {
                           ))}
                         </Selector>
                       </Campo>
-                    </div>
 
-                    <p className="mb-2 mt-2 text-[11.5px] leading-relaxed text-ink3">{forma.ayuda}</p>
-
-                    <p className="rotulo mb-1.5">
-                      {forma.senales === 1 ? 'Señal' : 'Señales, en orden: la primera y la segunda'}
-                    </p>
-
-                    {disponibles.length === 0 ? (
-                      <p className="m-0 text-[11.5px] text-ink3">Nada ha llegado todavía.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {disponibles.map(([clave, s]) => {
-                          const puesto = t.claves.indexOf(clave);
-                          return (
-                            <button
-                              key={clave}
-                              onClick={() => elegirSenal(t, clave)}
-                              className={`rounded-full border px-3 py-1.5 text-[12px] transition ${
-                                puesto >= 0 ? 'border-acc bg-acc/10 text-acc' : 'border-line2 text-ink2'
-                              }`}
-                            >
-                              {forma.senales > 1 && puesto >= 0 && (
-                                <b className="mr-1.5 font-mono">{puesto + 1}</b>
-                              )}
-                              {s.nombre}
-                              {s.unidad && (
-                                <em className="ml-1.5 font-mono text-[10.5px] not-italic opacity-60">{s.unidad}</em>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    <div className="mt-3 grid grid-cols-2 gap-3">
                       {forma.usa.includes('unidad') && (
-                        <Campo etiqueta="Unidad">
+                        <Campo etiqueta="Unidad" ayuda="Vacía = la de la señal.">
                           <Entrada
                             value={t.unidad}
-                            placeholder="la de la señal"
+                            placeholder={puesta?.unidad || 'la de la señal'}
                             onChange={(e) => cambiarTarjeta(t.id, { unidad: e.target.value })}
                           />
                         </Campo>
@@ -703,51 +782,66 @@ export default function Ajustes() {
 
                       {forma.usa.includes('decimales') && (
                         <Campo etiqueta="Decimales">
-                          <Entrada
-                            type="number" min={0} max={4} value={t.decimales}
+                          <Selector
+                            value={String(t.decimales)}
                             onChange={(e) => cambiarTarjeta(t.id, { decimales: Number(e.target.value) })}
+                          >
+                            {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                          </Selector>
+                        </Campo>
+                      )}
+
+                      {forma.usa.includes('decimales') && (
+                        <Campo etiqueta="Multiplicar por" ayuda="Para pasar de unidad. 1 = tal cual.">
+                          <Entrada
+                            type="number" step="any"
+                            value={t.factor}
+                            onChange={(e) => cambiarTarjeta(t.id, { factor: Number(e.target.value) || 1 })}
                           />
                         </Campo>
                       )}
 
                       {forma.usa.includes('rango') && (
                         <>
-                          <Campo etiqueta="Mínimo de la barra">
+                          <Campo etiqueta="Mínimo">
                             <Entrada
-                              type="number" value={t.min}
+                              type="number"
+                              value={t.min}
                               onChange={(e) => cambiarTarjeta(t.id, { min: Number(e.target.value) })}
                             />
                           </Campo>
-                          <Campo etiqueta="Máximo de la barra">
+                          <Campo etiqueta="Máximo">
                             <Entrada
-                              type="number" value={t.max}
+                              type="number"
+                              value={t.max}
                               onChange={(e) => cambiarTarjeta(t.id, { max: Number(e.target.value) })}
                             />
                           </Campo>
                         </>
                       )}
-
-                      {forma.usa.includes('umbrales') && (
-                        <>
-                          <Campo etiqueta="Avisa por debajo de">
-                            <Entrada
-                              type="number" value={t.bajo ?? ''} placeholder="sin límite"
-                              onChange={(e) =>
-                                cambiarTarjeta(t.id, { bajo: e.target.value === '' ? null : Number(e.target.value) })
-                              }
-                            />
-                          </Campo>
-                          <Campo etiqueta="Avisa por encima de">
-                            <Entrada
-                              type="number" value={t.alto ?? ''} placeholder="sin límite"
-                              onChange={(e) =>
-                                cambiarTarjeta(t.id, { alto: e.target.value === '' ? null : Number(e.target.value) })
-                              }
-                            />
-                          </Campo>
-                        </>
-                      )}
                     </div>
+
+                    {forma.senales > 1 && (
+                      <>
+                        <p className="rotulo mb-1.5 mt-3">Segunda señal, la que se resta o se suma</p>
+                        <Selector
+                          value={t.claves[1] ?? ''}
+                          onChange={(e) => {
+                            const c = e.target.value;
+                            cambiarTarjeta(t.id, {
+                              claves: c ? [t.claves[0] ?? '', c].filter(Boolean) : t.claves.slice(0, 1),
+                            });
+                          }}
+                        >
+                          <option value="">— ninguna —</option>
+                          {disponibles.map(([clave, s]) => (
+                            <option key={clave} value={clave}>
+                              {s.nombre}{s.unidad ? ` (${s.unidad})` : ''}
+                            </option>
+                          ))}
+                        </Selector>
+                      </>
+                    )}
 
                     <div className="mt-3">
                       <Interruptor
@@ -761,11 +855,12 @@ export default function Ajustes() {
               })}
 
               <div className="flex flex-wrap gap-2">
-                {VISTAS.map((v) => (
-                  <Boton key={v.id} onClick={() => cambiarPanel([...cfg.panel, nuevaTarjeta(v.id)])}>
-                    + {v.nombre}
-                  </Boton>
-                ))}
+                <Boton onClick={() => cambiarPanel([...cfg.panel, nuevaTarjeta('numero')])}>
+                  + Añadir un cuadro
+                </Boton>
+                <Boton variante="tenue" onClick={() => cambiarPanel(panelFijo())}>
+                  Dejarlo como de fábrica
+                </Boton>
               </div>
             </Bloque>
           )}

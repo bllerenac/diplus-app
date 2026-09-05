@@ -191,6 +191,29 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   factor: 1,
 });
 
+/** Cuantos huecos trae el panel de fabrica. Entran de dos en dos en pantalla. */
+export const HUECOS = 6;
+
+/**
+ * El panel siempre tiene sus huecos puestos.
+ *
+ * Antes las tarjetas se creaban de una en una y, sin ninguna, la pantalla se
+ * llenaba sola con todo lo que llegara. Eso hacia dos cosas malas: el panel
+ * cambiaba de forma segun lo que hubiera conectado, y para poner una lectura en
+ * un sitio concreto habia que crear la tarjeta, elegir la vista y ordenarla con
+ * flechas.
+ *
+ * Con huecos fijos, la pantalla tiene siempre la misma cara y configurar es una
+ * sola decision por hueco: que señal va aqui. El que esta vacio no desaparece
+ * ni molesta, enseña su icono y una raya.
+ */
+export const panelFijo = (): Tarjeta[] =>
+  Array.from({ length: HUECOS }, (_, i) => ({
+    ...nuevaTarjeta('numero'),
+    id: `hueco${i + 1}`,
+    decimales: 1,
+  }));
+
 /**
  * Un panel de camion armado de una vez.
  *
@@ -344,9 +367,19 @@ export const calcular = (
   return { valor, unidad, fraccion, estado, ambiguo, partes, visto };
 };
 
-/** El numero ya con sus decimales, listo para pintar. */
+/**
+ * El numero ya con sus decimales, listo para pintar.
+ *
+ * Un cuadro sin sensor elegido y uno que lo tiene pero no recibe **no dicen lo
+ * mismo**, y por eso no se escriben igual. El primero es una raya: nadie ha
+ * puesto nada ahi todavia y no hay nada que arreglar. El segundo dice «sin
+ * dato», que es un aviso: hay un sensor esperado que no esta llegando.
+ */
 export const texto = (v: ValorTarjeta, decimales: number): string => {
-  if (v.valor === null) return v.ambiguo ? 'cero o sin dato' : 'sin dato';
+  if (v.valor === null) {
+    if (!v.partes.length) return '—';
+    return v.ambiguo ? 'cero o sin dato' : 'sin dato';
+  }
   if (typeof v.valor === 'string') return v.valor;
   return v.valor.toFixed(decimales);
 };
