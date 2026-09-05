@@ -27,7 +27,7 @@ import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
 import {
-  ICONOS, Tarjeta, VISTAS, VistaTarjeta, iconoSugerido, nuevaTarjeta, panelDeCamion, panelFijo, vista,
+  ICONOS, Tarjeta, VISTAS, VistaTarjeta, esPrincipal, iconoSugerido, nuevaTarjeta, panelDeCamion, panelFijo, vista,
 } from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
@@ -666,22 +666,31 @@ export default function Ajustes() {
           {pestana === 'panel' && (
             <Bloque titulo="Qué va en cada cuadro del panel">
               <Nota>
-                El panel tiene siempre estos cuadros, con sensor o sin él. Elige qué señal va en
-                cada uno y con qué icono; el que dejes vacío se queda con su icono y una raya, y
-                la pantalla no cambia de forma.
+                Los cuatro primeros son los principales y van arriba del todo: combustible,
+                revoluciones, temperatura y aire de ruedas. Ya vienen con su instrumento, su
+                icono y su unidad; lo único que hay que decirles es <b>qué señal leen</b>. Debajo
+                quedan cuadros libres para lo que traiga cada instalación.
               </Nota>
 
               {cfg.panel.map((t, i) => {
                 const forma = vista(t.vista);
                 const puesta = t.claves[0] ? vistas.get(t.claves[0]) : undefined;
+                const principal = esPrincipal(t);
+                const primerSuelto = !principal && cfg.panel.slice(0, i).every(esPrincipal);
 
                 return (
-                  <div key={t.id} className="rounded-xl border border-line bg-bg px-3.5 py-3">
+                  <div key={t.id}>
+                    {i === 0 && <p className="rotulo mb-2">Los cuatro principales</p>}
+                    {primerSuelto && <p className="rotulo mb-2 mt-4">Los de debajo</p>}
+
+                  <div className={`rounded-xl border bg-bg px-3.5 py-3 ${
+                    principal ? 'border-acc/40' : 'border-line'
+                  }`}>
                     <div className="mb-3 flex items-center gap-2">
                       <span className="rotulo flex-1">
-                        Cuadro {i + 1}
+                        {principal ? t.titulo || `Principal ${i + 1}` : `Cuadro ${i + 1}`}
                         {t.claves.length === 0 && (
-                          <em className="ml-2 not-italic text-ink3">vacío</em>
+                          <em className="ml-2 not-italic text-ink3">sin señal</em>
                         )}
                       </span>
                       <Boton variante="tenue" onClick={() => mover(i, -1)} disabled={i === 0}>↑</Boton>
@@ -850,6 +859,7 @@ export default function Ajustes() {
                         etiqueta="Ocupa el ancho entero"
                       />
                     </div>
+                  </div>
                   </div>
                 );
               })}

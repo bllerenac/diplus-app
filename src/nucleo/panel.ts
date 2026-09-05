@@ -191,11 +191,50 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   factor: 1,
 });
 
-/** Cuantos huecos trae el panel de fabrica. Entran de dos en dos en pantalla. */
-export const HUECOS = 6;
+/**
+ * Los cuatro que siempre van arriba, y los de debajo.
+ *
+ * No son cuatro cuadros cualesquiera: son las cuatro cosas que quien conduce
+ * mira sin pensar —cuánto queda, a qué vueltas va, si se calienta y cómo están
+ * las ruedas—, y por eso tienen sitio propio y salen primero. Cada uno viene ya
+ * con su instrumento: el combustible en tanque, las revoluciones y el aire en
+ * cuadrante —que es su aguja de toda la vida—, y la temperatura en termómetro,
+ * porque no se piensa como «cuánto de lo que cabe».
+ *
+ * Lo demás va debajo, en cuadros genéricos. Ahi es donde entra lo que traiga
+ * cada instalacion: un totalizador, un segundo caudalímetro, lo que sea.
+ *
+ * Configurar es entonces una sola decisión por cuadro —qué señal va aquí—, y
+ * como mucho ajustar la unidad o el factor si el aparato da otra cosa. Nada
+ * mas.
+ */
+const PRINCIPALES: Partial<Tarjeta>[] = [
+  {
+    titulo: 'Combustible', vista: 'tanque', icono: 'Fuel',
+    unidad: 'L', decimales: 0, min: 0, max: 400, bajo: 60,
+  },
+  {
+    titulo: 'Revoluciones', vista: 'cuadrante', icono: 'Gauge',
+    unidad: 'rpm', decimales: 0, min: 0, max: 2500,
+  },
+  {
+    titulo: 'Temperatura', vista: 'termometro', icono: 'Thermometer',
+    unidad: '°C', decimales: 1, min: 0, max: 120, alto: 100,
+  },
+  {
+    titulo: 'Aire de ruedas', vista: 'cuadrante', icono: 'LifeBuoy',
+    unidad: 'psi', decimales: 1, min: 0, max: 10, bajo: 6,
+  },
+];
+
+/** Cuadros libres bajo los cuatro principales. */
+const SUELTOS = 4;
+
+/** Cuantos cuadros trae el panel de fabrica. */
+export const HUECOS = PRINCIPALES.length + SUELTOS;
 
 /**
- * El panel siempre tiene sus huecos puestos.
+ * El panel siempre tiene sus cuadros puestos.
  *
  * Antes las tarjetas se creaban de una en una y, sin ninguna, la pantalla se
  * llenaba sola con todo lo que llegara. Eso hacia dos cosas malas: el panel
@@ -203,16 +242,21 @@ export const HUECOS = 6;
  * un sitio concreto habia que crear la tarjeta, elegir la vista y ordenarla con
  * flechas.
  *
- * Con huecos fijos, la pantalla tiene siempre la misma cara y configurar es una
- * sola decision por hueco: que señal va aqui. El que esta vacio no desaparece
- * ni molesta, enseña su icono y una raya.
+ * Con los cuadros puestos, la pantalla tiene siempre la misma cara. El que esta
+ * vacio no desaparece ni molesta: enseña su nombre, su icono y una raya, y ya
+ * dice lo que le falta.
  */
-export const panelFijo = (): Tarjeta[] =>
-  Array.from({ length: HUECOS }, (_, i) => ({
+export const panelFijo = (): Tarjeta[] => [
+  ...PRINCIPALES.map((p, i) => ({ ...nuevaTarjeta('numero'), id: `principal${i + 1}`, ...p })),
+  ...Array.from({ length: SUELTOS }, (_, i) => ({
     ...nuevaTarjeta('numero'),
-    id: `hueco${i + 1}`,
+    id: `suelto${i + 1}`,
     decimales: 1,
-  }));
+  })),
+];
+
+/** Si un cuadro es de los cuatro de arriba. Se usa para agruparlos en Ajustes. */
+export const esPrincipal = (t: Tarjeta) => t.id.startsWith('principal');
 
 /**
  * Un panel de camion armado de una vez.
@@ -392,7 +436,9 @@ export const texto = (v: ValorTarjeta, decimales: number): string => {
  */
 export const titulo = (t: Tarjeta, v: ValorTarjeta): string => {
   if (t.titulo.trim()) return t.titulo.trim();
-  if (!v.partes.length) return 'Sin señales';
+  /* «Sin señales» sonaba a averia y no lo es: es un cuadro al que todavia no le
+     han dicho que leer. Lo que falta es una decision, no un cable. */
+  if (!v.partes.length) return 'Sin asignar';
   if (t.vista === 'diferencia') return `${v.partes[0].nombre} − ${v.partes[1]?.nombre ?? '?'}`;
   if (t.vista === 'suma') return `${v.partes[0].nombre} + ${v.partes[1]?.nombre ?? '?'}`;
   return v.partes[0].nombre;
