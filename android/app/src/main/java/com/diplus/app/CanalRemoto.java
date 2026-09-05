@@ -275,6 +275,21 @@ public class CanalRemoto extends Service {
     /** La direccion de este equipo en el enlace directo con el HelperBox. */
     private static final String IP_CABLE = "192.168.60.2/24";
 
+    /** Una propiedad del sistema, sin root: `getprop` la lee cualquiera. */
+    private String propiedad(String nombre) {
+        try {
+            Process p = Runtime.getRuntime().exec(new String[] { "getprop", nombre });
+            java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()));
+            String linea = r.readLine();
+            r.close();
+            p.waitFor();
+            return linea == null ? "" : linea.trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /**
      * Ejecuta una orden como root, si el equipo lo permite.
      *
@@ -344,6 +359,19 @@ public class CanalRemoto extends Service {
      */
     private void reabrirAdbPorRed() {
         new Thread(() -> {
+            /* Si ya esta puesto, no se toca.
+               ─────────────────────────────
+               Reiniciar el `adbd` **corta todas las conexiones abiertas**, y
+               este metodo corre cada vez que arranca el servicio. El resultado
+               era que cualquiera que estuviera mirando la pantalla de lejos se
+               quedaba a media frase, con un «Device disconnected» que parecia
+               de la WiFi y era cosa nuestra. Se arregla como todo lo que se
+               ejecuta a menudo: mirando antes de actuar. */
+            if ("5555".equals(propiedad("service.adb.tcp.port"))) {
+                Log.i(TAG, "El ADB por red ya estaba abierto; no se toca");
+                return;
+            }
+
             boolean ok = comoRoot("setprop service.adb.tcp.port 5555; stop adbd; start adbd");
             Log.i(TAG, ok ? "ADB por red reabierto con root"
                           : "Sin root: el ADB por red se queda como estaba");
