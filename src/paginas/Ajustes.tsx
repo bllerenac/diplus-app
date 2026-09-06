@@ -38,10 +38,11 @@ import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Modal, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
 
-type Pestana = 'fuentes' | 'panel' | 'posicion' | 'datos' | 'servidor';
+type Pestana = 'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'servidor';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
-  { id: 'fuentes', nombre: 'Fuentes' },
+  { id: 'sensores', nombre: 'Sensores' },
+  { id: 'inercial', nombre: 'Inercial' },
   { id: 'panel', nombre: 'Panel' },
   { id: 'posicion', nombre: 'Posición' },
   { id: 'datos', nombre: 'Datos' },
@@ -316,7 +317,7 @@ function DetalleSenal({
 
 export default function Ajustes() {
   const [cfg, setCfg] = useState<Config>({ ...cargar() });
-  const [pestana, setPestana] = useState<Pestana>('fuentes');
+  const [pestana, setPestana] = useState<Pestana>('sensores');
   const [avanzado, setAvanzado] = useState(false);
   /* Se guarda tambien el valor, no solo el nombre: al elegir el sensor de un
      cuadro hay que poder ver lo que vale ahora mismo, que es lo unico que
@@ -513,6 +514,10 @@ export default function Ajustes() {
     cambiarTarjeta(t.id, { claves: claves.slice(-cabe) });
   };
   const disponibles = useMemo(() => [...vistas.entries()], [vistas]);
+  /* La inercial va en su pestaña: no llega por ningun cable, la mide el propio
+     equipo, y mezclarla con los sensores del camion confundia las dos cosas. */
+  const deCable = useMemo(() => disponibles.filter(([c]) => !c.startsWith('imu.')), [disponibles]);
+  const deLaInercial = useMemo(() => disponibles.filter(([c]) => c.startsWith('imu.')), [disponibles]);
 
   return (
     <IonPage>
@@ -539,7 +544,7 @@ export default function Ajustes() {
           )}
 
           {/* ── Fuentes ────────────────────────────────────────────────── */}
-          {pestana === 'fuentes' && (
+          {pestana === 'sensores' && (
             <Bloque
               titulo="De dónde se lee"
               accion={
@@ -798,7 +803,7 @@ export default function Ajustes() {
           )}
 
           {/* ── Las señales que llegan ─────────────────────────────────── */}
-          {pestana === 'fuentes' && (
+          {pestana === 'sensores' && (
             <Bloque titulo="Las señales que llegan">
               <Nota>
                 Una por cada cosa que el equipo está midiendo. Pulsa <b>Detalles</b> para ponerle
@@ -806,14 +811,15 @@ export default function Ajustes() {
                 fuera. Lo que se ve aquí es el valor ya ajustado.
               </Nota>
 
-              {disponibles.length === 0 ? (
+              {deCable.length === 0 ? (
                 <Vacio>
-                  Todavía no llega nada. Da de alta una fuente arriba, o enciende los datos de
-                  prueba en la pestaña Panel.
+                  Todavía no llega nada por cable ni por red. Da de alta una fuente arriba, o
+                  enciende los datos de prueba en la pestaña Panel. Lo que mide el propio
+                  equipo está en la pestaña Inercial.
                 </Vacio>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-line">
-                  {disponibles.map(([clave, s], i) => {
+                  {deCable.map(([clave, s], i) => {
                     const a = ajustesDe(cfg.senales, clave);
                     const f = cfg.fuentes.find((x) => clave.startsWith(`${x.id}.`));
                     const de = clave.startsWith('imu.')
@@ -877,7 +883,7 @@ export default function Ajustes() {
 
               {disponibles.length === 0 ? (
                 <Vacio>
-                  Todavía no llega nada. Da de alta una fuente en la pestaña Fuentes, o
+                  Todavía no llega nada. Da de alta un sensor en la pestaña Sensores, o
                   enciende los datos de prueba más abajo para ver cómo queda el panel.
                 </Vacio>
               ) : (
@@ -1158,8 +1164,8 @@ export default function Ajustes() {
             </Bloque>
           )}
 
-          {/* ── Posición ───────────────────────────────────────────────── */}
-          {pestana === 'posicion' && (
+          {/* ── Inercial ───────────────────────────────────────────────── */}
+          {pestana === 'inercial' && (
             <>
               <Bloque titulo="Movimiento e inclinación">
                 <Nota>
@@ -1364,6 +1370,69 @@ export default function Ajustes() {
                 )}
               </Bloque>
 
+              <Bloque titulo="Lo que mide la inercial">
+                <Nota>
+                  Las mismas opciones que cualquier otra señal: nombre, unidad, curva, y si se
+                  guarda y si sale hacia fuera. Están aquí y no en Sensores porque no llegan por
+                  ningún cable — las mide el propio equipo.
+                </Nota>
+
+                {deLaInercial.length === 0 ? (
+                  <Vacio>
+                    La inercial no está publicando. Enciéndela arriba con «Usar la unidad
+                    inercial».
+                  </Vacio>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-line">
+                    {deLaInercial.map(([clave, s], i) => {
+                      const a = ajustesDe(cfg.senales, clave);
+                      return (
+                        <div
+                          key={clave}
+                          className={`flex items-center gap-3 px-3.5 py-2.5 ${i % 2 ? 'bg-bg' : 'bg-sur2'}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] text-ink">
+                              {a.alias.trim() || s.nombre}
+                              {a.curva.length >= 2 && (
+                                <em className="ml-2 not-italic text-[10.5px] text-acc">calibrada</em>
+                              )}
+                              {a.factor !== 1 && (
+                                <em className="ml-2 not-italic text-[10.5px] text-ink3">×{a.factor}</em>
+                              )}
+                            </div>
+                            <div className="truncate font-mono text-[10.5px] text-ink3">
+                              {clave}
+                              {!a.guardar && ' · no se guarda'}
+                              {!a.enviar && ' · no sale'}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <b className="tabular-nums text-[15px] text-ink">
+                              {s.valor === null || s.valor === undefined ? '—' : String(s.valor)}
+                            </b>
+                            {(a.unidad.trim() || s.unidad) && (
+                              <em className="ml-1 font-mono text-[11px] not-italic text-ink3">
+                                {a.unidad.trim() || s.unidad}
+                              </em>
+                            )}
+                          </div>
+                          <Boton variante="tenue" onClick={() => setDetalle(clave)}>
+                            Detalles
+                          </Boton>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Bloque>
+            </>
+          )}
+
+          {/* ── Posición ───────────────────────────────────────────────── */}
+          {pestana === 'posicion' && (
+            <>
+
             <Bloque titulo="GPS y RTK">
               <div className="grid grid-cols-2 gap-3">
                 <Campo etiqueta="Dispositivo del receptor">
@@ -1506,7 +1575,7 @@ export default function Ajustes() {
 
               <p className="rotulo mb-1.5 mt-4">Qué señales se guardan</p>
               <Nota>
-                Se decide en cada señal, en <b>Fuentes → Detalles</b>. Aquí solo se ve el
+                Se decide en cada señal, en <b>Sensores → Detalles</b> o en <b>Inercial</b>. Aquí solo se ve el
                 resultado y lo que va a quedar en la base.
               </Nota>
 
