@@ -400,9 +400,9 @@ export default function Navegacion() {
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {
-    /* Las curvas antes de arrancar: si una fuente entrega su primera trama
-       entre las dos lineas, se corregiria con una calibracion vacia. */
-    hardware.calibrar(cfg.calibracion);
+    /* Los ajustes de las señales antes de arrancar: si una fuente entrega su primera trama
+       entre las dos lineas, se leeria sin sus ajustes. */
+    hardware.ajustarSenales(cfg.senales);
     for (const f of cfg.fuentes) hardware.arrancar(f).catch(() => undefined);
 
     /* El guardado en la base va con la aplicacion, no con la pantalla de

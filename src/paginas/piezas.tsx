@@ -158,3 +158,59 @@ export const Pestanas = <T extends string>({
     ))}
   </nav>
 );
+
+/**
+ * Una ventana encima de lo demas, para lo que tiene demasiadas decisiones.
+ *
+ * Configurar una señal —su nombre, su unidad, si se guarda, su curva— son cinco
+ * cosas, y multiplicadas por veinte señales no caben en una columna sin que la
+ * pantalla se vuelva un rollo interminable. Puestas aparte, la lista de fuera
+ * queda corta y se ve de un vistazo, y cada señal se toca cuando toca.
+ *
+ * Se cierra por el fondo y por el aspa, nunca sola: se escribe dentro y perder
+ * lo tecleado por un toque despistado en una cabina que se mueve seria muy
+ * facil.
+ */
+export const Modal = ({
+  titulo, subtitulo, alCerrar, children, pie,
+}: {
+  titulo: string;
+  subtitulo?: ReactNode;
+  alCerrar: () => void;
+  children: ReactNode;
+  pie?: ReactNode;
+}) => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    onClick={alCerrar}
+  >
+    <div
+      className="flex max-h-full w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-sur shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="m-0 truncate text-[17px] font-semibold text-ink">{titulo}</h2>
+          {subtitulo && <div className="mt-0.5 text-[12px] text-ink3">{subtitulo}</div>}
+        </div>
+        <button
+          onClick={alCerrar}
+          className="shrink-0 rounded-lg border border-line2 px-2.5 py-1 text-[13px] text-ink3 transition hover:text-ink"
+          aria-label="Cerrar"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="desplazable flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+        {children}
+      </div>
+
+      {pie && (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          {pie}
+        </div>
+      )}
+    </div>
+  </div>
+);

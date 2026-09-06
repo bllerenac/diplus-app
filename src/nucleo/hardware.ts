@@ -11,7 +11,7 @@ import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Senal, pgnDe, saDe } from './lecturas';
 import { Contexto, protocolo } from './protocolos';
 import { Troceador, aHex, deHex, troceador } from './tramas';
-import { Calibraciones, aplicar } from './curva';
+import { AjustesPorSenal, ajustar, ajustesDe } from './senales';
 
 /**
  * Un puerto serie del equipo, con el papel que cumple.
@@ -141,8 +141,8 @@ class Hardware {
   private troceadores = new Map<string, Troceador>();
   /** Un reloj por fuente que interroga a los aparatos que no hablan solos. */
   private preguntones = new Map<string, any>();
-  /** Las curvas de calibracion, por clave completa de señal. */
-  private calibraciones: Calibraciones = {};
+  /** Lo decidido de cada señal: alias, unidad, factor, curva, si se guarda. */
+  private ajustes: AjustesPorSenal = {};
   private oyentesTrama = new Set<OyenteTramas>();
   private oyentesProblema = new Set<OyenteProblemas>();
   private ultimas: TramaVista[] = [];
@@ -224,11 +224,7 @@ class Hardware {
        mismo numero. Corregir solo en la pantalla dejaria un historico sin
        calibrar, y eso se descubre meses despues, cuando ya nadie sabe con que
        curva se tomo cada fila. */
-    senales = senales.map((s) => {
-      const puntos = this.calibraciones[`${f.id}.${s.clave}`];
-      if (!puntos?.length || typeof s.valor !== 'number') return s;
-      return { ...s, valor: aplicar(puntos, s.valor), calibrada: true };
-    });
+    senales = senales.map((s) => ajustar(ajustesDe(this.ajustes, `${f.id}.${s.clave}`), s));
 
     for (const s of senales) this.valores.set(`${f.id}.${s.clave}`, s);
 
@@ -317,8 +313,28 @@ class Hardware {
    * es la misma. Se vuelven a poner en cada cambio de configuracion, que es
    * barato y evita tener que acordarse de mantenerlas al dia.
    */
-  calibrar(c: Calibraciones) {
-    this.calibraciones = c ?? {};
+  ajustarSenales(a: AjustesPorSenal) {
+    this.ajustes = a ?? {};
+  }
+
+  /** Lo puesto a una señal, para que la pantalla no tenga que recalcularlo. */
+  ajusteDe(clave: string) {
+    return ajustesDe(this.ajustes, clave);
+  }
+
+  /**
+   * Las señales con su clave completa, y quien decide si se guarda o se manda.
+   *
+   * `senales()` devuelve la clave corta —la que trae el protocolo— y esa se
+   * repite entre fuentes: dos caudalimetros distintos entregan los dos un
+   * `caudal`. Para decidir sobre una en concreto hace falta la clave con su
+   * fuente delante, que es la que se usa en la configuracion. Filtrar aqui evita
+   * que cada sitio que guarda o manda tenga que volver a atar las dos cosas.
+   */
+  senalesPara(que: 'guardar' | 'enviar'): { clave: string; senal: Senal }[] {
+    return [...this.valores.entries()]
+      .filter(([c]) => ajustesDe(this.ajustes, c)[que])
+      .map(([clave, senal]) => ({ clave, senal }));
   }
 
   quitar(id: string) {

@@ -45,21 +45,21 @@ class Registro {
   }
 
   private async tomarMuestra() {
-    const senales = hardware.senales();
-    if (!senales.length) return;
-
-    const elegidas = this.ajustes.claves.length
-      ? senales.filter((s) => this.ajustes.claves.includes(s.clave))
-      : senales;
+    /* Quien decide que se guarda es cada señal, en su detalle, no una lista
+       aparte. Antes se comparaba contra la clave corta —la que trae el
+       protocolo— y esa se repite entre fuentes: dos caudalimetros entregan los
+       dos un `caudal`, asi que elegir uno elegia los dos. Se guarda con la
+       clave completa por lo mismo. */
+    const elegidas = hardware.senalesPara('guardar');
     if (!elegidas.length) return;
 
     const at = Date.now();
     const p = gps.posicion();
 
-    const filas = elegidas.map((s) => ({
-      clave: s.clave,
-      valor: typeof s.valor === 'number' ? s.valor : null,
-      texto: typeof s.valor === 'string' ? s.valor : null,
+    const filas = elegidas.map(({ clave, senal }) => ({
+      clave,
+      valor: typeof senal.valor === 'number' ? senal.valor : null,
+      texto: typeof senal.valor === 'string' ? senal.valor : null,
       at,
       ...(p ? { lat: p.lat, lon: p.lon } : {}),
     }));

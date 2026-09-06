@@ -11,7 +11,7 @@ import { defectosDe, protocolo } from './protocolos';
 import { Tarjeta, nuevaTarjeta, panelFijo } from './panel';
 import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
-import { Calibraciones } from './curva';
+import { AjustesPorSenal } from './senales';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -62,13 +62,13 @@ export interface Config {
   /** La unidad inercial del propio equipo: inclinacion, conduccion y via. */
   movimiento: AjustesMovimiento;
   /**
-   * Curvas de calibracion, por clave completa de señal.
+   * Lo que se decide de cada señal, por su clave completa.
    *
-   * Van aparte de las fuentes porque no son del cable sino de la señal: el
-   * mismo caudalimetro puede llegar por RS485 hoy y por red mañana, y su curva
-   * sigue siendo la suya.
+   * Va aparte de las fuentes porque no es del cable sino de la señal: el
+   * mismo caudalimetro puede llegar hoy por RS485 y mañana por red, y su
+   * nombre, su unidad y su curva siguen siendo los suyos.
    */
-  calibracion: Calibraciones;
+  senales: AjustesPorSenal;
   /** Genera un camión de mentira para poder ver la pantalla sin hardware. */
   maqueta: boolean;
   /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
@@ -91,7 +91,7 @@ const POR_DEFECTO: Config = {
   actualizacion: { url: '', automatica: false, cadaHoras: 6 },
   canal: { activo: false, puerto: 8787, token: '' },
   movimiento: MOVIMIENTO_POR_DEFECTO,
-  calibracion: {},
+  senales: {},
   maqueta: false,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
