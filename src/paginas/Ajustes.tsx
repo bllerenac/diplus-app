@@ -22,7 +22,7 @@ import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { maqueta } from '../nucleo/maqueta';
-import { Eje, movimiento } from '../nucleo/movimiento';
+import { movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
@@ -37,6 +37,7 @@ import {
 import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Modal, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
+import { Montaje } from './montaje';
 
 type Pestana = 'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'servidor';
 
@@ -1246,56 +1247,34 @@ export default function Ajustes() {
                       </Nota>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <Campo etiqueta="Eje de avance" ayuda="Cuál apunta hacia adelante.">
-                        <Selector
-                          value={cfg.movimiento.ejeAvance}
-                          onChange={(e) =>
-                            aplicar({
-                              ...cfg,
-                              movimiento: { ...cfg.movimiento, ejeAvance: e.target.value as Eje },
-                            })
-                          }
-                        >
-                          <option value="x">X</option>
-                          <option value="y">Y</option>
-                          <option value="z">Z</option>
-                        </Selector>
-                      </Campo>
-
-                      <Campo etiqueta="Lecturas por segundo">
-                        <Selector
-                          value={String(cfg.movimiento.cadaMs)}
-                          onChange={(e) =>
-                            aplicar({
-                              ...cfg,
-                              movimiento: { ...cfg.movimiento, cadaMs: Number(e.target.value) },
-                            })
-                          }
-                        >
-                          <option value="200">5 · suave</option>
-                          <option value="100">10 · normal</option>
-                          <option value="50">20 · fino</option>
-                          <option value="20">50 · muy fino</option>
-                        </Selector>
-                      </Campo>
-                    </div>
-
-                    <Interruptor
-                      activo={cfg.movimiento.avanceInvertido}
-                      alCambiar={(v) =>
+                    <Montaje
+                      eje={cfg.movimiento.ejeAvance}
+                      invertido={cfg.movimiento.avanceInvertido}
+                      referencia={cfg.movimiento.ref}
+                      alCambiar={(ejeAvance, avanceInvertido) =>
                         aplicar({
                           ...cfg,
-                          movimiento: { ...cfg.movimiento, avanceInvertido: v },
+                          movimiento: { ...cfg.movimiento, ejeAvance, avanceInvertido },
                         })
                       }
-                      etiqueta="Invertir el sentido de avance"
                     />
 
-                    <Nota>
-                      Acelera un momento y mira «Aceleración» abajo: si al acelerar sale
-                      negativo, invierte el sentido. Si apenas se mueve, prueba otro eje.
-                    </Nota>
+                    <Campo etiqueta="Lecturas por segundo">
+                      <Selector
+                        value={String(cfg.movimiento.cadaMs)}
+                        onChange={(e) =>
+                          aplicar({
+                            ...cfg,
+                            movimiento: { ...cfg.movimiento, cadaMs: Number(e.target.value) },
+                          })
+                        }
+                      >
+                        <option value="200">5 · suave</option>
+                        <option value="100">10 · normal</option>
+                        <option value="50">20 · fino</option>
+                        <option value="20">50 · muy fino</option>
+                      </Selector>
+                    </Campo>
 
                     <div className="grid grid-cols-3 gap-3">
                       <Campo etiqueta="Frenada (m/s²)">
