@@ -14,6 +14,8 @@ export interface Senal {
   valor: number | string | null;
   /** Cuando el aparato no puede distinguir «cero» de «no disponible». */
   ambiguo?: boolean;
+  /** Si el valor ya paso por una curva de calibracion. */
+  calibrada?: boolean;
 }
 
 export const senal = (

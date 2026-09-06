@@ -28,6 +28,7 @@ export default function Monitor() {
   const abajo = useRef(true);
 
   useEffect(() => {
+    hardware.calibrar(cargar().calibracion);
     for (const f of cargar().fuentes) hardware.arrancar(f).catch(() => undefined);
 
     const quitar = hardware.alRecibir(() => {

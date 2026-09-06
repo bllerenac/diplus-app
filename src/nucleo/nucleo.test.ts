@@ -11,6 +11,7 @@ import { comoVoy, dentroDelPoligono, geocercaDe, recomendacionDe } from './geo';
 import { Geocerca } from './servidor';
 import { arreglarDireccion, esMasNueva, reparo } from './actualizacion';
 import { HUECOS, calcular, nuevaTarjeta, panelFijo, texto, titulo } from './panel';
+import { aplicar as aplicarCurva, ordenar as ordenarCurva, revisar as revisarCurva } from './curva';
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
@@ -570,5 +571,57 @@ describe('cuadros del panel sin señal', () => {
     expect(p).toHaveLength(HUECOS);
     expect(p.every((t) => t.claves.length === 0)).toBe(true);
     expect(new Set(p.map((t) => t.id)).size).toBe(HUECOS);
+  });
+});
+
+/**
+ * La curva tiene que dar lo mismo aqui que en el HelperBox.
+ *
+ * El mismo caudalimetro puede leerse aqui por RS485 o llegar ya corregido de la
+ * caja, y si las dos correcciones no coincidieran el mismo sensor daria dos
+ * numeros segun por donde entrara. Estos son los mismos puntos con los que se
+ * comprobo la de alla.
+ */
+describe('curvas de calibracion', () => {
+  const puntos = [
+    { crudo: 0, real: 0 },
+    { crudo: 10, real: 12 },
+    { crudo: 50, real: 51 },
+    { crudo: 100, real: 98 },
+  ];
+
+  it('interpola en linea recta entre dos puntos medidos', () => {
+    expect(aplicarCurva(puntos, 0)).toBe(0);
+    expect(aplicarCurva(puntos, 5)).toBeCloseTo(6);
+    expect(aplicarCurva(puntos, 10)).toBe(12);
+    expect(aplicarCurva(puntos, 30)).toBeCloseTo(31.5);
+    expect(aplicarCurva(puntos, 75)).toBeCloseTo(74.5);
+  });
+
+  it('fuera de lo medido no extrapola: se queda en el extremo', () => {
+    expect(aplicarCurva(puntos, -20)).toBe(0);
+    expect(aplicarCurva(puntos, 500)).toBe(98);
+  });
+
+  it('con menos de dos puntos no toca el valor', () => {
+    expect(aplicarCurva([], 42)).toBe(42);
+    expect(aplicarCurva([{ crudo: 1, real: 9 }], 42)).toBe(42);
+  });
+
+  it('ordena los puntos y se queda con el ultimo de los repetidos', () => {
+    expect(ordenarCurva([
+      { crudo: 50, real: 51 },
+      { crudo: 0, real: 0 },
+      { crudo: 50, real: 99 },
+    ])).toEqual([{ crudo: 0, real: 0 }, { crudo: 50, real: 99 }]);
+  });
+
+  it('avisa de una curva que baja, que casi siempre es un punto mal tecleado', () => {
+    expect(revisarCurva([
+      { crudo: 0, real: 0 },
+      { crudo: 10, real: 12 },
+      { crudo: 20, real: 5 },
+    ])).toMatch(/baja/);
+    expect(revisarCurva(puntos)).toBeNull();
   });
 });

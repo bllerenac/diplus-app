@@ -26,6 +26,7 @@ import { Eje, movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
+import { Punto, revisar } from '../nucleo/curva';
 import {
   ICONOS, Tarjeta, VISTAS, VistaTarjeta, esPrincipal, iconoSugerido, nuevaTarjeta, panelDeCamion, panelFijo, vista,
 } from '../nucleo/panel';
@@ -208,6 +209,9 @@ export default function Ajustes() {
       const r = await hardware.buscarPuertos(setProbando);
       setHallazgos(r.found);
       /* El escaneo paro los hilos de lectura; hay que devolverlos a su sitio. */
+      /* Las curvas antes de arrancar: si una fuente entrega su primera trama
+         entre las dos lineas, se corregiria con una calibracion vacia. */
+      hardware.calibrar(cfg.calibracion);
       for (const f of cfg.fuentes) hardware.arrancar(f).catch(() => undefined);
     } catch (e: unknown) {
       setHallazgos([]);
@@ -607,6 +611,126 @@ export default function Ajustes() {
                   alCambiar={setAvanzado}
                   etiqueta="Mostrar los valores del manual del fabricante"
                 />
+              )}
+            </Bloque>
+          )}
+
+          {/* ── Calibración ────────────────────────────────────────────── */}
+          {pestana === 'fuentes' && (
+            <Bloque titulo="Calibrar lo que se lee">
+              <Nota>
+                Pares «lo que marca → lo que es», tomados con un equipo de referencia. Entre dos
+                puntos se interpola en línea recta, y fuera de lo medido se mantiene el valor del
+                extremo en vez de inventar. La corrección se aplica nada más leer, así que el
+                número corregido es el que se ve, el que se guarda y el que sale al servidor.
+              </Nota>
+
+              {disponibles.length === 0 ? (
+                <Vacio>Todavía no llega ninguna señal que se pueda calibrar.</Vacio>
+              ) : (
+                <>
+                  {Object.entries(cfg.calibracion).map(([clave, puntos]) => {
+                    const s = vistas.get(clave);
+                    const aviso = revisar(puntos);
+                    const ahora = typeof s?.valor === 'number' ? s.valor : null;
+
+                    const cambiar = (p: Punto[]) =>
+                      aplicar({ ...cfg, calibracion: { ...cfg.calibracion, [clave]: p } });
+
+                    return (
+                      <div key={clave} className="rounded-xl border border-line bg-bg px-3.5 py-3">
+                        <div className="mb-3 flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] text-ink">
+                              {s?.nombre ?? clave}
+                              {s?.unidad && (
+                                <em className="ml-1.5 font-mono text-[11px] not-italic text-ink3">
+                                  {s.unidad}
+                                </em>
+                              )}
+                            </div>
+                            <div className="truncate font-mono text-[10.5px] text-ink3">
+                              {clave}
+                              {ahora === null ? ' · esta señal ya no llega' : ` · marca ahora ${ahora}`}
+                            </div>
+                          </div>
+                          <Boton
+                            variante="peligro"
+                            onClick={() => {
+                              const otra = { ...cfg.calibracion };
+                              delete otra[clave];
+                              aplicar({ ...cfg, calibracion: otra });
+                            }}
+                          >
+                            Quitar
+                          </Boton>
+                        </div>
+
+                        {aviso && <Aviso tono="warn">{aviso}</Aviso>}
+
+                        {puntos.map((p, i) => (
+                          <div key={i} className="mb-2 grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                            <Campo etiqueta={i === 0 ? 'Lo que marca' : ''}>
+                              <Entrada
+                                type="number" step="any"
+                                value={p.crudo}
+                                onChange={(e) =>
+                                  cambiar(puntos.map((x, j) =>
+                                    j === i ? { ...x, crudo: Number(e.target.value) } : x))
+                                }
+                              />
+                            </Campo>
+                            <Campo etiqueta={i === 0 ? 'Lo que es de verdad' : ''}>
+                              <Entrada
+                                type="number" step="any"
+                                value={p.real}
+                                onChange={(e) =>
+                                  cambiar(puntos.map((x, j) =>
+                                    j === i ? { ...x, real: Number(e.target.value) } : x))
+                                }
+                              />
+                            </Campo>
+                            <Boton
+                              variante="tenue"
+                              onClick={() => cambiar(puntos.filter((_, j) => j !== i))}
+                            >
+                              −
+                            </Boton>
+                          </div>
+                        ))}
+
+                        <Boton onClick={() => cambiar([...puntos, { crudo: ahora ?? 0, real: 0 }])}>
+                          Añadir punto{ahora !== null ? ` (marca ${ahora})` : ''}
+                        </Boton>
+                      </div>
+                    );
+                  })}
+
+                  <Campo
+                    etiqueta="Calibrar otra señal"
+                    ayuda="Solo las numéricas: un estado o un texto no se calibran."
+                  >
+                    <Selector
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        aplicar({
+                          ...cfg,
+                          calibracion: { ...cfg.calibracion, [e.target.value]: [] },
+                        });
+                      }}
+                    >
+                      <option value="">— elige la señal —</option>
+                      {disponibles
+                        .filter(([c, s]) => typeof s.valor === 'number' && !(c in cfg.calibracion))
+                        .map(([c, s]) => (
+                          <option key={c} value={c}>
+                            {s.nombre}{s.unidad ? ` (${s.unidad})` : ''}
+                          </option>
+                        ))}
+                    </Selector>
+                  </Campo>
+                </>
               )}
             </Bloque>
           )}

@@ -11,6 +11,7 @@ import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Senal, pgnDe, saDe } from './lecturas';
 import { Contexto, protocolo } from './protocolos';
 import { Troceador, aHex, deHex, troceador } from './tramas';
+import { Calibraciones, aplicar } from './curva';
 
 /**
  * Un puerto serie del equipo, con el papel que cumple.
@@ -140,6 +141,8 @@ class Hardware {
   private troceadores = new Map<string, Troceador>();
   /** Un reloj por fuente que interroga a los aparatos que no hablan solos. */
   private preguntones = new Map<string, any>();
+  /** Las curvas de calibracion, por clave completa de señal. */
+  private calibraciones: Calibraciones = {};
   private oyentesTrama = new Set<OyenteTramas>();
   private oyentesProblema = new Set<OyenteProblemas>();
   private ultimas: TramaVista[] = [];
@@ -214,6 +217,18 @@ class Hardware {
       /* Una trama rara no puede tumbar la lectura: el cable trae lo que trae. */
       senales = [];
     }
+
+    /* La calibracion se aplica aqui, nada mas decodificar, y no al pintar. Asi
+       el valor corregido es el unico que existe de aqui para abajo: el que se ve
+       en el panel, el que baja a la base y el que sale hacia el servidor son el
+       mismo numero. Corregir solo en la pantalla dejaria un historico sin
+       calibrar, y eso se descubre meses despues, cuando ya nadie sabe con que
+       curva se tomo cada fila. */
+    senales = senales.map((s) => {
+      const puntos = this.calibraciones[`${f.id}.${s.clave}`];
+      if (!puntos?.length || typeof s.valor !== 'number') return s;
+      return { ...s, valor: aplicar(puntos, s.valor), calibrada: true };
+    });
 
     for (const s of senales) this.valores.set(`${f.id}.${s.clave}`, s);
 
@@ -292,6 +307,18 @@ class Hardware {
     const t = this.preguntones.get(id);
     if (t) clearInterval(t);
     this.preguntones.delete(id);
+  }
+
+  /**
+   * Las curvas que se aplican a lo que llega.
+   *
+   * Se ponen aparte de las fuentes porque no son del cable sino de la señal: el
+   * mismo caudalimetro puede llegar por RS485 hoy y por red mañana, y su curva
+   * es la misma. Se vuelven a poner en cada cambio de configuracion, que es
+   * barato y evita tener que acordarse de mantenerlas al dia.
+   */
+  calibrar(c: Calibraciones) {
+    this.calibraciones = c ?? {};
   }
 
   quitar(id: string) {
