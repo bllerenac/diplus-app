@@ -397,9 +397,20 @@ export default function Ajustes() {
                   <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('can1')] })}>
                     + CAN
                   </Boton>
+                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('red')] })}>
+                    + Por red
+                  </Boton>
                 </div>
               }
             >
+              <Nota>
+                <b className="text-ink2">Por el cable de red no hay nada que configurar aparte
+                del puerto.</b> El equipo se pone su dirección solo al arrancar y se queda
+                escuchando; el HelperBox empuja sus lecturas sin esperar respuesta. Se hace así
+                porque esta boca de red <b className="text-ink2">recibe pero no transmite</b>, y
+                con eso no se puede pedir nada ni contestar a nadie.
+              </Nota>
+
               <div className="flex flex-col gap-2.5 rounded-xl bg-sur2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="rotulo">¿No sabes dónde está conectado?</span>
@@ -478,6 +489,11 @@ export default function Ajustes() {
               {cfg.fuentes.map((f, i) => {
                 const proto = protocolo(f.protocoloId);
                 const esSerie = f.puerto === 'rs485';
+                /* La red trae las mismas tramas que el cable serie —lineas de
+                   texto, no tramas del bus—, asi que se le ofrecen esos
+                   protocolos. Estaba cayendo en la rama del CAN y el selector
+                   enseñaba un protocolo que no era el suyo. */
+                const familia = f.puerto === 'can1' || f.puerto === 'can2' ? 'can' : 'serie';
 
                 return (
                   <div key={f.id} className="flex flex-col gap-3.5 rounded-xl border border-line bg-sur2 p-4">
@@ -490,7 +506,7 @@ export default function Ajustes() {
                           value={f.puerto}
                           onChange={(e) => {
                             const puerto = e.target.value as Fuente['puerto'];
-                            const nuevo = protocolosDe(puerto === 'rs485' ? 'serie' : 'can')[0];
+                            const nuevo = protocolosDe(puerto === 'can1' || puerto === 'can2' ? 'can' : 'serie')[0];
                             cambiarFuente(i, { ...f, puerto, protocoloId: nuevo.id, config: defectosDe(nuevo) });
                           }}
                         >
@@ -498,7 +514,20 @@ export default function Ajustes() {
                         </Selector>
                       </Campo>
 
-                      {esSerie ? (
+                      {f.puerto === 'red' ? (
+                        <Campo
+                          etiqueta="Puerto en el que se escucha"
+                          ayuda="Tiene que ser el mismo al que emite el HelperBox. Por defecto, el 9977."
+                        >
+                          <Entrada
+                            type="number"
+                            min={1}
+                            max={65535}
+                            value={f.baudios}
+                            onChange={(e) => cambiarFuente(i, { ...f, baudios: Number(e.target.value) })}
+                          />
+                        </Campo>
+                      ) : esSerie ? (
                         <>
                           <Campo
                             etiqueta="Dispositivo"
@@ -552,7 +581,7 @@ export default function Ajustes() {
                             cambiarFuente(i, { ...f, protocoloId: p.id, config: defectosDe(p) });
                           }}
                         >
-                          {protocolosDe(esSerie ? 'serie' : 'can').map((p) => (
+                          {protocolosDe(familia).map((p) => (
                             <option key={p.id} value={p.id}>{p.nombre}</option>
                           ))}
                         </Selector>
