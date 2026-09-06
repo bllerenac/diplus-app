@@ -1249,6 +1249,83 @@ export default function Ajustes() {
                 etiqueta="Guardar histórico"
               />
 
+              <p className="rotulo mb-1.5 mt-4">Qué señales se guardan</p>
+              <Nota>
+                Sin elegir ninguna se guarda todo lo que llegue, que es lo que hay que hacer
+                mientras no se sabe qué interesa. Cuando ya se sabe, conviene elegir: guardar
+                veinte señales cada segundo llena la memoria del equipo con cosas que nadie va a
+                mirar.
+              </Nota>
+
+              {disponibles.length === 0 ? (
+                <Vacio>Todavía no llega ninguna señal que se pueda guardar.</Vacio>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {disponibles.map(([clave, s]) => {
+                      const puesta = cfg.registro.claves.includes(clave);
+                      return (
+                        <button
+                          key={clave}
+                          onClick={() =>
+                            aplicar({
+                              ...cfg,
+                              registro: {
+                                ...cfg.registro,
+                                claves: puesta
+                                  ? cfg.registro.claves.filter((c) => c !== clave)
+                                  : [...cfg.registro.claves, clave],
+                              },
+                            })
+                          }
+                          className={`rounded-full border px-3 py-1.5 text-[12px] transition ${
+                            puesta ? 'border-acc bg-acc/10 text-acc' : 'border-line2 text-ink2'
+                          }`}
+                        >
+                          {s.nombre}
+                          {s.unidad && (
+                            <em className="ml-1.5 font-mono text-[10.5px] not-italic opacity-60">
+                              {s.unidad}
+                            </em>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Boton
+                      variante="tenue"
+                      onClick={() => aplicar({ ...cfg, registro: { ...cfg.registro, claves: [] } })}
+                    >
+                      Guardar todas
+                    </Boton>
+                    <span className="font-mono text-[11px] text-ink3">
+                      {cfg.registro.claves.length
+                        ? `${cfg.registro.claves.length} de ${disponibles.length}`
+                        : `todas (${disponibles.length})`}
+                    </span>
+                  </div>
+
+                  <p className="rotulo mb-1.5 mt-4">Lo que queda guardado, en cada muestra</p>
+                  <pre className="desplazable overflow-x-auto rounded-xl border border-line bg-bg p-3 font-mono text-[11px] leading-relaxed text-ink2">
+{JSON.stringify(
+  {
+    at: Date.now(),
+    posicion: { lat: -12.10347, lon: -77.02451 },
+    valores: Object.fromEntries(
+      disponibles
+        .filter(([c]) => !cfg.registro.claves.length || cfg.registro.claves.includes(c))
+        .map(([c, s]) => [c, s.valor ?? null]),
+    ),
+  },
+  null,
+  2,
+)}
+                  </pre>
+                </>
+              )}
+
               <div className="rounded-xl border border-line bg-bg px-4 py-3">
                 <p className="rotulo mb-1.5">Ocupación</p>
                 <p className="m-0 font-mono text-[13px] text-ink">
