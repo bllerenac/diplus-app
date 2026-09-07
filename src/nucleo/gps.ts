@@ -16,6 +16,7 @@
  * informacion y en un mapa se ven exactamente igual.
  */
 import { registerPlugin, Capacitor } from '@capacitor/core';
+import { metrosEntre } from './geo';
 
 export type Origen = 'rtk' | 'interno';
 
@@ -114,8 +115,11 @@ class Gps {
       lat: d.latitude,
       lon: d.longitude,
       alt: Number(d.altitude) || 0,
-      velocidad: Number(d.speed) || 0,
-      rumbo: Number(d.course) || 0,
+      /* El puente manda `speedKmH` y `heading`; `speed` y `course` no existen y
+         durante mucho tiempo esto leyo cero siempre. Se aceptan los dos juegos
+         de nombres para que un cambio en el puente no vuelva a callar esto. */
+      velocidad: (Number(d.speedKmH ?? d.speed) || 0) / 3.6,
+      rumbo: Number(d.heading ?? d.course ?? d.bearing) || 0,
       hdop: Number(d.hdop) || 99.9,
       satelites: Number(d.satellites) || 0,
       calidad: Number(d.rtkQuality) || 0,
@@ -135,7 +139,7 @@ class Gps {
       alt: Number(d.altitude) || 0,
       /* En este evento el plugin ya lo pasa a km/h; aqui todo va en m/s. */
       velocidad: (Number(d.speed) || 0) / 3.6,
-      rumbo: Number(d.bearing) || 0,
+      rumbo: Number(d.bearing ?? d.heading) || 0,
       hdop: Number(d.accuracy) || 0,
       satelites: 0,
       calidad: 1,
@@ -155,7 +159,46 @@ class Gps {
     this.publicar(p);
   }
 
-  private publicar(p: Posicion) {
+  /**
+   * Velocidad y rumbo sacados de dos posiciones seguidas.
+   *
+   * Existe porque **no siempre vienen**. El receptor RTK los manda con otros
+   * nombres, y el GPS interno de Android no manda rumbo en absoluto: durante
+   * mucho tiempo los dos llegaron a cero sin que nadie lo notara, porque un
+   * mapa que no gira se parece bastante a un mapa que no hace falta girar.
+   *
+   * Calcularlos es lo mismo que hace el receptor: la dirección y la distancia
+   * entre dónde estaba y dónde está. Solo se usa lo calculado cuando lo que
+   * llega es cero, para no pisar un dato bueno con uno peor.
+   *
+   * Por debajo de tres metros no se calcula rumbo: dos posiciones casi en el
+   * mismo sitio dan una dirección que es puro ruido del receptor, y eso es
+   * justo lo que no queremos meter en el mapa.
+   */
+  private completar(p: Posicion): Posicion {
+    const a = this.ultima;
+    const segundos = a ? (p.at - a.at) / 1000 : 0;
+
+    if (!a || segundos <= 0 || segundos > 10) return p;
+
+    const metros = metrosEntre([a.lat, a.lon], [p.lat, p.lon]);
+    const velocidad = p.velocidad || metros / segundos;
+
+    if (p.rumbo || metros < 3) return { ...p, velocidad };
+
+    const rad = Math.PI / 180;
+    const dLon = (p.lon - a.lon) * rad;
+    const lat1 = a.lat * rad;
+    const lat2 = p.lat * rad;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    const grados = (Math.atan2(y, x) / rad + 360) % 360;
+
+    return { ...p, velocidad, rumbo: Number(grados.toFixed(1)) };
+  }
+
+  private publicar(cruda: Posicion) {
+    const p = this.completar(cruda);
     this.ultima = p;
     this.rastro.push([p.lat, p.lon]);
     if (this.rastro.length > 500) this.rastro = this.rastro.slice(-500);

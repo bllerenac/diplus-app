@@ -289,6 +289,13 @@ public class CanRs485Plugin extends Plugin {
                                 data.put("latitude", location.getLatitude());
                                 data.put("longitude", location.getLongitude());
                                 data.put("speed", location.getSpeed() * 3.6);
+                                /* El rumbo no se mandaba, asi que del GPS interno llegaba
+                                   siempre cero y el mapa nunca giraba. Solo se manda si
+                                   el fix lo trae: Android devuelve 0 cuando no lo sabe, y
+                                   un cero que significa «norte» no se distingue de un cero
+                                   que significa «no tengo ni idea». */
+                                if (location.hasBearing()) data.put("bearing", location.getBearing());
+                                if (location.hasAccuracy()) data.put("accuracy", location.getAccuracy());
                                 data.put("altitude", location.getAltitude());
                                 data.put("timestamp", System.currentTimeMillis());
                                 notifyListeners("onGpsLocationFix", data);
