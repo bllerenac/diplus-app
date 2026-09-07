@@ -21,6 +21,7 @@ import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
 import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
+import { envio } from '../nucleo/envio';
 import { maqueta } from '../nucleo/maqueta';
 import { movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
@@ -38,8 +39,10 @@ import {
   Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Modal, Nota, Pestanas, Selector, Vacio,
 } from './piezas';
 import { Montaje } from './montaje';
+import { Envio } from './envio';
 
-type Pestana = 'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'servidor';
+type Pestana =
+  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'servidor';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'sensores', nombre: 'Sensores' },
@@ -47,6 +50,7 @@ const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'panel', nombre: 'Panel' },
   { id: 'posicion', nombre: 'Posición' },
   { id: 'datos', nombre: 'Datos' },
+  { id: 'envio', nombre: 'Envío' },
   { id: 'servidor', nombre: 'Servidor' },
 ];
 
@@ -323,11 +327,18 @@ export default function Ajustes() {
   /* Se guarda tambien el valor, no solo el nombre: al elegir el sensor de un
      cuadro hay que poder ver lo que vale ahora mismo, que es lo unico que
      distingue una clave util de una que ya no llega. */
-  const [vistas, setVistas] = useState<Map<string, Senal>>(() => {
-    const m = new Map<string, Senal>();
-    for (const s of hardware.senales()) m.set(s.clave, s);
-    return m;
-  });
+  /* Se siembra con lo que el aparato ya tenga leído, para no abrir la pantalla
+     en blanco esperando la primera trama.
+
+     Va por la clave completa, que es la que trae el mapa del hardware. Antes se
+     sembraba con la clave corta —la que viene dentro de la trama— mientras que
+     lo que llegaba después entraba con la completa, así que cada señal aparecía
+     **dos veces**: una con «imu.vibracion» y otra con «vibracion», y las dos
+     con su interruptor de guardar y de mandar. Se vio en el equipo: dieciocho
+     señales donde solo hay nueve. */
+  const [vistas, setVistas] = useState<Map<string, Senal>>(
+    () => new Map(hardware.senalesPorClave()),
+  );
   const [eco, setEco] = useState<string | null>(null);
   const [peso, setPeso] = useState<{ filas: number; desde: number | null } | null>(null);
   const [buscando, setBuscando] = useState(false);
@@ -403,6 +414,7 @@ export default function Ajustes() {
     setCfg(c);
     guardar(c);
     registro.aplicar(c.registro);
+    envio.aplicar(c.envio);
     setEco(`Guardado a las ${new Date().toLocaleTimeString('es-PE')}`);
     setTimeout(() => setEco(null), 2500);
   };
@@ -1634,6 +1646,16 @@ export default function Ajustes() {
                 </Aviso>
               )}
             </Bloque>
+          )}
+
+          {/* ── Envío ──────────────────────────────────────────────────── */}
+          {pestana === 'envio' && (
+            <Envio
+              ajustes={cfg.envio}
+              alCambiar={(envio) => aplicar({ ...cfg, envio })}
+              salen={disponibles.filter(([c]) => ajustesDe(cfg.senales, c).enviar)}
+              alDetalle={setDetalle}
+            />
           )}
 
           {/* ── Servidor ───────────────────────────────────────────────── */}

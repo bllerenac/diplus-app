@@ -18,6 +18,7 @@ import { Config, alCambiar, cargar, guardar } from '../nucleo/config';
 import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
+import { envio } from '../nucleo/envio';
 import { Senal } from '../nucleo/lecturas';
 import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 import { maqueta } from '../nucleo/maqueta';
@@ -409,6 +410,10 @@ export default function Navegacion() {
        ajustes: si solo arrancara al guardar la configuracion, un equipo que se
        enciende y nadie toca no registraria nada. */
     registro.aplicar(cfg.registro);
+
+    /* Y el envío, por lo mismo: un equipo encendido tiene que estar mandando
+       aunque nadie haya abierto la configuración en todo el turno. */
+    envio.aplicar(cfg.envio);
 
     const quitarTramas = hardware.alRecibir((t: TramaVista) => {
       setValores((prev) => {

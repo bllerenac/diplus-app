@@ -128,6 +128,32 @@ export const leerDe = async (clave: string, desde: number, limite = 500): Promis
   });
 };
 
+/**
+ * Todo lo guardado a partir de un instante, de lo viejo a lo nuevo.
+ *
+ * En este orden y no al revés porque es lo que pide el envío por lotes: se
+ * manda un trozo, se apunta hasta dónde se llegó y la próxima vuelta sigue por
+ * ahí. Del revés no habría por dónde seguir.
+ */
+export const leerDesde = async (desde: number, limite = 200): Promise<Lectura[]> => {
+  const db = await abrir();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('lecturas', 'readonly');
+    const idx = tx.objectStore('lecturas').index('at');
+    const salida: Lectura[] = [];
+
+    const cur = idx.openCursor(IDBKeyRange.lowerBound(desde), 'next');
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c || salida.length >= limite) return resolve(salida);
+      salida.push(c.value as Lectura);
+      c.continue();
+    };
+    cur.onerror = () => reject(cur.error);
+  });
+};
+
 /** Cuántas filas hay y desde cuándo, para poder decidir la retención. */
 export const resumen = async (): Promise<{ filas: number; desde: number | null }> => {
   const db = await abrir();

@@ -12,6 +12,7 @@ import { Tarjeta, nuevaTarjeta, panelFijo } from './panel';
 import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 import { AjustesPorSenal } from './senales';
+import { AjustesEnvio, ENVIO_POR_DEFECTO } from './envio';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -57,6 +58,8 @@ export interface Config {
   panel: Tarjeta[];
   gps: { ruta: string; baudios: number; activo: boolean };
   servidor: Servidor;
+  /** A dónde salen las lecturas: en directo por socket y por lotes a una API. */
+  envio: AjustesEnvio;
   actualizacion: Actualizacion;
   canal: Canal;
   /** La unidad inercial del propio equipo: inclinacion, conduccion y via. */
@@ -88,6 +91,7 @@ const POR_DEFECTO: Config = {
     activo: false, url: 'https://miskimayo-back.wapsi.io/api', token: '',
     cadaSeg: 30, equipo: '', usuario: '', clave: '',
   },
+  envio: ENVIO_POR_DEFECTO,
   actualizacion: { url: '', automatica: false, cadaHoras: 6 },
   canal: { activo: false, puerto: 8787, token: '' },
   movimiento: MOVIMIENTO_POR_DEFECTO,

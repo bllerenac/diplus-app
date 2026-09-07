@@ -438,6 +438,11 @@ class Hardware {
     return [...this.valores.values()];
   }
 
+  /** Lo mismo, pero con la clave completa: `fuente.senal`. */
+  senalesPorClave(): [string, Senal][] {
+    return [...this.valores.entries()];
+  }
+
   limpiar() {
     this.ultimas = [];
     this.valores.clear();

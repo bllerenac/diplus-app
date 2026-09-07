@@ -199,3 +199,40 @@ input[type='submit'] {
 [hidden] {
   display: none;
 }
+
+/* ─── `gap` en flex, que este WebView no tiene ────────────────────────────────
+
+   El equipo lleva el WebView 78 y el `gap` de flexbox llegó en el 84. En
+   rejilla sí funciona —ahí es del 57— y por eso los botones en cuadrícula
+   salían bien separados mientras que todo lo que iba en flex salía pegado: la
+   etiqueta contra su interruptor, el título contra su campo, y en el marcador
+   de envío un «Apagado0 envíosúltimo: nunca» de una sola pieza.
+
+   No se puede emular `gap` de forma general en CSS, así que se emula para los
+   tamaños que se usan, con margen en los hijos. La columna se escribe con las
+   tres clases para ganar en especificidad a la fila.
+
+   Con `flex-wrap`, el primer hijo de la segunda línea se queda con su margen y
+   sale un poco entrado. Es un defecto conocido y menor: pasa en dos sitios,
+   ninguno de ellos con texto largo.
+
+   Ojo al tocar esto: es la misma familia de problemas que obliga a quedarse en
+   Tailwind 3 por el `:where()`. Ver la nota de arriba. */
+
+.flex.gap-0\.5 > * + * { margin-left: 0.125rem; }
+.flex.gap-1\.5 > * + * { margin-left: 0.375rem; }
+.flex.gap-2 > * + * { margin-left: 0.5rem; }
+.flex.gap-2\.5 > * + * { margin-left: 0.625rem; }
+.flex.gap-3 > * + * { margin-left: 0.75rem; }
+.flex.gap-3\.5 > * + * { margin-left: 0.875rem; }
+.flex.gap-4 > * + * { margin-left: 1rem; }
+.flex.gap-5 > * + * { margin-left: 1.25rem; }
+
+.flex.flex-col.gap-0\.5 > * + * { margin-left: 0; margin-top: 0.125rem; }
+.flex.flex-col.gap-1\.5 > * + * { margin-left: 0; margin-top: 0.375rem; }
+.flex.flex-col.gap-2 > * + * { margin-left: 0; margin-top: 0.5rem; }
+.flex.flex-col.gap-2\.5 > * + * { margin-left: 0; margin-top: 0.625rem; }
+.flex.flex-col.gap-3 > * + * { margin-left: 0; margin-top: 0.75rem; }
+.flex.flex-col.gap-3\.5 > * + * { margin-left: 0; margin-top: 0.875rem; }
+.flex.flex-col.gap-4 > * + * { margin-left: 0; margin-top: 1rem; }
+.flex.flex-col.gap-5 > * + * { margin-left: 0; margin-top: 1.25rem; }
