@@ -106,7 +106,7 @@ const mirar = (v: V3, giro: number, alto: number): V3 => {
    mirando al parabrisas y otra al conductor— se dibujarían igual. */
 const CAMARA = 700;
 const ESCALA = 0.74;
-const CENTRO: [number, number] = [142, 94];
+const CENTRO: [number, number] = [158, 88];
 const LIENZO: [number, number] = [300, 186];
 
 const proyectar = (v: V3): [number, number, number] => {
@@ -327,6 +327,29 @@ const RELLENO = {
 /** Dónde va el equipo dentro del camión: en el salpicadero, en la cabina. */
 const SALPICADERO: V3 = [0, 6, 62];
 
+// ── El chivato: el equipo solo, con sus ejes ────────────────────────────────
+
+/**
+ * Dentro del camión el equipo sale pequeño y medio tapado por el alambre, que
+ * está bien para ver dónde queda pero no para ver **cómo** queda. Esto es el
+ * mismo aparato, en grande, aparte y con sus tres ejes dibujados: gira con el
+ * de dentro, y por eso al pulsar girar se ve el movimiento aunque el de la
+ * cabina quede de espaldas.
+ *
+ * La Z es la que sale por la pantalla, y va marcada como tal. Es la que decide
+ * las dos posiciones de pie y la que nadie adivina.
+ */
+const CHIVATO = { x: 4, y: 98, ancho: 90, alto: 84, escala: 0.9, largo: 22 };
+const CHIVATO_C: [number, number] = [
+  CHIVATO.x + CHIVATO.ancho / 2, CHIVATO.y + 36,
+];
+
+const EJES: { dir: V3; color: string; letra: string }[] = [
+  { dir: [1, 0, 0], color: 'var(--acc2)', letra: 'X' },
+  { dir: [0, 1, 0], color: 'var(--warn)', letra: 'Y' },
+  { dir: [0, 0, 1], color: 'var(--acc)', letra: 'Z' },
+];
+
 function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: number }) {
   const ver = (v: V3) => proyectar(mirar(v, giro, alto));
 
@@ -388,6 +411,69 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
   const puntos = (l: [number, number, number][]) =>
     l.map((p) => `${p[0]},${p[1]}`).join(' ');
 
+  // ── El chivato ──────────────────────────────────────────────────────────
+  /* Sin fuga y en su propio centro: aquí no se trata de situar el aparato en
+     ningún sitio, solo de verle la postura, y la perspectiva solo estorbaría. */
+  const enChivato = (v: V3): [number, number, number] => {
+    const m = mirar(girado(v), giro, alto);
+    return [CHIVATO_C[0] + m[0] * CHIVATO.escala, CHIVATO_C[1] - m[1] * CHIVATO.escala, m[2]];
+  };
+
+  const carasChivato = CARAS.map((c) => {
+    const p = c.pts.map((v) => mirar(girado(v), giro, alto));
+    const z = p.reduce((s, v) => s + v[2], 0) / p.length;
+    return { ...c, z, xy: c.pts.map(enChivato) };
+  }).sort((a, b) => a.z - b.z);
+
+  const ejes = EJES.map((e) => {
+    const o = enChivato([0, 0, 0]);
+    const p = enChivato([
+      e.dir[0] * CHIVATO.largo, e.dir[1] * CHIVATO.largo, e.dir[2] * CHIVATO.largo,
+    ]);
+    const dx = p[0] - o[0], dy = p[1] - o[1];
+    const largo = Math.hypot(dx, dy);
+    /* Un eje que apunta a la cámara se proyecta en un punto: dibujarlo como
+       flecha daría una raya de dos píxeles que no dice nada. Se dibuja como
+       diana, lleno si viene hacia quien mira y hueco si se va. */
+    const deFrente = largo < 4;
+    const ux = largo > 0.001 ? dx / largo : 0;
+    const uy = largo > 0.001 ? dy / largo : 0;
+    return {
+      ...e, o, p, deFrente,
+      viene: p[2] >= o[2],
+      punta: `${p[0]},${p[1]} ${p[0] - ux * 6.5 - uy * 3},${p[1] - uy * 6.5 + ux * 3} ` +
+             `${p[0] - ux * 6.5 + uy * 3},${p[1] - uy * 6.5 - ux * 3}`,
+      rotulo: [p[0] + ux * 10 + (deFrente ? 10 : 0), p[1] + uy * 10 + 3],
+    };
+  });
+
+  const ejeDibujado = (e: (typeof ejes)[number]) => (
+    <g key={e.letra}>
+      {e.deFrente ? (
+        <circle
+          cx={e.p[0]} cy={e.p[1]} r="4"
+          fill={e.viene ? e.color : 'none'} stroke={e.color} strokeWidth="1.6"
+        />
+      ) : (
+        <>
+          <line
+            x1={e.o[0]} y1={e.o[1]} x2={e.p[0]} y2={e.p[1]}
+            stroke={e.color} strokeWidth="1.8" strokeLinecap="round"
+            strokeOpacity={e.viene ? 1 : 0.45}
+          />
+          <polygon points={e.punta} fill={e.color} fillOpacity={e.viene ? 1 : 0.45} />
+        </>
+      )}
+      <text
+        x={e.rotulo[0]} y={e.rotulo[1]}
+        textAnchor="middle" fontSize="8.5" fontWeight="700" fill={e.color}
+        fillOpacity={e.viene || e.deFrente ? 1 : 0.5}
+      >
+        {e.letra}
+      </text>
+    </g>
+  );
+
   return (
     <>
       <defs>
@@ -446,13 +532,53 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
         </>
       )}
 
-      {/* La leyenda va fija en la esquina y no pegada al equipo: pegada, en las
-          posiciones de pie el rótulo caía justo encima y tapaba lo que nombra. */}
-      <rect x="10" y="10" width="12" height="8.5" rx="2"
-        fill="rgb(var(--acc-rgb) / 0.34)" stroke="var(--acc)" strokeWidth="1.1" />
-      <text x="27" y="17.8" fontSize="8" fontWeight="600"
-        fill="var(--ink3)" letterSpacing="1.1">
-        EL EQUIPO
+      {/* ── El chivato, abajo a la izquierda ──────────────────────────── */}
+      <rect
+        x={CHIVATO.x} y={CHIVATO.y} width={CHIVATO.ancho} height={CHIVATO.alto} rx="8"
+        fill="var(--bg)" fillOpacity="0.92" stroke="var(--line)" strokeWidth="1"
+      />
+      {/* Los ejes que se van por detrás, antes que el aparato; los que vienen
+          hacia quien mira, después. Es todo el orden que hace falta. */}
+      {ejes.filter((e) => !e.viene).map(ejeDibujado)}
+
+      {carasChivato.map((c, i) => (
+        <polygon
+          key={`c${i}`}
+          points={puntos(c.xy)}
+          fill={RELLENO[c.cara]}
+          stroke="var(--acc)"
+          strokeWidth={c.cara === 'pantalla' ? 1.4 : 0.8}
+          strokeOpacity={c.cara === 'pantalla' ? 0.95 : 0.4}
+          strokeLinejoin="round"
+        />
+      ))}
+
+      {daLaCara && (
+        <>
+          <polygon
+            points={puntos(CRISTAL.map(enChivato))}
+            fill="rgb(var(--acc-rgb) / 0.38)"
+          />
+          {(() => {
+            const [a, b] = CANTO_ALTO.map(enChivato);
+            return (
+              <line
+                x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}
+                stroke="var(--acc)" strokeWidth="2.4" strokeLinecap="round"
+              />
+            );
+          })()}
+        </>
+      )}
+
+      {ejes.filter((e) => e.viene).map(ejeDibujado)}
+
+      {/* Dicho con todas las letras, que es lo único que no se puede confundir */}
+      <rect x={CHIVATO.x + 9} y={CHIVATO.y + CHIVATO.alto - 14} width="11" height="7.5" rx="1.5"
+        fill="rgb(var(--acc-rgb) / 0.38)" stroke="var(--acc)" strokeWidth="1" />
+      <text x={CHIVATO.x + 24} y={CHIVATO.y + CHIVATO.alto - 8} fontSize="7.5" fontWeight="700"
+        fill="var(--acc)" letterSpacing="0.8">
+        LA PANTALLA {daLaCara ? '' : '· detrás'}
       </text>
     </>
   );
