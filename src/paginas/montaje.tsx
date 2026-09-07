@@ -8,11 +8,15 @@
  * había que explicarlas con palabras porque en un plano no se ven.
  *
  * Aquí el camión se dibuja en alambre —como una radiografía— y el equipo va
- * dentro de la cabina, en la postura en que quedó instalado. El camión no se
- * mueve: el morro apunta siempre al mismo sitio, y lo único que cambia entre
- * las seis posiciones es cómo queda puesto el equipo. Y se puede arrastrar
- * para mirarlo desde otro lado, que es lo que convierte seis casos abstractos
- * en seis cosas que se ven.
+ * dentro de la cabina, macizo, en la postura en que quedó instalado. El camión
+ * no se mueve: el morro apunta siempre al mismo sitio, y lo único que cambia
+ * entre las seis posiciones es cómo queda puesto el equipo. Se arrastra para
+ * mirarlo desde otro lado, que es lo que convierte seis casos abstractos en
+ * seis cosas que se ven.
+ *
+ * Al cambiar de posición el equipo **gira**, no salta. Ver el giro es lo que
+ * enseña que las seis son la misma cosa mirada de seis maneras; saltando, cada
+ * una parecía un dibujo suelto y había que compararlas de memoria.
  *
  * Son seis y no más porque el acelerómetro tiene tres ejes y cada uno se puede
  * mirar en dos sentidos.
@@ -21,13 +25,13 @@
  * confirma es acelerar: por eso está el botón que mira unos segundos de marcha
  * y elige el eje solo. El dibujo dice lo que se cree; la prueba dice lo que es.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eje, movimiento } from '../nucleo/movimiento';
 import { Boton, Aviso, Nota } from './piezas';
 
 type Lado = 'arriba' | 'derecha' | 'abajo' | 'izquierda' | 'fuera' | 'detras';
 
-/** Un punto o una dirección. Siempre en ejes del equipo: X derecha, Y arriba, Z hacia quien mira. */
+/** Un punto o una dirección. En ejes del equipo: X derecha, Y arriba, Z hacia quien mira. */
 type V3 = [number, number, number];
 
 interface Posicion {
@@ -89,23 +93,6 @@ const cruz = (a: V3, b: V3): V3 => [
   a[0] * b[1] - a[1] * b[0],
 ];
 
-/**
- * Del camión al equipo.
- *
- * El camión se dibuja en sus propios ejes —a lo largo, a lo ancho y a lo alto—
- * y esto lo coloca en los del equipo. Sabiendo hacia dónde le queda el morro y
- * hacia dónde el techo, el costado sale solo: es el producto cruzado de los
- * dos, y por eso no hace falta configurar nada más.
- */
-const colocar = (p: Posicion, v: V3): V3 => {
-  const derecha = cruz(p.frente, p.techo);
-  return [
-    derecha[0] * v[0] + p.techo[0] * v[1] + p.frente[0] * v[2],
-    derecha[1] * v[0] + p.techo[1] * v[1] + p.frente[1] * v[2],
-    derecha[2] * v[0] + p.techo[2] * v[1] + p.frente[2] * v[2],
-  ];
-};
-
 /** Desde dónde se mira. Es solo el punto de vista: no cambia nada de lo medido. */
 const mirar = (v: V3, giro: number, alto: number): V3 => {
   const cg = Math.cos(giro), sg = Math.sin(giro);
@@ -117,9 +104,10 @@ const mirar = (v: V3, giro: number, alto: number): V3 => {
 
 /* Con fuga y no en plano: sin perspectiva las dos posiciones de pie —una
    mirando al parabrisas y otra al conductor— se dibujarían igual. */
-const CAMARA = 640;
-const ESCALA = 0.78;
-const CENTRO: [number, number] = [130, 98];
+const CAMARA = 700;
+const ESCALA = 0.74;
+const CENTRO: [number, number] = [142, 94];
+const LIENZO: [number, number] = [300, 186];
 
 const proyectar = (v: V3): [number, number, number] => {
   const k = CAMARA / (CAMARA - v[2]);
@@ -127,67 +115,188 @@ const proyectar = (v: V3): [number, number, number] => {
 };
 
 /** Lo lejano se ve más flojo. Es lo que da la sensación de fondo. */
-const fuerza = (k: number) => Math.min(1, Math.max(0.32, (k - 0.68) * 1.6));
+const fuerza = (k: number) => Math.min(1, Math.max(0.3, (k - 0.66) * 1.55));
+
+// ── El giro del equipo, y cómo se anima ─────────────────────────────────────
+
+type Cuat = [number, number, number, number];
+
+/**
+ * La postura, en cuaternión.
+ *
+ * Se guarda así y no como tres ejes sueltos para poder **interpolar** entre dos
+ * posiciones: entre dos cuaterniones hay un camino corto y único, mientras que
+ * interpolar matrices casilla a casilla deforma el aparato por el camino.
+ *
+ * El signo de la primera fila no es un capricho. «Derecha, techo, morro» es la
+ * forma natural de decir cómo está puesto un camión, pero como terna es zurda:
+ * derecha × techo da hacia atrás, no hacia adelante. Una terna zurda no es un
+ * giro sino un giro **más un espejo**, y de una matriz así no sale ningún
+ * cuaternión: salía siempre el mismo, y por eso el aparato no se movía. Se
+ * quita el espejo aquí y se vuelve a poner al aplicarlo, que es una línea en
+ * cada sitio y deja la matriz siendo un giro de verdad.
+ */
+const cuaternion = (p: Posicion): Cuat => {
+  const d = cruz(p.frente, p.techo);
+  /* Por filas, que es la vuelta —del equipo al camión— y es la que se aplica. */
+  const m = [
+    [-d[0], -d[1], -d[2]],
+    [p.techo[0], p.techo[1], p.techo[2]],
+    [p.frente[0], p.frente[1], p.frente[2]],
+  ];
+  const traza = m[0][0] + m[1][1] + m[2][2];
+  if (traza > 0) {
+    const s = Math.sqrt(traza + 1) * 2;
+    return [(m[2][1] - m[1][2]) / s, (m[0][2] - m[2][0]) / s, (m[1][0] - m[0][1]) / s, s / 4];
+  }
+  if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+    const s = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2;
+    return [s / 4, (m[0][1] + m[1][0]) / s, (m[0][2] + m[2][0]) / s, (m[2][1] - m[1][2]) / s];
+  }
+  if (m[1][1] > m[2][2]) {
+    const s = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2;
+    return [(m[0][1] + m[1][0]) / s, s / 4, (m[1][2] + m[2][1]) / s, (m[0][2] - m[2][0]) / s];
+  }
+  const s = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2;
+  return [(m[0][2] + m[2][0]) / s, (m[1][2] + m[2][1]) / s, s / 4, (m[1][0] - m[0][1]) / s];
+};
+
+/** Girar un punto del equipo a los ejes del camión. */
+const conCuat = (q: Cuat, v: V3): V3 => {
+  const [x, y, z, w] = q;
+  const tx = 2 * (y * v[2] - z * v[1]);
+  const ty = 2 * (z * v[0] - x * v[2]);
+  const tz = 2 * (x * v[1] - y * v[0]);
+  return [
+    v[0] + w * tx + (y * tz - z * ty),
+    v[1] + w * ty + (z * tx - x * tz),
+    v[2] + w * tz + (x * ty - y * tx),
+  ];
+};
+
+/** El camino corto entre dos posturas. */
+const entre = (a: Cuat, b: Cuat, t: number): Cuat => {
+  let punto = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  /* Un cuaternión y su opuesto son la misma postura; sin este cambio de signo
+     el equipo daría la vuelta larga, de trescientos grados. */
+  const fin: Cuat = punto < 0 ? [-b[0], -b[1], -b[2], -b[3]] : b;
+  punto = Math.abs(punto);
+
+  let ka = 1 - t, kb = t;
+  if (punto < 0.9995) {
+    const o = Math.acos(Math.min(1, punto));
+    const so = Math.sin(o);
+    ka = Math.sin((1 - t) * o) / so;
+    kb = Math.sin(t * o) / so;
+  }
+  const q: Cuat = [
+    a[0] * ka + fin[0] * kb, a[1] * ka + fin[1] * kb,
+    a[2] * ka + fin[2] * kb, a[3] * ka + fin[3] * kb,
+  ];
+  const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+};
+
+const GIRO_MS = 420;
 
 // ── El camión, en alambre ───────────────────────────────────────────────────
 
 /* Ejes del camión: X a su derecha, Y hacia el techo, Z hacia el morro. El
-   origen es el centro del camión, que es donde va dibujado el equipo. */
-const caja = (x: number, y0: number, y1: number, z0: number, z1: number): [V3, V3][] => {
+   origen es el centro del camión; el suelo queda en y = -46. */
+type Linea = [V3, V3];
+
+const caja = (x: number, y0: number, y1: number, z0: number, z1: number): Linea[] => {
   const v: V3[] = [
     [-x, y0, z0], [x, y0, z0], [x, y1, z0], [-x, y1, z0],
     [-x, y0, z1], [x, y0, z1], [x, y1, z1], [-x, y1, z1],
   ];
   const p: [number, number][] = [
-    [0, 1], [1, 2], [2, 3], [3, 0],
-    [4, 5], [5, 6], [6, 7], [7, 4],
+    [0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4],
     [0, 4], [1, 5], [2, 6], [3, 7],
   ];
-  return p.map(([a, b]) => [v[a], v[b]] as [V3, V3]);
+  return p.map(([a, b]) => [v[a], v[b]] as Linea);
 };
 
-/** Una rueda: un aro plano pegado al costado. */
-const rueda = (x: number, y: number, z: number): [V3, V3][] => {
-  const r = 17;
-  const pts: V3[] = Array.from({ length: 12 }, (_, i) => {
-    const a = (i / 12) * Math.PI * 2;
-    return [x, y + r * Math.sin(a), z + r * Math.cos(a)] as V3;
-  });
-  return pts.map((p, i) => [p, pts[(i + 1) % 12]] as [V3, V3]);
+/** Una rueda de verdad: dos aros y los radios que los unen. */
+const rueda = (x: number, z: number): Linea[] => {
+  const r = 21, y = -25, ancho = 9, n = 10;
+  const aro = (xx: number): V3[] =>
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return [xx, y + r * Math.sin(a), z + r * Math.cos(a)] as V3;
+    });
+  const dentro = aro(x - Math.sign(x) * ancho);
+  const fuera = aro(x);
+  const l: Linea[] = [];
+  for (let i = 0; i < n; i += 1) {
+    l.push([fuera[i], fuera[(i + 1) % n]]);
+    l.push([dentro[i], dentro[(i + 1) % n]]);
+    if (i % 2 === 0) l.push([dentro[i], fuera[i]]);
+  }
+  return l;
 };
 
-const TOLVA = caja(46, -18, 32, -108, 20);
-const CABINA = caja(40, -18, 42, 24, 82);
-const MORRO = caja(40, -18, 6, 82, 106);
-const RUEDAS: [V3, V3][] = [
-  ...rueda(48, -28, 84), ...rueda(-48, -28, 84),
-  ...rueda(48, -28, -30), ...rueda(-48, -28, -30),
-  ...rueda(48, -28, -72), ...rueda(-48, -28, -72),
+/* Un volquete de mina, no un camión cualquiera: tolva alta atrás, marquesina
+   volando por encima de la cabina y ruedas más altas que la propia cabina. Es
+   lo que se reconoce sin leer nada. */
+const CHASIS = caja(38, -26, -14, -96, 92);
+const TOLVA = caja(48, -14, 34, -106, 26);
+const CABINA = caja(30, -14, 24, 34, 82);
+const MORRO = caja(32, -18, 4, 82, 104);
+
+/** La marquesina: la visera que sale de la tolva y vuela sobre la cabina. */
+const MARQUESINA: Linea[] = [
+  [[-48, 34, 26], [-40, 48, 100]], [[48, 34, 26], [40, 48, 100]],
+  [[-40, 48, 100], [40, 48, 100]],
+  [[-44, 41, 63], [44, 41, 63]],
+  [[-40, 48, 100], [-30, 24, 82]], [[40, 48, 100], [30, 24, 82]],
 ];
+
+/** El parabrisas, para saber por dónde mira quien conduce. */
+const PARABRISAS: Linea[] = [
+  [[-24, -2, 82], [24, -2, 82]], [[24, -2, 82], [24, 18, 82]],
+  [[24, 18, 82], [-24, 18, 82]], [[-24, 18, 82], [-24, -2, 82]],
+];
+
 /* Las rayas de la tolva: sin ellas el camión es una caja y no se sabe cuál es
    la parte de atrás cuando el morro queda escondido. */
-const CARGA: [V3, V3][] = [-70, -40, -10].map(
-  (z) => [[-46, 32, z], [46, 32, z]] as [V3, V3],
+const CARGA: Linea[] = [-76, -48, -20].map(
+  (z) => [[-48, 34, z], [48, 34, z]] as Linea,
 );
-const FLECHA: [V3, V3][] = [
-  [[0, 44, 114], [0, 44, 154]],
-  [[0, 44, 154], [-9, 44, 141]],
-  [[0, 44, 154], [9, 44, 141]],
+
+const RUEDAS: Linea[] = [
+  ...rueda(48, 78), ...rueda(-48, 78),
+  ...rueda(48, -34), ...rueda(-48, -34),
+  ...rueda(48, -74), ...rueda(-48, -74),
 ];
 
-const ALAMBRE: { lineas: [V3, V3][]; color: string; ancho: number }[] = [
-  { lineas: TOLVA, color: 'var(--line2)', ancho: 1.9 },
-  { lineas: CARGA, color: 'var(--line2)', ancho: 1.2 },
-  { lineas: CABINA, color: 'var(--ink3)', ancho: 2.1 },
-  { lineas: MORRO, color: 'var(--ink3)', ancho: 2.1 },
-  { lineas: RUEDAS, color: 'var(--line2)', ancho: 1.6 },
+const FLECHA: Linea[] = [
+  [[0, 58, 116], [0, 58, 154]],
+  [[0, 58, 154], [-9, 58, 141]], [[0, 58, 154], [9, 58, 141]],
+];
+
+/** El suelo, en cuadrícula. Es lo que hace que se vea que hay fondo. */
+const SUELO: Linea[] = [
+  ...[-100, -50, 0, 50, 100].map((x) => [[x, -46, -120], [x, -46, 130]] as Linea),
+  ...[-120, -58, 4, 66, 130].map((z) => [[-100, -46, z], [100, -46, z]] as Linea),
+];
+
+const ALAMBRE: { lineas: Linea[]; color: string; ancho: number; op?: number }[] = [
+  { lineas: SUELO, color: 'var(--line)', ancho: 1, op: 0.5 },
+  { lineas: CHASIS, color: 'var(--line2)', ancho: 1.4 },
+  { lineas: TOLVA, color: 'var(--line2)', ancho: 1.8 },
+  { lineas: CARGA, color: 'var(--line2)', ancho: 1.1, op: 0.7 },
+  { lineas: MARQUESINA, color: 'var(--line2)', ancho: 1.6 },
+  { lineas: RUEDAS, color: 'var(--line2)', ancho: 1.3 },
+  { lineas: CABINA, color: 'var(--ink3)', ancho: 2 },
+  { lineas: MORRO, color: 'var(--ink3)', ancho: 1.8 },
+  { lineas: PARABRISAS, color: 'var(--ink3)', ancho: 1.4, op: 0.8 },
 ];
 
 // ── El equipo, macizo ───────────────────────────────────────────────────────
 
-/* En ejes del equipo y sin girar nunca: es lo que se tiene delante. Va grande a
-   propósito; a escala de verdad sería un sello dentro del camión. */
-const ANCHO = 26, ALTO = 17, CANTO = 3.5;
+/* Va grande a propósito; a escala de verdad sería un sello dentro del camión. */
+const ANCHO = 21, ALTO = 14, CANTO = 2.6;
 
 const CARAS: { pts: V3[]; cara: 'pantalla' | 'espalda' | 'canto' }[] = [
   { cara: 'pantalla', pts: [[-ANCHO, -ALTO, CANTO], [ANCHO, -ALTO, CANTO], [ANCHO, ALTO, CANTO], [-ANCHO, ALTO, CANTO]] },
@@ -198,44 +307,63 @@ const CARAS: { pts: V3[]; cara: 'pantalla' | 'espalda' | 'canto' }[] = [
   { cara: 'canto', pts: [[-ANCHO, -ALTO, -CANTO], [-ANCHO, ALTO, -CANTO], [-ANCHO, ALTO, CANTO], [-ANCHO, -ALTO, CANTO]] },
 ];
 
+/** El cristal, dentro del marco: es lo que hace que se lea como una pantalla. */
+const CRISTAL: V3[] = [
+  [-ANCHO * 0.82, -ALTO * 0.74, CANTO + 0.4], [ANCHO * 0.82, -ALTO * 0.74, CANTO + 0.4],
+  [ANCHO * 0.82, ALTO * 0.74, CANTO + 0.4], [-ANCHO * 0.82, ALTO * 0.74, CANTO + 0.4],
+];
+
+/** El borde de arriba de la pantalla: distingue una tumbada de la de al lado. */
+const CANTO_ALTO: Linea = [
+  [-ANCHO * 0.6, ALTO + 0.8, CANTO], [ANCHO * 0.6, ALTO + 0.8, CANTO],
+];
+
 const RELLENO = {
-  pantalla: 'rgb(var(--acc-rgb) / 0.30)',
-  espalda: 'rgb(var(--sur3-rgb) / 0.92)',
-  canto: 'rgb(var(--sur2-rgb) / 0.95)',
+  pantalla: 'rgb(var(--sur3-rgb) / 0.96)',
+  espalda: 'rgb(var(--sur2-rgb) / 0.96)',
+  canto: 'rgb(var(--sur3-rgb) / 0.96)',
 };
 
 /** Dónde va el equipo dentro del camión: en el salpicadero, en la cabina. */
-const SALPICADERO: V3 = [0, 12, 58];
+const SALPICADERO: V3 = [0, 6, 62];
 
-/**
- * Lo que se queda quieto es el camión, y lo que gira dentro es el equipo.
- *
- * Al revés también era correcto —el equipo delante y el camión girando
- * alrededor, que es lo que se ve de verdad— pero se leía mal: el camión salía
- * en una postura distinta cada vez y había que reconocerlo antes de poder
- * comparar nada. Así el camión es siempre el mismo camión, el morro apunta
- * siempre al mismo sitio, y lo único que cambia entre las seis posiciones es
- * cómo queda puesto el equipo. Eso se ve de un vistazo.
- */
-function Escena({ puesta, giro, alto }: { puesta: Posicion; giro: number; alto: number }) {
+function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: number }) {
   const ver = (v: V3) => proyectar(mirar(v, giro, alto));
 
-  /* Del equipo al camión: es el camino de vuelta de `colocar`, y en una matriz
-     de giro la vuelta es la traspuesta, o sea los tres productos escalares. */
-  const derecha = cruz(puesta.frente, puesta.techo);
-  const girado = (v: V3): V3 => [
-    derecha[0] * v[0] + derecha[1] * v[1] + derecha[2] * v[2],
-    puesta.techo[0] * v[0] + puesta.techo[1] * v[1] + puesta.techo[2] * v[2],
-    puesta.frente[0] * v[0] + puesta.frente[1] * v[1] + puesta.frente[2] * v[2],
-  ];
+  /* El camión no depende de la postura del equipo: solo del punto de vista. Se
+     rehace al arrastrar y no en cada cuadro del giro, que son ciento y pico
+     líneas y esto es un WebView de 2019. */
+  const camion = useMemo(
+    () =>
+      ALAMBRE.flatMap((grupo, g) =>
+        grupo.lineas.map(([a, b], i) => {
+          const p = proyectar(mirar(a, giro, alto));
+          const q = proyectar(mirar(b, giro, alto));
+          return (
+            <line
+              key={`${g}-${i}`}
+              x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
+              stroke={grupo.color}
+              strokeWidth={grupo.ancho}
+              strokeOpacity={fuerza((p[2] + q[2]) / 2) * (grupo.op ?? 1)}
+              strokeLinecap="round"
+            />
+          );
+        }),
+      ),
+    [giro, alto],
+  );
+
+  /* Girar y devolver el espejo que se le quitó al cuaternión, que es este menos
+     de la izquierda. Ver `cuaternion` para el porqué. */
+  const girado = (v: V3): V3 => {
+    const g = conCuat(postura, v);
+    return [-g[0], g[1], g[2]];
+  };
   const enElCamion = (v: V3): V3 => {
     const g = girado(v);
     return [g[0] + SALPICADERO[0], g[1] + SALPICADERO[1], g[2] + SALPICADERO[2]];
   };
-
-  /* Si la pantalla queda de espaldas, su marca no se dibuja: pintarla igual
-     sería enseñar a través del aparato justo lo que no se ve. */
-  const pantallaVisible = mirar(girado([0, 0, 1]), giro, alto)[2] > 0;
 
   /* Las caras se pintan de la más lejana a la más cercana: es lo único que
      necesita orden, y son seis. */
@@ -245,33 +373,34 @@ function Escena({ puesta, giro, alto }: { puesta: Posicion; giro: number; alto: 
     return { ...c, z, xy: p.map(proyectar) };
   }).sort((a, b) => a.z - b.z);
 
-  const puntaFlecha = ver([0, 44, 186]);
-  /* El borde de arriba de la pantalla, marcado: es lo que distingue una
-     posición tumbada de la de al lado. */
-  const arribaPantalla: [V3, V3] = [
-    enElCamion([-ANCHO * 0.62, ALTO, CANTO + 0.6]),
-    enElCamion([ANCHO * 0.62, ALTO, CANTO + 0.6]),
-  ];
+  /* Si la pantalla queda de espaldas, ni el cristal ni la marca del borde se
+     dibujan: pintarlos sería enseñar a través del aparato lo que no se ve. */
+  const daLaCara = mirar(girado([0, 0, 1]), giro, alto)[2] > 0;
+  const cristal = CRISTAL.map((v) => ver(enElCamion(v)));
+  const marca = CANTO_ALTO.map((v) => ver(enElCamion(v)));
+
+  const puntaFlecha = ver([0, 92, 140]);
+  const sombra = Array.from({ length: 18 }, (_, i) => {
+    const a = (i / 18) * Math.PI * 2;
+    return ver([Math.cos(a) * 96, -45.5, -8 + Math.sin(a) * 108]);
+  });
+
+  const puntos = (l: [number, number, number][]) =>
+    l.map((p) => `${p[0]},${p[1]}`).join(' ');
 
   return (
     <>
-      {/* El camión, transparente */}
-      {ALAMBRE.map((grupo, g) =>
-        grupo.lineas.map(([a, b], i) => {
-          const p = ver(a);
-          const q = ver(b);
-          return (
-            <line
-              key={`${g}-${i}`}
-              x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
-              stroke={grupo.color}
-              strokeWidth={grupo.ancho}
-              strokeOpacity={fuerza((p[2] + q[2]) / 2)}
-              strokeLinecap="round"
-            />
-          );
-        }),
-      )}
+      <defs>
+        <radialGradient id="mtj-sombra">
+          <stop offset="0%" stopColor="var(--acc)" stopOpacity="0.11" />
+          <stop offset="100%" stopColor="var(--acc)" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* El suelo bajo el camión: sin algo debajo, el camión flota */}
+      <polygon points={puntos(sombra)} fill="url(#mtj-sombra)" />
+
+      {camion}
 
       {/* Por dónde sale el morro */}
       {FLECHA.map(([a, b], i) => {
@@ -281,15 +410,15 @@ function Escena({ puesta, giro, alto }: { puesta: Posicion; giro: number; alto: 
           <line
             key={`f${i}`}
             x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
-            stroke="var(--acc)" strokeWidth="2.6" strokeLinecap="round"
+            stroke="var(--acc)" strokeWidth="2.4" strokeLinecap="round"
             strokeOpacity={fuerza((p[2] + q[2]) / 2)}
           />
         );
       })}
       <text
         x={puntaFlecha[0]} y={puntaFlecha[1]}
-        textAnchor="middle" fontSize="10" fontWeight="700"
-        fill="var(--acc)" letterSpacing="1.4"
+        textAnchor="middle" fontSize="9.5" fontWeight="700"
+        fill="var(--acc)" letterSpacing="1.6"
       >
         FRENTE
       </text>
@@ -298,31 +427,31 @@ function Escena({ puesta, giro, alto }: { puesta: Posicion; giro: number; alto: 
       {caras.map((c, i) => (
         <polygon
           key={i}
-          points={c.xy.map((p) => `${p[0]},${p[1]}`).join(' ')}
+          points={puntos(c.xy)}
           fill={RELLENO[c.cara]}
           stroke="var(--acc)"
-          strokeWidth={c.cara === 'pantalla' ? 1.8 : 1}
-          strokeOpacity={c.cara === 'pantalla' ? 1 : 0.45}
+          strokeWidth={c.cara === 'pantalla' ? 1.6 : 0.9}
+          strokeOpacity={c.cara === 'pantalla' ? 0.95 : 0.4}
+          strokeLinejoin="round"
         />
       ))}
 
-      {pantallaVisible && (() => {
-        const p = ver(arribaPantalla[0]);
-        const q = ver(arribaPantalla[1]);
-        return (
+      {daLaCara && (
+        <>
+          <polygon points={puntos(cristal)} fill="rgb(var(--acc-rgb) / 0.34)" />
           <line
-            x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
-            stroke="var(--acc)" strokeWidth="3" strokeLinecap="round"
+            x1={marca[0][0]} y1={marca[0][1]} x2={marca[1][0]} y2={marca[1][1]}
+            stroke="var(--acc)" strokeWidth="2.6" strokeLinecap="round"
           />
-        );
-      })()}
+        </>
+      )}
 
       {/* La leyenda va fija en la esquina y no pegada al equipo: pegada, en las
           posiciones de pie el rótulo caía justo encima y tapaba lo que nombra. */}
-      <rect x="10" y="8" width="11" height="8" rx="2"
-        fill="rgb(var(--acc-rgb) / 0.30)" stroke="var(--acc)" strokeWidth="1.2" />
-      <text x="26" y="15.5" fontSize="8.5" fontWeight="600"
-        fill="var(--ink3)" letterSpacing="1">
+      <rect x="10" y="10" width="12" height="8.5" rx="2"
+        fill="rgb(var(--acc-rgb) / 0.34)" stroke="var(--acc)" strokeWidth="1.1" />
+      <text x="27" y="17.8" fontSize="8" fontWeight="600"
+        fill="var(--ink3)" letterSpacing="1.1">
         EL EQUIPO
       </text>
     </>
@@ -330,6 +459,8 @@ function Escena({ puesta, giro, alto }: { puesta: Posicion; giro: number; alto: 
 }
 
 // ── El selector ─────────────────────────────────────────────────────────────
+
+const VISTA_INICIAL = { giro: 0.62, alto: 0.34 };
 
 export function Montaje({
   eje, invertido, referencia, alCambiar,
@@ -340,11 +471,33 @@ export function Montaje({
   alCambiar: (eje: Eje, invertido: boolean) => void;
 }) {
   const puesta = posicionDe(eje, invertido);
+  const destino = useMemo(() => cuaternion(puesta), [puesta]);
 
   /* Un poco de lado y un poco desde arriba: de frente no se vería que hay
      fondo, y es justo el fondo lo que se quiere enseñar. */
-  const [vista, setVista] = useState({ giro: 0.62, alto: 0.34 });
+  const [vista, setVista] = useState(VISTA_INICIAL);
   const arrastre = useRef<{ x: number; y: number } | null>(null);
+
+  const [postura, setPostura] = useState<Cuat>(destino);
+  const ahora = useRef<Cuat>(destino);
+
+  /* El giro, cuadro a cuadro. Con una curva suave a los dos lados: arrancar y
+     frenar de golpe se lee como un salto, que es justo lo que se evita. */
+  useEffect(() => {
+    const desde = ahora.current;
+    const t0 = Date.now();
+    let pedido = 0;
+
+    const paso = () => {
+      const t = Math.min(1, (Date.now() - t0) / GIRO_MS);
+      const s = t < 0.5 ? 2 * t * t : 1 - ((2 - 2 * t) ** 2) / 2;
+      ahora.current = entre(desde, destino, s);
+      setPostura(ahora.current);
+      if (t < 1) pedido = requestAnimationFrame(paso);
+    };
+    pedido = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(pedido);
+  }, [destino]);
 
   const [avance, setAvance] = useState<number | null>(null);
   const [restan, setRestan] = useState(0);
@@ -436,16 +589,27 @@ export function Montaje({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-line bg-bg p-3.5">
-      <div className="text-[11px] uppercase tracking-wide text-ink3">
-        Dónde está el frente del camión
+    <div className="flex flex-col gap-3.5 rounded-2xl border border-line bg-bg p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="rotulo">Dónde está el frente del camión</span>
+        <button
+          type="button"
+          onClick={() => setVista(VISTA_INICIAL)}
+          className="shrink-0 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink3"
+        >
+          Enderezar vista
+        </button>
       </div>
 
-      <div className="flex flex-col items-center gap-1.5">
+      {/* El escenario, en su propio hueco: el dibujo necesita un fondo que lo
+          separe del formulario, o se lee como un adorno del bloque de al lado.
+          Va limitado y centrado: a todo lo ancho de la columna el camión salía
+          enorme y el bloque no cabía de una vez en la pantalla. */}
+      <div className="relative mx-auto w-full max-w-[380px] overflow-hidden rounded-xl border border-line bg-sur2">
         <svg
-          viewBox="0 0 260 190"
-          className="h-[200px] w-full max-w-[330px] select-none"
-          style={{ touchAction: 'none', cursor: arrastre.current ? 'grabbing' : 'grab' }}
+          viewBox={`0 0 ${LIENZO[0]} ${LIENZO[1]}`}
+          className="block w-full select-none"
+          style={{ touchAction: 'none' }}
           onPointerDown={(e) => {
             arrastre.current = { x: e.clientX, y: e.clientY };
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -460,38 +624,39 @@ export function Montaje({
               giro: v.giro + dx * 0.012,
               /* Sin llegar a la vertical: desde el cenit exacto el camión se
                  aplasta en una raya y no se entiende nada. */
-              alto: Math.min(1.25, Math.max(-1.25, v.alto + dy * 0.012)),
+              alto: Math.min(1.2, Math.max(-0.35, v.alto + dy * 0.012)),
             }));
           }}
           onPointerUp={() => { arrastre.current = null; }}
           onPointerCancel={() => { arrastre.current = null; }}
         >
-          <Escena puesta={puesta} giro={vista.giro} alto={vista.alto} />
+          <Escena postura={postura} giro={vista.giro} alto={vista.alto} />
         </svg>
 
-        <b className="text-center text-[13px] text-acc">{puesta.nombre}</b>
-        <span className="text-center text-[11px] leading-snug text-ink3">{puesta.como}</span>
-        <span className="text-center text-[10.5px] text-ink3 opacity-70">
-          Arrastra el dibujo para mirarlo desde otro lado.
+        <span className="pointer-events-none absolute bottom-2 right-3 font-mono text-[9px] uppercase tracking-[0.1em] text-ink3 opacity-60">
+          arrastra para girar la vista
         </span>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2">
-        <Boton onClick={() => girar(-1)}>↺ Girar</Boton>
-        <Boton onClick={() => girar(1)}>Girar ↻</Boton>
-        <Boton onClick={() => setVista({ giro: 0.62, alto: 0.34 })}>
-          Enderezar vista
-        </Boton>
+      <div className="text-center">
+        <b className="text-[15px] text-acc">{puesta.nombre}</b>
+        <p className="m-0 mt-0.5 text-[11.5px] leading-snug text-ink3">{puesta.como}</p>
       </div>
 
+      {/* Las seis posiciones: cuatro girando y dos de pie. Separadas porque son
+          dos gestos distintos —dar la vuelta al aparato o ponerlo derecho— y
+          juntas en una sola fila de seis nadie las distinguía. */}
       <div className="grid grid-cols-2 gap-2">
+        <Boton className="w-full" onClick={() => girar(-1)}>↺ Girar</Boton>
+        <Boton className="w-full" onClick={() => girar(1)}>Girar ↻</Boton>
         {POSICIONES.filter((p) => p.eje === 'z').map((p) => (
           <Boton
             key={p.id}
+            className="w-full"
             variante={puesta.id === p.id ? 'fuerte' : 'normal'}
             onClick={() => elegir(p)}
           >
-            {p.id === 'detras' ? 'De pie, pantalla al conductor' : 'De pie, pantalla al frente'}
+            {p.id === 'detras' ? 'De pie, al conductor' : 'De pie, al frente'}
           </Boton>
         ))}
       </div>
