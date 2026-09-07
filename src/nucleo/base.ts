@@ -21,7 +21,7 @@
  */
 
 const BASE = 'diplus';
-const VERSION = 1;
+const VERSION = 2;
 
 export interface Lectura {
   id?: number;
@@ -62,6 +62,15 @@ const abrir = (): Promise<IDBDatabase> =>
 
       if (!db.objectStoreNames.contains('pendientes')) {
         db.createObjectStore('pendientes', { keyPath: 'id', autoIncrement: true });
+      }
+
+      /* Las calibraciones, con su historia. No se sobrescribe la anterior: una
+         calibración se hace con el camión parado y en llano, y si alguien la
+         repite mal —con el camión en una rampa, por ejemplo— hay que poder
+         volver a la buena sin tener que bajar a llano otra vez. */
+      if (!db.objectStoreNames.contains('calibraciones')) {
+        const c = db.createObjectStore('calibraciones', { keyPath: 'id', autoIncrement: true });
+        c.createIndex('que_at', ['que', 'at']);
       }
     };
 
@@ -203,6 +212,48 @@ export const podar = async (horas: number): Promise<number> => {
 
 export const vaciar = async (): Promise<void> => {
   await conTienda('lecturas', 'readwrite', (t) => t.clear());
+};
+
+/* ── Calibraciones ────────────────────────────────────────────────────────── */
+
+/**
+ * Una calibración guardada, con la fecha en que se hizo.
+ *
+ * La configuración vive en `localStorage`, que es donde tiene que estar para
+ * que la lea la pantalla, pero eso se borra: basta con vaciar los datos de la
+ * aplicación. Y una calibración de la inercial no se rehace en un minuto — hay
+ * que llevar el camión a llano, pararlo y volver a tomarla. En la base queda a
+ * salvo de eso, y además con su historia.
+ */
+export interface Calibracion {
+  id?: number;
+  /** Qué se calibró. Hoy solo `imu`; las curvas de las señales podrían ir aquí. */
+  que: string;
+  datos: unknown;
+  at: number;
+}
+
+export const guardarCalibracion = (que: string, datos: unknown): Promise<IDBValidKey> =>
+  conTienda('calibraciones', 'readwrite', (t) => t.add({ que, datos, at: Date.now() }));
+
+/** Las calibraciones de algo, de la más reciente hacia atrás. */
+export const calibraciones = async (que: string, limite = 10): Promise<Calibracion[]> => {
+  const db = await abrir();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('calibraciones', 'readonly');
+    const idx = tx.objectStore('calibraciones').index('que_at');
+    const salida: Calibracion[] = [];
+
+    const cur = idx.openCursor(IDBKeyRange.bound([que, 0], [que, Infinity]), 'prev');
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c || salida.length >= limite) return resolve(salida);
+      salida.push(c.value as Calibracion);
+      c.continue();
+    };
+    cur.onerror = () => reject(cur.error);
+  });
 };
 
 /* ── Cola de envio ────────────────────────────────────────────────────────── */

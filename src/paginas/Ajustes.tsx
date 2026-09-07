@@ -19,11 +19,13 @@ import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config
 import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
-import { hayBase, podar, resumen, vaciar } from '../nucleo/base';
+import {
+  Calibracion, calibraciones, guardarCalibracion, hayBase, podar, resumen, vaciar,
+} from '../nucleo/base';
 import { registro } from '../nucleo/registro';
 import { envio } from '../nucleo/envio';
 import { maqueta } from '../nucleo/maqueta';
-import { movimiento } from '../nucleo/movimiento';
+import { AjustesMovimiento, movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { guardarPlano } from '../nucleo/plano';
@@ -341,6 +343,7 @@ export default function Ajustes() {
   );
   const [eco, setEco] = useState<string | null>(null);
   const [peso, setPeso] = useState<{ filas: number; desde: number | null } | null>(null);
+  const [calibs, setCalibs] = useState<Calibracion[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [probando, setProbando] = useState<{ port: string; baudrate: number } | null>(null);
   const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null);
@@ -389,6 +392,16 @@ export default function Ajustes() {
     }
   };
 
+  /* Las calibraciones guardadas, para poder enseñar cuando se tomo la de ahora
+     y volver a una anterior si alguien la repitio en mal sitio. */
+  const mirarCalibraciones = async () => {
+    try {
+      setCalibs(await calibraciones('imu', 5));
+    } catch {
+      setCalibs([]);
+    }
+  };
+
   const mirarPeso = async () => {
     try {
       setPeso(await resumen());
@@ -399,6 +412,7 @@ export default function Ajustes() {
 
   useEffect(() => {
     if (pestana === 'datos') mirarPeso();
+    if (pestana === 'inercial') mirarCalibraciones();
   }, [pestana]);
 
   useEffect(() =>
@@ -1218,6 +1232,12 @@ export default function Ajustes() {
                       {cfg.movimiento.ref ? (
                         <Nota>
                           Calibrado. La inclinación se mide contra esta posición.
+                          {calibs[0] && (
+                            <>
+                              {' '}Guardada en la base del equipo el{' '}
+                              <b>{new Date(calibs[0].at).toLocaleString('es-PE')}</b>.
+                            </>
+                          )}
                         </Nota>
                       ) : (
                         <Aviso tono="warn">
@@ -1234,8 +1254,15 @@ export default function Ajustes() {
                               setEco('Todavía no llegan lecturas del sensor.');
                               return;
                             }
-                            aplicar({ ...cfg, movimiento: { ...cfg.movimiento, ref: r } });
-                            setEco('Calibrado con la posición actual.');
+                            const m = { ...cfg.movimiento, ref: r };
+                            aplicar({ ...cfg, movimiento: m });
+                            /* Y a la base, que es lo único que sobrevive a
+                               borrar los datos de la aplicación. Tomarla nueva
+                               obliga a llevar el camión a llano otra vez. */
+                            guardarCalibracion('imu', m)
+                              .then(() => mirarCalibraciones())
+                              .catch(() => undefined);
+                            setEco('Calibrado con la posición actual, y guardado en la base.');
                           }}
                         >
                           Calibrar aquí
@@ -1249,6 +1276,23 @@ export default function Ajustes() {
                             }
                           >
                             Borrar
+                          </Boton>
+                        )}
+
+                        {/* Volver a una anterior sin bajar a llano otra vez: es
+                            para cuando alguien la repite en una rampa. */}
+                        {calibs.length > 1 && (
+                          <Boton
+                            onClick={() => {
+                              const previa = calibs[1].datos as AjustesMovimiento;
+                              if (!previa?.ref) return;
+                              aplicar({ ...cfg, movimiento: previa });
+                              setEco(
+                                `Recuperada la del ${new Date(calibs[1].at).toLocaleString('es-PE')}.`,
+                              );
+                            }}
+                          >
+                            Volver a la anterior
                           </Boton>
                         )}
                       </div>
