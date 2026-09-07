@@ -13,6 +13,7 @@ import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 import { AjustesPorSenal } from './senales';
 import { AjustesEnvio, ENVIO_POR_DEFECTO } from './envio';
+import { AjustesRumbo, RUMBO_POR_DEFECTO } from './rumbo';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -57,6 +58,8 @@ export interface Config {
   /** Las tarjetas del panel de la pantalla principal, en el orden en que se ven. */
   panel: Tarjeta[];
   gps: { ruta: string; baudios: number; activo: boolean };
+  /** Cuando el mapa gira con la marcha y cuanto se suaviza. */
+  rumbo: AjustesRumbo;
   servidor: Servidor;
   /** A dónde salen las lecturas: en directo por socket y por lotes a una API. */
   envio: AjustesEnvio;
@@ -86,6 +89,7 @@ const POR_DEFECTO: Config = {
   /* 921600 no es un capricho: es la velocidad a la que esta el puerto del
      receptor en este equipo, medida con stty. A 9600 no se leeria nada. */
   gps: { ruta: '/dev/ttyHSL2', baudios: 921600, activo: true },
+  rumbo: RUMBO_POR_DEFECTO,
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: {
     activo: false, url: 'https://miskimayo-back.wapsi.io/api', token: '',

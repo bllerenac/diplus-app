@@ -23,6 +23,7 @@ import {
   Calibracion, calibraciones, guardarCalibracion, hayBase, podar, resumen, vaciar,
 } from '../nucleo/base';
 import { registro } from '../nucleo/registro';
+import { rumbo } from '../nucleo/rumbo';
 import { envio } from '../nucleo/envio';
 import { maqueta } from '../nucleo/maqueta';
 import { AjustesMovimiento, movimiento } from '../nucleo/movimiento';
@@ -429,6 +430,7 @@ export default function Ajustes() {
     guardar(c);
     registro.aplicar(c.registro);
     envio.aplicar(c.envio);
+    rumbo.aplicar(c.rumbo);
     setEco(`Guardado a las ${new Date().toLocaleTimeString('es-PE')}`);
     setTimeout(() => setEco(null), 2500);
   };
@@ -1510,6 +1512,80 @@ export default function Ajustes() {
                 una que el receptor ya tiene con satélites. Sin satélites no hay posición, con
                 correcciones o sin ellas.
               </Aviso>
+            </Bloque>
+
+            <Bloque titulo="Cuándo gira el mapa">
+              <Nota>
+                Arriba es siempre hacia donde se va, y para eso el mapa gira con la marcha. Pero
+                el rumbo del receptor sale de comparar dos posiciones, así que{' '}
+                <b>parado no significa nada</b>: devuelve cero, o el último valor, o ruido, y el
+                mapa se ponía a girar solo con el camión detenido.
+              </Nota>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo
+                  etiqueta="Se queda quieto por debajo de (km/h)"
+                  ayuda="Ahí el camión maniobra o está parado, y su rumbo no dice nada."
+                >
+                  <Entrada
+                    type="number" step="0.5" min={0}
+                    value={Number((cfg.rumbo.minima * 3.6).toFixed(1))}
+                    onChange={(e) =>
+                      aplicar({
+                        ...cfg,
+                        rumbo: { ...cfg.rumbo, minima: (Number(e.target.value) || 0) / 3.6 },
+                      })
+                    }
+                  />
+                </Campo>
+                <Campo
+                  etiqueta="Y vuelve a girar pasando de (km/h)"
+                  ayuda="Más alto que el anterior a propósito; si no, se enciende y apaga solo."
+                >
+                  <Entrada
+                    type="number" step="0.5" min={0}
+                    value={Number((cfg.rumbo.suelta * 3.6).toFixed(1))}
+                    onChange={(e) =>
+                      aplicar({
+                        ...cfg,
+                        rumbo: { ...cfg.rumbo, suelta: (Number(e.target.value) || 0) / 3.6 },
+                      })
+                    }
+                  />
+                </Campo>
+              </div>
+
+              {cfg.rumbo.suelta <= cfg.rumbo.minima && (
+                <Aviso tono="warn">
+                  El segundo tiene que ser mayor que el primero. Con los dos iguales, un camión
+                  que oscile alrededor de esa velocidad engancha y suelta el giro sin parar.
+                </Aviso>
+              )}
+
+              <Campo
+                etiqueta="Suavizado"
+                ayuda="Cuánto pesa el rumbo anterior. Más suave aguanta mejor los tirones y llega un poco más tarde a las curvas."
+              >
+                <Selector
+                  value={String(cfg.rumbo.suavizado)}
+                  onChange={(e) =>
+                    aplicar({
+                      ...cfg,
+                      rumbo: { ...cfg.rumbo, suavizado: Number(e.target.value) },
+                    })
+                  }
+                >
+                  <option value="0">Ninguno · el rumbo tal cual</option>
+                  <option value="0.3">Poco</option>
+                  <option value="0.55">Normal</option>
+                  <option value="0.75">Mucho</option>
+                </Selector>
+              </Campo>
+
+              <Nota>
+                Se ajusta en el camión, no aquí: sal a dar una vuelta y mira si el mapa persigue
+                los tirones —súbelo— o si llega tarde a las curvas —bájalo—.
+              </Nota>
             </Bloque>
 
             <Bloque titulo="Plano de la mina y geocercas">

@@ -18,6 +18,7 @@ import { Config, alCambiar, cargar, guardar } from '../nucleo/config';
 import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
+import { rumbo } from '../nucleo/rumbo';
 import { envio } from '../nucleo/envio';
 import { Senal } from '../nucleo/lecturas';
 import { HUECOS, calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
@@ -209,11 +210,18 @@ export default function Navegacion() {
    * cambia con cada posicion y volver a dibujar la pantalla entera por un
    * angulo seria un desperdicio.
    *
-   * El camino corto: de 350 a 10 grados se gira 20, no 340.
+   * El camino corto: de 350 a 10 grados se gira 20, no 340. Se acumula en vez
+   * de normalizar para que el navegador tambien gire por el lado corto.
+   *
+   * Cuando toca girar y con que angulo lo decide `nucleo/rumbo`: aqui solo se
+   * pinta. `null` significa que el mapa se queda como esta.
    */
-  const girar = (rumbo: number) => {
+  const girar = (p: Posicion) => {
     if (!lienzo.current) return;
-    let d = rumbo - rumboPuesto.current;
+    const grados = rumbo.siguiente(p.rumbo, p.velocidad);
+    if (grados === null) return;
+
+    let d = grados - rumboPuesto.current;
     while (d > 180) d -= 360;
     while (d < -180) d += 360;
     rumboPuesto.current += d;
@@ -355,7 +363,7 @@ export default function Navegacion() {
         mapa.current.setView(punto, 17);
       }
       marca.current?.setLatLng(punto);
-      girar(p.rumbo);
+      girar(p);
       traza.current?.setLatLngs(gps.camino());
       if (seguirRef.current) mapa.current?.panTo(punto, { animate: true, duration: 0.4 });
     });
@@ -414,6 +422,7 @@ export default function Navegacion() {
     /* Y el envío, por lo mismo: un equipo encendido tiene que estar mandando
        aunque nadie haya abierto la configuración en todo el turno. */
     envio.aplicar(cfg.envio);
+    rumbo.aplicar(cfg.rumbo);
 
     const quitarTramas = hardware.alRecibir((t: TramaVista) => {
       setValores((prev) => {

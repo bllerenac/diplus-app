@@ -1,7 +1,7 @@
 # De dónde sale el rumbo del mapa, y qué le falta
 
-Nota del 6 de septiembre de 2026. Pendiente de hacer; queda escrito para no
-volver a averiguarlo.
+Nota del 6 de septiembre de 2026. **El umbral y el suavizado ya estan hechos**
+—ver `nucleo/rumbo.ts`—; lo que queda pendiente es lo del giroscopo, al final.
 
 ## Cómo está hoy
 
@@ -9,7 +9,7 @@ El rumbo sale **solo del GPS**. La unidad inercial no interviene.
 
 - Con el RTK: `course` de la sentencia NMEA — `nucleo/gps.ts:118`.
 - Con el GPS interno de respaldo: `bearing` de Android — `nucleo/gps.ts:138`.
-- Se aplica en `paginas/Navegacion.tsx:358`, `girar(p.rumbo)`.
+- Se filtra en `nucleo/rumbo.ts` y se aplica en `paginas/Navegacion.tsx`, `girar(p)`.
 
 **La flecha no rota nunca**: apunta siempre hacia arriba de la pantalla. Lo que
 gira es el mapa por debajo (`--giro` sobre el lienzo) y los nombres de las
@@ -20,27 +20,41 @@ Los dos valores son **rumbo sobre el terreno**: la dirección entre dos
 posiciones seguidas. Hacia dónde **se mueve** el camión, no hacia dónde
 **mira**.
 
-## Lo que falla
+## Lo que fallaba
 
 **Parado, el rumbo no significa nada.** Sin movimiento no hay dos posiciones
 que comparar: el receptor devuelve cero o el último valor, con ruido. El mapa
-puede girar solo con el camión detenido. Y hoy no hay ningún umbral: `girar()`
-se llama con cada posición, vaya a 40 km/h o esté parado en la cola de la pala.
+giraba solo con el camión detenido en la cola de la pala. No había ningún
+umbral: `girar()` se llamaba con cada posición, fuera a 40 km/h o parado.
+
+**Y daba tirones**, porque el mapa perseguía el rumbo entero, ruido incluido.
 
 **Marcha atrás sale al revés.** El rumbo apunta a donde va, así que retrocediendo
-el mapa se da la vuelta aunque el camión siga mirando al mismo sitio.
+el mapa se da la vuelta aunque el camión siga mirando al mismo sitio. Esto no
+tiene arreglo desde el GPS y sigue igual.
 
-## Qué hacer
+## Qué se hizo, el 7 de septiembre
 
-1. **Umbral de velocidad con histéresis.** Por debajo de ~1,5 m/s el mapa se
-   queda como estaba; vuelve a girar por encima de ~2,5. Dos números y no uno:
-   con uno solo, un camión oscilando alrededor del umbral engancha y suelta el
-   giro sin parar. Se lleva la mayor parte del problema.
-2. **Suavizado y tope de grados por segundo.** El rumbo del receptor da
-   tirones; que el mapa persiga el valor en vez de saltar a él.
+Todo en `nucleo/rumbo.ts`, con sus pruebas en `nucleo.test.ts`.
 
-Los dos umbrales, configurables desde Posición: se ajustan en el camión, no
-aquí.
+1. **Umbral de velocidad con histéresis.** Por debajo de 1,5 m/s el mapa se
+   queda como estaba; vuelve a girar pasando de 2,5. Dos números y no uno: con
+   uno solo, un camión oscilando alrededor del umbral engancha y suelta el giro
+   sin parar.
+2. **Suavizado.** El rumbo que se pinta es una media con el anterior, así los
+   tirones se quedan en el filtro y las curvas de verdad pasan.
+
+Los dos umbrales y el suavizado, configurables desde Posición: se ajustan en el
+camión, no aquí.
+
+**Tope de grados por segundo no hay, y es a propósito.** La animación ya la hace
+el navegador —medio segundo de transición sobre `.nav-lienzo`— y añadir un tope
+propio serían dos frenos peleándose, con el mapa llegando tarde a las curvas sin
+saber cuál de los dos lo retrasa.
+
+Comprobado en el equipo: parado sobre la mesa con fix real, `--giro` no llega a
+escribirse nunca; con la maqueta andando, va de −39,6° a −29,9° en veinte
+segundos, poco a poco.
 
 ## Qué no hacer, y por qué
 

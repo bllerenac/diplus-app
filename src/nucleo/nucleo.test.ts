@@ -15,6 +15,7 @@ import { aplicar as aplicarCurva, ordenar as ordenarCurva, revisar as revisarCur
 import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
+import { Rumbo } from './rumbo';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 
@@ -623,5 +624,56 @@ describe('curvas de calibracion', () => {
       { crudo: 20, real: 5 },
     ])).toMatch(/baja/);
     expect(revisarCurva(puntos)).toBeNull();
+  });
+});
+
+describe('el rumbo del mapa', () => {
+  const nuevo = () => {
+    const r = new Rumbo();
+    r.aplicar({ minima: 1.5, suelta: 2.5, suavizado: 0.5 });
+    return r;
+  };
+
+  it('no gira el mapa con el camion parado', () => {
+    const r = nuevo();
+    expect(r.siguiente(90, 0)).toBeNull();
+    expect(r.siguiente(273, 0.4)).toBeNull();
+  });
+
+  it('adopta el primer rumbo bueno tal cual, sin arrastrarse desde el norte', () => {
+    const r = nuevo();
+    expect(r.siguiente(200, 8)).toBe(200);
+  });
+
+  it('promedia con lo anterior en vez de perseguir cada tiron', () => {
+    const r = nuevo();
+    r.siguiente(100, 8);
+    expect(r.siguiente(120, 8)).toBe(110);
+    expect(r.siguiente(120, 8)).toBe(115);
+  });
+
+  it('promedia por la vuelta corta: de 350 a 10 sube, no baja 340 grados', () => {
+    const r = nuevo();
+    r.siguiente(350, 8);
+    expect(r.siguiente(10, 8)).toBe(0);
+  });
+
+  /* Los dos umbrales son el punto: con uno solo, un camion oscilando alrededor
+     del limite engancharia y soltaria el giro sin parar. */
+  it('sigue girando entre los dos umbrales, y solo se suelta por debajo del bajo', () => {
+    const r = nuevo();
+    r.siguiente(100, 8);
+    expect(r.siguiente(110, 2)).not.toBeNull();
+    expect(r.vivo()).toBe(true);
+    expect(r.siguiente(110, 1.4)).toBeNull();
+    expect(r.siguiente(110, 2)).toBeNull();
+    expect(r.siguiente(110, 3)).not.toBeNull();
+  });
+
+  it('al volver a arrancar sigue donde estaba, no da un salto al norte', () => {
+    const r = nuevo();
+    r.siguiente(300, 8);
+    r.siguiente(300, 0);
+    expect(r.siguiente(300, 8)).toBe(300);
   });
 });
