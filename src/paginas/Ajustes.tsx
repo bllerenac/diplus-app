@@ -29,11 +29,10 @@ import { maqueta } from '../nucleo/maqueta';
 import { AjustesMovimiento, movimiento } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
-import { guardarPlano } from '../nucleo/plano';
 import { revisar } from '../nucleo/curva';
-import { AjustesSenal, AJUSTES_POR_DEFECTO, ajustar, ajustesDe } from '../nucleo/senales';
+import { AjustesSenal, ajustar, ajustesDe } from '../nucleo/senales';
 import {
-  ICONOS, Tarjeta, VISTAS, VistaTarjeta, esPrincipal, iconoSugerido, nuevaTarjeta, panelDeCamion, panelFijo, vista,
+  ICONOS, Tarjeta, VISTAS, VistaTarjeta, esPrincipal, iconoSugerido, nuevaTarjeta, panelFijo, vista,
 } from '../nucleo/panel';
 import {
   Descarga, VersionInstalada, actualizador, arreglarDireccion, esMasNueva, hayActualizador, reparo,
@@ -527,21 +526,6 @@ export default function Ajustes() {
     cambiarPanel(p);
   };
 
-  /**
-   * Pone o quita una señal de una tarjeta.
-   *
-   * Cuando la tarjeta ya esta llena se sustituye la mas antigua en vez de no
-   * hacer nada: pulsar y que no pase nada parece que la pantalla se colgo.
-   */
-  const elegirSenal = (t: Tarjeta, clave: string) => {
-    const cabe = vista(t.vista).senales;
-    if (t.claves.includes(clave)) {
-      cambiarTarjeta(t.id, { claves: t.claves.filter((c) => c !== clave) });
-      return;
-    }
-    const claves = [...t.claves, clave];
-    cambiarTarjeta(t.id, { claves: claves.slice(-cabe) });
-  };
   const disponibles = useMemo(() => [...vistas.entries()], [vistas]);
   /* La inercial va en su pestaña: no llega por ningun cable, la mide el propio
      equipo, y mezclarla con los sensores del camion confundia las dos cosas. */
@@ -901,57 +885,6 @@ export default function Ajustes() {
             </Bloque>
           )}
 
-          {/* ── Qué está llegando ──────────────────────────────────────── */}
-          {pestana === 'panel' && (
-            <Bloque titulo="Qué está llegando ahora mismo">
-              <Nota>
-                Todo lo que el equipo esté leyendo, venga por donde venga. La columna de la
-                izquierda es el nombre con el que hay que buscarlo abajo; la de la derecha, lo
-                último que se recibió. Si algo no aparece aquí, no se puede poner en el panel.
-              </Nota>
-
-              {disponibles.length === 0 ? (
-                <Vacio>
-                  Todavía no llega nada. Da de alta un sensor en la pestaña Sensores, o
-                  enciende los datos de prueba más abajo para ver cómo queda el panel.
-                </Vacio>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-line">
-                  {disponibles.map(([clave, s], i) => {
-                    const f = cfg.fuentes.find((x) => clave.startsWith(`${x.id}.`));
-                    const de = clave.startsWith('imu.')
-                      ? 'inercial del equipo'
-                      : f
-                        ? `${f.nombre} · ${NOMBRE_PUERTO[f.puerto] ?? f.puerto}`
-                        : 'sin fuente';
-
-                    return (
-                      <div
-                        key={clave}
-                        className={`flex items-center gap-3 px-3.5 py-2 ${i % 2 ? 'bg-bg' : 'bg-sur2'}`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[13px] text-ink">{s.nombre}</div>
-                          <div className="truncate font-mono text-[10.5px] text-ink3">
-                            {clave} · {de}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <b className="tabular-nums text-[15px] text-ink">
-                            {s.valor === null || s.valor === undefined ? '—' : String(s.valor)}
-                          </b>
-                          {s.unidad && (
-                            <em className="ml-1 font-mono text-[11px] not-italic text-ink3">{s.unidad}</em>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Bloque>
-          )}
-
           {/* ── Los huecos del panel ───────────────────────────────────── */}
           {pestana === 'panel' && (
             <Bloque titulo="Qué va en cada cuadro del panel">
@@ -960,6 +893,13 @@ export default function Ajustes() {
                 revoluciones, temperatura y aire de ruedas. Ya vienen con su instrumento, su
                 icono y su unidad; lo único que hay que decirles es <b>qué señal leen</b>. Debajo
                 quedan cuadros libres para lo que traiga cada instalación.
+              </Nota>
+
+              <Nota>
+                Aquí se decide <b>cómo se ve</b> cada señal. Cómo se llama, en qué unidad y su
+                curva de calibración son de la señal, no del cuadro, y se tocan en{' '}
+                <b>Sensores → Detalles</b>: así siguen siendo las mismas se enseñen donde se
+                enseñen. Lo que se ponga aquí de nombre o unidad solo cambia este cuadro.
               </Nota>
 
               {cfg.panel.map((t, i) => {
@@ -1087,16 +1027,6 @@ export default function Ajustes() {
                           >
                             {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
                           </Selector>
-                        </Campo>
-                      )}
-
-                      {forma.usa.includes('decimales') && (
-                        <Campo etiqueta="Multiplicar por" ayuda="Para pasar de unidad. 1 = tal cual.">
-                          <Entrada
-                            type="number" step="any"
-                            value={t.factor}
-                            onChange={(e) => cambiarTarjeta(t.id, { factor: Number(e.target.value) || 1 })}
-                          />
                         </Campo>
                       )}
 

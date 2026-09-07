@@ -37,15 +37,6 @@ export interface Tarjeta {
   grande: boolean;
   /** Nombre del icono en lucide. Vacío = sin icono. */
   icono: string;
-  /**
-   * Multiplica el valor antes de enseñarlo.
-   *
-   * Un caudalímetro da litros por hora y en la mina se habla en galones. La
-   * conversión va aquí y no en el protocolo porque es cosa de cómo se quiere
-   * leer, no de cómo llega el dato: el mismo sensor puede verse en las dos
-   * unidades en dos tarjetas distintas.
-   */
-  factor: number;
 }
 
 /** Cada forma de presentar, con lo que necesita. La pantalla se dibuja de aqui. */
@@ -188,7 +179,6 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
   alto: null,
   grande: false,
   icono: '',
-  factor: 1,
 });
 
 /**
@@ -205,7 +195,7 @@ export const nuevaTarjeta = (v: VistaTarjeta = 'numero'): Tarjeta => ({
  * cada instalacion: un totalizador, un segundo caudalímetro, lo que sea.
  *
  * Configurar es entonces una sola decisión por cuadro —qué señal va aquí—, y
- * como mucho ajustar la unidad o el factor si el aparato da otra cosa. Nada
+ * como mucho la unidad o los limites si el aparato da otra cosa. Nada
  * mas.
  */
 const PRINCIPALES: Partial<Tarjeta>[] = [
@@ -258,78 +248,6 @@ export const panelFijo = (): Tarjeta[] => [
 /** Si un cuadro es de los cuatro de arriba. Se usa para agruparlos en Ajustes. */
 export const esPrincipal = (t: Tarjeta) => t.id.startsWith('principal');
 
-/**
- * Un panel de camion armado de una vez.
- *
- * Montarlo tarjeta a tarjeta la primera vez es tedioso y no enseña de que es
- * capaz esto. Se le pasan las claves que ya han llegado y arma lo que puede:
- * el consumo como resta de los dos caudalimetros, el nivel con su barra, y el
- * resto en numeros. Lo que no encuentra, no lo inventa.
- */
-export const panelDeCamion = (claves: string[]): Tarjeta[] => {
-  const busca = (...trozos: string[]) =>
-    claves.find((c) => trozos.every((t) => c.toLowerCase().includes(t)));
-
-  const tarjetas: Tarjeta[] = [];
-  const puesta = new Set<string>();
-
-  const ida = busca('caudal', 'ida');
-  const retorno = busca('caudal', 'retorno');
-  if (ida && retorno) {
-    tarjetas.push({
-      ...nuevaTarjeta('diferencia'),
-      id: 't-consumo',
-      titulo: 'Consumo',
-      icono: 'Droplet',
-      claves: [ida, retorno],
-      unidad: 'gal/h',
-      /* El caudalímetro da litros; en la mina se habla en galones. */
-      factor: 1 / 3.785,
-      decimales: 1,
-      grande: true,
-    });
-    puesta.add(ida).add(retorno);
-  }
-
-  const nivel = busca('nivel');
-  if (nivel) {
-    tarjetas.push({
-      ...nuevaTarjeta('tanque'),
-      id: 't-nivel',
-      titulo: 'Combustible',
-      icono: 'Fuel',
-      claves: [nivel],
-      decimales: 0,
-      min: 0,
-      max: 400,
-      bajo: 60,
-      grande: true,
-    });
-    puesta.add(nivel);
-  }
-
-  for (const c of claves) {
-    if (puesta.has(c)) continue;
-    /* Cada magnitud con la forma que le corresponde: la temperatura en
-       termómetro, porque no se piensa como «cuánto de lo que cabe»; las
-       revoluciones y las presiones en cuadrante, que es su instrumento de
-       toda la vida. El resto, número. */
-    const esTermometro = /temp/i.test(c);
-    const esAguja = /rpm|revoluc|presi|aire|neumat|rueda/i.test(c);
-
-    tarjetas.push({
-      ...nuevaTarjeta(esTermometro ? 'termometro' : esAguja ? 'cuadrante' : 'numero'),
-      id: `t-${c}`,
-      claves: [c],
-      decimales: /rpm|revoluc/i.test(c) ? 0 : 1,
-      min: 0,
-      max: /rpm|revoluc/i.test(c) ? 2500 : /temp/i.test(c) ? 120 : /aire|presi/i.test(c) ? 10 : 100,
-      icono: iconoSugerido(c),
-    });
-  }
-
-  return tarjetas;
-};
 
 /** Lo que la pantalla necesita saber para pintar una tarjeta. */
 export interface ValorTarjeta {
@@ -395,9 +313,6 @@ export const calcular = (
   if (t.vista === 'diferencia') valor = (n[0] as number) - (n[1] as number);
   else if (t.vista === 'suma') valor = (n[0] as number) + (n[1] as number);
   else valor = n[0] as number;
-
-  /* Antes de los umbrales: se compara con lo que el conductor ve. */
-  if (t.factor && t.factor !== 1) valor *= t.factor;
 
   let estado: ValorTarjeta['estado'] = 'ok';
   if (t.bajo !== null && valor < t.bajo) estado = 'bajo';
