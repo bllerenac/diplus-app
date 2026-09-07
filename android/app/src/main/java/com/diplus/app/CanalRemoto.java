@@ -63,6 +63,14 @@ public class CanalRemoto extends Service {
     private ServerSocket puerta;
     private Thread hilo;
 
+    /* El token y el puerto se guardan aqui y se releen en cada peticion, no se
+       capturan al arrancar el hilo. Antes se capturaban, asi que cambiar el
+       token en Ajustes no cerraba la puerta al viejo: seguia abriendo hasta que
+       alguien matara la aplicacion. Un cierre que se cambia y no cambia es peor
+       que no tener cierre, porque se cree que esta cambiado. */
+    private volatile String token = "";
+    private volatile int puerto = 0;
+
     /** Lo ultimo que la aplicacion conto de si misma. Lo publica el lado TypeScript. */
     private static volatile String estado = "{\"estado\":\"la aplicación aún no ha publicado nada\"}";
 
@@ -81,15 +89,25 @@ public class CanalRemoto extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        int puerto = intent != null ? intent.getIntExtra(EXTRA_PUERTO, 8787) : 8787;
-        String token = intent != null ? intent.getStringExtra(EXTRA_TOKEN) : null;
+        int pedido = intent != null ? intent.getIntExtra(EXTRA_PUERTO, 8787) : 8787;
+        String pedidoToken = intent != null ? intent.getStringExtra(EXTRA_TOKEN) : null;
 
-        avisar(puerto);
+        this.token = pedidoToken == null ? "" : pedidoToken;
+
+        avisar(pedido);
         reabrirAdbPorRed();
         levantarRedCableada();
 
+        /* Cambiar de puerto si obliga a rehacer la escucha: el socket ya esta
+           atado al de antes. Se cierra y el hilo sale solo. */
+        if (vivo.get() && this.puerto != pedido) {
+            vivo.set(false);
+            cerrarPuerta();
+        }
+        this.puerto = pedido;
+
         if (vivo.compareAndSet(false, true)) {
-            hilo = new Thread(() -> servir(puerto, token == null ? "" : token));
+            hilo = new Thread(this::servir);
             hilo.start();
         }
 
@@ -101,11 +119,7 @@ public class CanalRemoto extends Service {
     @Override
     public void onDestroy() {
         vivo.set(false);
-        try {
-            if (puerta != null) puerta.close();
-        } catch (Exception ignorado) {
-            /* Se esta cerrando de todos modos. */
-        }
+        cerrarPuerta();
         super.onDestroy();
     }
 
@@ -116,14 +130,23 @@ public class CanalRemoto extends Service {
 
     /* ── El servidor ───────────────────────────────────────────────────────── */
 
-    private void servir(int puerto, String token) {
+    private void cerrarPuerta() {
+        try {
+            if (puerta != null) puerta.close();
+        } catch (Exception ignorado) {
+            /* Se esta cerrando de todos modos. */
+        }
+    }
+
+    private void servir() {
+        int mio = puerto;
         try {
             puerta = new ServerSocket();
             puerta.setReuseAddress(true);
-            puerta.bind(new InetSocketAddress(puerto));
-            Log.i(TAG, "Canal escuchando en el puerto " + puerto);
+            puerta.bind(new InetSocketAddress(mio));
+            Log.i(TAG, "Canal escuchando en el puerto " + mio);
         } catch (Exception e) {
-            Log.e(TAG, "No se pudo abrir el puerto " + puerto, e);
+            Log.e(TAG, "No se pudo abrir el puerto " + mio, e);
             vivo.set(false);
             return;
         }
@@ -136,6 +159,7 @@ public class CanalRemoto extends Service {
                 if (vivo.get()) Log.w(TAG, "conexión fallida: " + e.getMessage());
             }
         }
+        cerrarPuerta();
     }
 
     private void atender(Socket s, String token) throws Exception {
