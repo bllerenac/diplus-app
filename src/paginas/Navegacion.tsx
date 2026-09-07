@@ -20,7 +20,7 @@ import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/har
 import { registro } from '../nucleo/registro';
 import { envio } from '../nucleo/envio';
 import { Senal } from '../nucleo/lecturas';
-import { calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
+import { HUECOS, calcular, nuevaTarjeta, texto, titulo } from '../nucleo/panel';
 import { maqueta } from '../nucleo/maqueta';
 import { guardado } from '../nucleo/servidor';
 import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
@@ -521,13 +521,15 @@ export default function Navegacion() {
   const vaConsumo = galones === null ? 'bien' : comoVoy(galones, consejo.galonesHora);
 
   /**
-   * Las tarjetas que caben sin desplazar.
+   * Las tarjetas del panel, todas.
    *
    * El panel no tiene barra de desplazamiento a propósito: conduciendo no se
-   * desplaza nada. Lo que no cabe, no se enseña, así que el orden de las
-   * tarjetas en Configuración decide qué se ve.
+   * desplaza nada. Cuando era una lista libre eso obligaba a cortar por donde
+   * dejara de caber —seis— y lo demás no se enseñaba. Ahora los huecos son
+   * fijos y son ocho, elegidos para que quepan: cortar por seis solo escondía
+   * dos que en Configuración se veían puestos, que es peor que no tenerlos.
    */
-  const vitales = useMemo(() => tarjetas.slice(0, 6), [tarjetas]);
+  const vitales = useMemo(() => tarjetas.slice(0, HUECOS), [tarjetas]);
 
   return (
     <IonPage>
