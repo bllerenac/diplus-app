@@ -95,7 +95,7 @@ const POR_DEFECTO: Config = {
   registro: { activo: true, cadaMs: 5000, retencionHoras: 72, claves: [] },
   servidor: {
     activo: false, url: 'https://miskimayo-back.wapsi.io/api', token: '',
-    cadaSeg: 30, equipo: '', usuario: '', clave: '',
+    cadaSeg: 30, equipo: 'SC-03', usuario: '', clave: '',
   },
   envio: ENVIO_POR_DEFECTO,
   actualizacion: {

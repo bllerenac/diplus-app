@@ -153,7 +153,7 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
     topic: '/miskimayo/diplus/{{unit_id}}',
     cadaSeg: 5,
   },
-  equipo: '',
+  equipo: 'SC-03',
   formato: 'lista',
 };
 
@@ -302,7 +302,7 @@ export const cuerpoMqtt = (
   const imuRoll    = porClaveONombre(undefined, 'giro');
   const imuHeading = null;  /* No disponible en este hardware */
 
-  const unitId = equipo || 'HT-01';
+  const unitId = equipo || 'SC-03';
   const topicReal = topic.replace('{{unit_id}}', unitId);
 
   const payload = {
@@ -532,7 +532,7 @@ class Envio {
    * El POST, por el camino nativo cuando lo hay.
    */
   private async entregar(cuerpo: unknown): Promise<void> {
-    const unitId = this.cfg.equipo || 'HT-01';
+    const unitId = this.cfg.equipo || 'SC-03';
     const url = this.cfg.api.url.replace('{{unit_id}}', unitId).trim();
     const headers = {
       'Content-Type': 'application/json',
