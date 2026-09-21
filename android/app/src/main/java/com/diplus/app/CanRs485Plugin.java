@@ -252,31 +252,51 @@ public class CanRs485Plugin extends Plugin {
     }
 
     @PluginMethod
-    public void startGpsListener(PluginCall call) {
-        /* Si el permiso no esta, se pide antes de tocar nada. Sin el, el
-           LocationManager falla y el receptor entrega sentencias vacias para
-           siempre: parece una antena sin cielo y es un permiso sin conceder. */
+    public void solicitarPermisosUbicacion(PluginCall call) {
         if (getPermissionState(UBICACION) != PermissionState.GRANTED) {
             requestPermissionForAlias(UBICACION, call, "trasPedirUbicacion");
-            return;
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("concedido", true);
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void startGpsListener(PluginCall call) {
+        /* Se pide el permiso dinámico para el GPS interno de Android (LocationManager),
+           pero NUNCA bloqueamos la lectura del puerto serie /dev/ttyHSL2 (RTK externo). */
+        if (getPermissionState(UBICACION) != PermissionState.GRANTED) {
+            try {
+                requestPermissionForAlias(UBICACION, call, "trasPedirUbicacion");
+            } catch (Exception e) {
+                Log.w(TAG, "No se pudo solicitar permiso de ubicacion: " + e.getMessage());
+            }
         }
         arrancarGps(call);
     }
 
     @PermissionCallback
     private void trasPedirUbicacion(PluginCall call) {
-        if (getPermissionState(UBICACION) != PermissionState.GRANTED) {
-            /* Se sigue igual: el puerto serie se lee sin permiso, y algo es
-               mejor que nada. Pero se dice, para que no parezca una averia. */
-            Log.w(TAG, "Sin permiso de ubicacion: el receptor no fijara posicion");
+        if (getPermissionState(UBICACION) == PermissionState.GRANTED) {
+            activarLocationManager();
+        } else {
+            Log.w(TAG, "Sin permiso de ubicacion: el GPS interno no fijara posicion, usando solo RTK serie.");
         }
-        arrancarGps(call);
+        if (call != null) {
+            try {
+                JSObject ret = new JSObject();
+                ret.put("status", "started");
+                ret.put("concedido", getPermissionState(UBICACION) == PermissionState.GRANTED);
+                call.resolve(ret);
+            } catch (Exception e) {
+                /* Call may have already resolved in arrancarGps */
+            }
+        }
     }
 
-    private void arrancarGps(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyHSL2");
-        int baudrate = call.getInt("baudrate", 921600);
-
+    private void activarLocationManager() {
+        if (locationManager != null) return;
         try {
             getActivity().runOnUiThread(() -> {
                 try {
@@ -289,11 +309,6 @@ public class CanRs485Plugin extends Plugin {
                                 data.put("latitude", location.getLatitude());
                                 data.put("longitude", location.getLongitude());
                                 data.put("speed", location.getSpeed() * 3.6);
-                                /* El rumbo no se mandaba, asi que del GPS interno llegaba
-                                   siempre cero y el mapa nunca giraba. Solo se manda si
-                                   el fix lo trae: Android devuelve 0 cuando no lo sabe, y
-                                   un cero que significa «norte» no se distingue de un cero
-                                   que significa «no tengo ni idea». */
                                 if (location.hasBearing()) data.put("bearing", location.getBearing());
                                 if (location.hasAccuracy()) data.put("accuracy", location.getAccuracy());
                                 data.put("altitude", location.getAltitude());
@@ -304,13 +319,25 @@ public class CanRs485Plugin extends Plugin {
                             @Override public void onProviderEnabled(String provider) {}
                             @Override public void onProviderDisabled(String provider) {}
                         });
+                        Log.i(TAG, "LocationManager activado con exito.");
                     }
+                } catch (SecurityException se) {
+                    Log.e(TAG, "Sin permiso de ubicacion para LocationManager: " + se.getMessage());
                 } catch (Exception e) {
                     Log.e(TAG, "Error activando LocationManager: " + e.getMessage());
                 }
             });
         } catch (Exception e) {
             Log.e(TAG, "Error invocando UI Thread para LocationManager", e);
+        }
+    }
+
+    private void arrancarGps(PluginCall call) {
+        String devicePath = call.getString("devicePath", "/dev/ttyHSL2");
+        int baudrate = call.getInt("baudrate", 921600);
+
+        if (getPermissionState(UBICACION) == PermissionState.GRANTED) {
+            activarLocationManager();
         }
 
         if (!isGpsListening.get()) {
@@ -323,7 +350,11 @@ public class CanRs485Plugin extends Plugin {
         ret.put("status", "started");
         ret.put("devicePath", devicePath);
         ret.put("baudrate", baudrate);
-        call.resolve(ret);
+        try {
+            call.resolve(ret);
+        } catch (Exception e) {
+            /* Ignores if already resolved */
+        }
     }
 
     /**

@@ -61,6 +61,7 @@ export const nombreOrigen = (o: Origen) => (o === 'rtk' ? 'receptor RTK' : 'GPS 
 interface PluginGps {
   setPortBaudrate(o: { devicePath: string; baudrate: number }): Promise<unknown>;
   startGpsListener(o: { devicePath: string; baudrate?: number }): Promise<unknown>;
+  solicitarPermisosUbicacion?(): Promise<unknown>;
   addListener(evento: string, fn: (d: any) => void): Promise<unknown>;
 }
 
@@ -84,6 +85,17 @@ class Gps {
   private enganchado = false;
   private rastro: [number, number][] = [];
 
+  async pedirPermiso() {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      if (typeof Nativo.solicitarPermisosUbicacion === 'function') {
+        await Nativo.solicitarPermisosUbicacion();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   async arrancar(ruta: string, baudios = 921600) {
     if (!Capacitor.isNativePlatform()) return;
 
@@ -93,6 +105,9 @@ class Gps {
       /* El GNSS del propio Android, que el plugin ya publicaba y nadie escuchaba. */
       await Nativo.addListener('onGpsLocationFix', (d: any) => this.deInterno(d));
     }
+
+    /* Solicitamos permiso dinámico a Android explícitamente */
+    await this.pedirPermiso();
 
     /* El puerto se configura antes de leer: si alguien lo dejo a otra velocidad
        llegaria basura en vez de sentencias, y pareceria un receptor roto. */
