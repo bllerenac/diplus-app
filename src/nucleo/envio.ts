@@ -473,21 +473,25 @@ class Envio {
   private abrirSocket() {
     this.cerrarSocket();
     this.socket = { ...this.socket, estado: 'conectando', error: null };
+    agregarLogEnvio('socket', 'info', `Conectando WebSocket a ${this.cfg.socket.url.trim()}`);
 
     try {
       const ws = new WebSocket(this.cfg.socket.url.trim());
       this.ws = ws;
       ws.onopen = () => {
         this.socket = { ...this.socket, estado: 'abierto', error: null };
+        agregarLogEnvio('socket', 'ok', `WebSocket conectado exitosamente a ${this.cfg.socket.url.trim()}`);
       };
       ws.onerror = () => {
         /* El navegador no cuenta por qué falló un WebSocket, a propósito: solo
            dice que falló. No hay más detalle que dar. */
         this.socket = { ...this.socket, estado: 'fallo', error: 'no se pudo conectar' };
+        agregarLogEnvio('socket', 'error', `Fallo de conexión WebSocket con ${this.cfg.socket.url.trim()}`);
       };
       ws.onclose = () => {
         this.socket = { ...this.socket, estado: 'fallo' };
         this.ws = null;
+        agregarLogEnvio('socket', 'info', `WebSocket desconectado`);
         /* Se vuelve a intentar sin prisa. En una cabina el otro lado puede
            estar apagado horas, y machacarlo cada segundo no lo enciende. */
         if (this.relojSocket) {
@@ -496,6 +500,7 @@ class Envio {
       };
     } catch (e) {
       this.socket = { ...this.socket, estado: 'fallo', error: dicho(e) };
+      agregarLogEnvio('socket', 'error', `Excepción al abrir WebSocket: ${dicho(e)}`);
     }
   }
 
@@ -506,15 +511,18 @@ class Envio {
     if (!s.length) return;
 
     try {
-      this.ws.send(JSON.stringify(cuerpoAhora(this.cfg.equipo, this.cfg.formato, s)));
+      const payloadStr = JSON.stringify(cuerpoAhora(this.cfg.equipo, this.cfg.formato, s));
+      this.ws.send(payloadStr);
       this.socket = {
         ...this.socket,
         enviados: this.socket.enviados + 1,
         ultimo: Date.now(),
         error: null,
       };
+      agregarLogEnvio('socket', 'ok', `Trama enviada por WebSocket`, payloadStr);
     } catch (e) {
       this.socket = { ...this.socket, error: dicho(e) };
+      agregarLogEnvio('socket', 'error', `Error al enviar trama WebSocket: ${dicho(e)}`);
     }
   }
 
@@ -522,17 +530,6 @@ class Envio {
 
   /**
    * El POST, por el camino nativo cuando lo hay.
-   *
-   * Con `fetch` esto sale del WebView, y un WebView es un navegador: manda un
-   * `OPTIONS` de permiso antes de cada envío y descarta la respuesta si al
-   * otro lado no contestan con las cabeceras de CORS. Eso convertiría cada
-   * servidor al que se quiera mandar en un servidor que además hay que
-   * configurar para un navegador —cuando aquí no hay ninguno—. Se vio en el
-   * equipo: dos `OPTIONS` por vuelta y ni un solo `POST`.
-   *
-   * Por el puente nativo la petición la hace Android y no hay permiso que
-   * pedir. `fetch` se queda solo para poder probar esto en un navegador de
-   * escritorio, donde no hay puente.
    */
   private async entregar(cuerpo: unknown): Promise<void> {
     const unitId = this.cfg.equipo || 'HT-01';
@@ -541,17 +538,42 @@ class Envio {
       'Content-Type': 'application/json',
       ...(this.cfg.api.token ? { Authorization: `Bearer ${this.cfg.api.token}` } : {}),
     };
+    const cant = Array.isArray(cuerpo) ? `${cuerpo.length} registros` : '1 registro';
+    const strPayload = JSON.stringify(cuerpo, null, 2);
+    const snippetPayload = strPayload.length > 800 ? strPayload.substring(0, 800) + '\n...' : strPayload;
+
+    agregarLogEnvio('api', 'info', `POST -> ${url} (${cant})`, snippetPayload);
 
     if (Capacitor.isNativePlatform()) {
-      const r = await CapacitorHttp.post({ url, headers, data: cuerpo });
-      if (r.status < 200 || r.status >= 300) {
-        throw new Error(`el servidor respondió ${r.status}`);
+      try {
+        const r = await CapacitorHttp.post({ url, headers, data: cuerpo });
+        const respDetalle = typeof r.data === 'string' ? r.data : JSON.stringify(r.data, null, 2);
+        if (r.status < 200 || r.status >= 300) {
+          agregarLogEnvio('api', 'error', `HTTP ${r.status}: Servidor rechazó la petición`, respDetalle || `Status ${r.status}`);
+          throw new Error(`el servidor respondió ${r.status}`);
+        }
+        agregarLogEnvio('api', 'ok', `HTTP ${r.status} OK - Respuesta del Servidor (${cant})`, respDetalle || 'HTTP 200 OK');
+        return;
+      } catch (e) {
+        if ((e as Error).message?.includes('servidor respondió')) throw e;
+        agregarLogEnvio('api', 'error', `Error de red POST nativo: ${dicho(e)}`, snippetPayload);
+        throw e;
       }
-      return;
     }
 
-    const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(cuerpo) });
-    if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
+    try {
+      const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(cuerpo) });
+      const textResp = await r.text().catch(() => '');
+      if (!r.ok) {
+        agregarLogEnvio('api', 'error', `HTTP ${r.status}: ${r.statusText || 'Error'}`, textResp || `Status ${r.status}`);
+        throw new Error(`el servidor respondió ${r.status}`);
+      }
+      agregarLogEnvio('api', 'ok', `HTTP ${r.status} OK - Respuesta del Servidor (${cant})`, textResp || 'HTTP 200 OK');
+    } catch (e) {
+      if ((e as Error).message?.includes('servidor respondió')) throw e;
+      agregarLogEnvio('api', 'error', `Error de red POST fetch: ${dicho(e)}`, snippetPayload);
+      throw e;
+    }
   }
 
   /**
@@ -666,7 +688,10 @@ class Envio {
     // Guardar snapshot en BD local para el envío histórico por API
     guardarSnapshot(payload).catch(() => undefined);
 
-    if (!hayMqtt()) return;
+    if (!hayMqtt()) {
+      agregarLogEnvio('mqtt', 'info', `Snapshot local guardado en BD. MQTT omitido (solo funciona en Android nativo).`, payload);
+      return;
+    }
 
     mqtt.publicar(topicReal, payload).then(() => {
       this.mqttCh = {
@@ -676,8 +701,10 @@ class Envio {
         ultimo: Date.now(),
         error: null,
       };
+      agregarLogEnvio('mqtt', 'ok', `Publicado exitosamente en '${topicReal}'`, payload);
     }).catch((e: Error) => {
       this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
+      agregarLogEnvio('mqtt', 'error', `Fallo al publicar MQTT en '${topicReal}': ${e.message}`, payload);
     });
   }
 
@@ -690,9 +717,12 @@ class Envio {
     try {
       await mqtt.publicar(topicReal, payload);
       this.mqttCh = { ...this.mqttCh, estado: 'abierto', ultimo: Date.now(), error: null };
+      agregarLogEnvio('mqtt', 'ok', `Prueba manual publicada en '${topicReal}'`, payload);
       return `Publicado en ${topicReal}.`;
     } catch (e) {
-      return `No se pudo publicar: ${e instanceof Error ? e.message : String(e)}`;
+      const msj = `No se pudo publicar: ${e instanceof Error ? e.message : String(e)}`;
+      agregarLogEnvio('mqtt', 'error', `Prueba manual MQTT falló en '${topicReal}'`, payload);
+      return msj;
     }
   }
 

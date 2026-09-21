@@ -15,7 +15,16 @@
  */
 import { useEffect, useState } from 'react';
 import { Senal } from '../nucleo/lecturas';
-import { AjustesEnvio, EstadoCanal, Formato, envio } from '../nucleo/envio';
+import {
+  AjustesEnvio,
+  EstadoCanal,
+  Formato,
+  LogEnvio,
+  alLogsEnvio,
+  envio,
+  limpiarLogsEnvio,
+  obtenerLogsEnvio,
+} from '../nucleo/envio';
 import { hayMqtt } from '../nucleo/mqtt';
 import { hardware } from '../nucleo/hardware';
 import { cuantosSnapshotsPendientes } from '../nucleo/base';
@@ -67,9 +76,14 @@ export function Envio({
   const [probandoMqtt, setProbandoMqtt] = useState(false);
   const [snapsPendientes, setSnapsPendientes] = useState(0);
 
+  const [logs, setLogs] = useState<LogEnvio[]>(obtenerLogsEnvio());
+  const [filtroCanal, setFiltroCanal] = useState<'todos' | 'mqtt' | 'api' | 'socket'>('todos');
+  const [logExpandido, setLogExpandido] = useState<number | null>(null);
+
   /* El estado y la muestra del JSON se miran solos: son las dos cosas que hay
      que ver cambiar para creerse que esto está mandando de verdad. */
   useEffect(() => {
+    const unsub = alLogsEnvio((nuevosLogs) => setLogs(nuevosLogs));
     const t = setInterval(async () => {
       setEstado(envio.estado());
       setMuestra(envio.vistaPrevia());
@@ -77,7 +91,10 @@ export function Envio({
     }, 1000);
     setMuestra(envio.vistaPrevia());
     cuantosSnapshotsPendientes().then(setSnapsPendientes).catch(() => 0);
-    return () => clearInterval(t);
+    return () => {
+      unsub();
+      clearInterval(t);
+    };
   }, []);
 
   const socket = (c: Partial<AjustesEnvio['socket']>) =>
@@ -486,6 +503,116 @@ export function Envio({
 
         {eco && <Aviso tono={eco.startsWith('Entregado') ? 'ok' : 'warn'}>{eco}</Aviso>}
       </Bloque>
+
+      {/* ── Consola de Envíos y Debug ───────────────────────────────────── */}
+      {(() => {
+        const logsFiltered =
+          filtroCanal === 'todos' ? logs : logs.filter((l) => l.canal === filtroCanal);
+
+        return (
+          <Bloque titulo="Consola de Envíos & Debug (Logs y Respuestas del Servidor en Vivo)">
+            <Nota>
+              Aquí ves exactamente lo que sale del equipo hacia el servidor y las respuestas HTTP /
+              MQTT / WebSocket que se reciben en tiempo real.
+            </Nota>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-sur2 p-3 rounded-xl border border-line">
+              <div className="flex items-center gap-1.5">
+                {(['todos', 'mqtt', 'api', 'socket'] as const).map((canal) => (
+                  <button
+                    key={canal}
+                    type="button"
+                    onClick={() => setFiltroCanal(canal)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${
+                      filtroCanal === canal
+                        ? 'bg-acc text-sur1 shadow'
+                        : 'bg-sur3 text-ink2 hover:bg-line'
+                    }`}
+                  >
+                    {canal}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Boton
+                  variante="fuerte"
+                  onClick={async () => {
+                    envio.probarMqtt().catch(() => undefined);
+                    envio.probar().catch(() => undefined);
+                  }}
+                >
+                  ⚡ Probar Envíos Ahora
+                </Boton>
+                <Boton onClick={limpiarLogsEnvio}>Limpiar consola</Boton>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1">
+              {logsFiltered.length === 0 ? (
+                <Vacio>
+                  ⚡ Sin logs de envío registrados. Los registros de peticiones y respuestas salientes aparecerán aquí automáticamente.
+                </Vacio>
+              ) : (
+                logsFiltered.map((log) => {
+                  const expandido = logExpandido === log.id;
+                  const badgeCanalColor =
+                    log.canal === 'mqtt'
+                      ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                      : log.canal === 'api'
+                      ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+
+                  const tipoColor =
+                    log.tipo === 'ok'
+                      ? 'text-acc font-semibold'
+                      : log.tipo === 'error'
+                      ? 'text-bad font-semibold'
+                      : 'text-warn';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="rounded-xl border border-line bg-sur2 p-3 text-xs font-mono transition hover:border-ink3/40"
+                    >
+                      <div
+                        className="flex items-center justify-between gap-2 cursor-pointer"
+                        onClick={() => setLogExpandido(expandido ? null : log.id)}
+                      >
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="text-ink3 text-[11px]">
+                            {new Date(log.at).toLocaleTimeString('es-PE')}
+                          </span>
+                          <span
+                            className={`uppercase text-[10px] font-bold px-2 py-0.5 rounded border ${badgeCanalColor}`}
+                          >
+                            {log.canal}
+                          </span>
+                          <span className={tipoColor}>{log.mensaje}</span>
+                        </div>
+
+                        {log.detalles && (
+                          <span className="text-[10px] text-ink3 hover:text-ink1 font-sans shrink-0">
+                            {expandido ? '▲ Ocultar JSON' : '▼ Ver JSON/Detalles'}
+                          </span>
+                        )}
+                      </div>
+
+                      {expandido && log.detalles && (
+                        <div className="mt-2.5 pt-2 border-t border-line/60">
+                          <pre className="bg-sur1 p-2.5 rounded-lg text-[11px] text-ink1 overflow-x-auto whitespace-pre-wrap max-h-48 border border-line">
+                            {log.detalles}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Bloque>
+        );
+      })()}
     </>
   );
 }
