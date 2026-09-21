@@ -150,7 +150,7 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
     puerto: 1883,
     usuario: 'test',
     contrasena: 'test1234',
-    topic: '/miskimayo/diplus/{{unit_id}}',
+    topic: 'miskimayo/{{unit_id}}/telemetry',
     cadaSeg: 5,
   },
   equipo: 'SC-03',
