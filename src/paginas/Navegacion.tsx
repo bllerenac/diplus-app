@@ -393,7 +393,6 @@ export default function Navegacion() {
       },
     });
     revisarSola(cfg.actualizacion);
-    revisarTailscale(cfg.actualizacion);
   }, [cfg.canal.activo, cfg.canal.puerto, cfg.canal.token, cfg.actualizacion.automatica]);
 
   /**

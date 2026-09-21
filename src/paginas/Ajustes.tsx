@@ -500,6 +500,38 @@ export default function Ajustes() {
       setBajando(false);
     }
   };
+
+  const [bajandoTailscale, setBajandoTailscale] = useState(false);
+  const [avanceTailscale, setAvanceTailscale] = useState(0);
+  const [avanceTotalTailscale, setAvanceTotalTailscale] = useState(0);
+  const [ecoTailscale, setEcoTailscale] = useState<string | null>(null);
+
+  const instalarTailscaleManual = async () => {
+    if (!hayActualizador()) {
+      setEcoTailscale('Instalar Tailscale solo funciona en la tablet.');
+      return;
+    }
+    if (!cfg.actualizacion.urlTailscale.trim()) {
+      setEcoTailscale('Falta la URL del APK de Tailscale.');
+      return;
+    }
+    setBajandoTailscale(true);
+    setEcoTailscale(null);
+    setAvanceTailscale(0);
+    setAvanceTotalTailscale(0);
+    try {
+      const d = await actualizador.descargarCualquier(cfg.actualizacion.urlTailscale, (bytes, total) => {
+        setAvanceTailscale(bytes);
+        setAvanceTotalTailscale(total);
+      });
+      await actualizador.instalar(d.ruta);
+      setEcoTailscale('APK descargado. Abriendo instalador de Android...');
+    } catch (e) {
+      setEcoTailscale(String((e as Error).message ?? e));
+    } finally {
+      setBajandoTailscale(false);
+    }
+  };
   /* ── Plano y geocercas ────────────────────────────────────────────────── */
   const [loMio, setLoMio] = useState<Descargado | null>(() => guardado());
   const [bajandoMapa, setBajandoMapa] = useState(false);
@@ -1769,12 +1801,10 @@ export default function Ajustes() {
               </Aviso>
             </Bloque>
 
-              <Bloque titulo="Actualizar la aplicación">
+              <Bloque titulo="Actualizar DiPlus App (App Principal ~9 MB)">
                 <Nota>
-                  El equipo se baja el APK de donde le digas y abre el instalador de Android.
-                  Sin Google Play y sin cable. El último paso —pulsar «Instalar»— lo da una
-                  persona delante de la máquina: para que entre sola haría falta quitarle la
-                  cuenta de Google al equipo.
+                  El equipo descarga el APK de DiPlus de la dirección configurada y abre el instalador de Android.
+                  Al pesar solo ~9 MB, la actualización es rápida y no consume ancho de banda pesado.
                 </Nota>
 
                 <Campo etiqueta="Dirección del APK de DiPlus">
@@ -1785,17 +1815,6 @@ export default function Ajustes() {
                   />
                 </Campo>
 
-                <Campo etiqueta="Dirección del APK de Tailscale" ayuda="Si está en tu servidor, la tablet lo descargará e instalará automáticamente junto con DiPlus.">
-                  <Entrada
-                    value={cfg.actualizacion.urlTailscale ?? ''}
-                    placeholder="https://…/tailscale.apk"
-                    onChange={(e) => aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, urlTailscale: e.target.value } })}
-                  />
-                </Campo>
-
-                {/* Vale el enlace de compartir de Drive tal cual: se traduce al de
-                    descarga directa al pulsar, porque el de compartir devuelve una
-                    página web y es el error que va a cometer todo el mundo. */}
                 {cfg.actualizacion.url.includes('drive.google.com') && (
                   <p className="m-0 font-mono text-[10.5px] leading-relaxed text-ink3">
                     Se pedirá como {arreglarDireccion(cfg.actualizacion.url)}
@@ -1835,7 +1854,7 @@ export default function Ajustes() {
                     disabled={bajando || !cfg.actualizacion.url.trim()}
                     onClick={buscarActualizacion}
                   >
-                    {bajando ? 'Bajando…' : 'Buscar actualización'}
+                    {bajando ? 'Bajando…' : '⚡ Buscar actualización de DiPlus'}
                   </Boton>
 
                   {instalada && (
@@ -1880,11 +1899,58 @@ export default function Ajustes() {
                           }
                         }}
                       >
-                        Instalar
+                        Instalar DiPlus ahora
                       </Boton>
                     </div>
                   </div>
                 )}
+              </Bloque>
+
+              <Bloque titulo="Instalar / Actualizar Tailscale VPN (~105 MB)">
+                <Nota>
+                  Tailscale permite el acceso remoto y scrcpy vía VPN. Pesa ~105 MB y se gestiona de forma independiente
+                  para evitar descargas pesadas innecesarias al actualizar la app.
+                </Nota>
+
+                <Campo
+                  etiqueta="Dirección del APK de Tailscale"
+                  ayuda="Ubicación directa del instalador de Tailscale en tu servidor."
+                >
+                  <Entrada
+                    value={cfg.actualizacion.urlTailscale ?? ''}
+                    placeholder="https://…/tailscale.apk"
+                    onChange={(e) =>
+                      aplicar({
+                        ...cfg,
+                        actualizacion: { ...cfg.actualizacion, urlTailscale: e.target.value },
+                      })
+                    }
+                  />
+                </Campo>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Boton
+                    variante="fuerte"
+                    disabled={bajandoTailscale || !cfg.actualizacion.urlTailscale.trim()}
+                    onClick={instalarTailscaleManual}
+                  >
+                    {bajandoTailscale ? 'Bajando Tailscale…' : '🔒 Descargar e Instalar Tailscale'}
+                  </Boton>
+                </div>
+
+                {bajandoTailscale && avanceTailscale > 0 && (
+                  <p className="m-0 font-mono text-[11.5px] text-ink2">
+                    Descargando: {(avanceTailscale / 1048576).toFixed(1)} MB
+                    {avanceTotalTailscale > 0 && ` de ${(avanceTotalTailscale / 1048576).toFixed(1)} MB`}
+                  </p>
+                )}
+
+                {ecoTailscale && (
+                  <Aviso tono={ecoTailscale.includes('Abriendo') ? 'ok' : 'warn'}>
+                    {ecoTailscale}
+                  </Aviso>
+                )}
+              </Bloque>
 
                 {instalada && !instalada.puedeInstalar && (
                   <Aviso tono="warn">
@@ -1892,7 +1958,6 @@ export default function Ajustes() {
                     sale la pantalla del permiso; se concede una vez y ya queda.
                   </Aviso>
                 )}
-              </Bloque>
 
               <Bloque titulo="Acceso remoto">
                 <Nota>
