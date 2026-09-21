@@ -159,6 +159,13 @@ const alDia = (c: Config): Config => {
     },
   };
 
+  if (!res.envio?.equipo || !res.envio.equipo.trim()) {
+    res = { ...res, envio: { ...res.envio, equipo: 'SC-03' } };
+  }
+  if (!res.servidor?.equipo || !res.servidor.equipo.trim()) {
+    res = { ...res, servidor: { ...res.servidor, equipo: 'SC-03' } };
+  }
+
   return res;
 };
 
