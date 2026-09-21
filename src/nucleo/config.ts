@@ -107,7 +107,7 @@ const POR_DEFECTO: Config = {
   canal: { activo: false, puerto: 8787, token: '' },
   movimiento: MOVIMIENTO_POR_DEFECTO,
   senales: {},
-  maqueta: true,
+  maqueta: false,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
 };
