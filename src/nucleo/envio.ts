@@ -35,6 +35,54 @@ import { gps } from './gps';
 import { hardware } from './hardware';
 import { mqtt, hayMqtt } from './mqtt';
 
+export interface LogEnvio {
+  id: number;
+  at: number;
+  canal: 'mqtt' | 'api' | 'socket';
+  tipo: 'ok' | 'error' | 'info';
+  mensaje: string;
+  detalles?: string;
+}
+
+const MAX_LOGS = 100;
+let logsContador = 0;
+const logsMemoria: LogEnvio[] = [];
+type LogListener = (logs: LogEnvio[]) => void;
+const logListeners = new Set<LogListener>();
+
+export const agregarLogEnvio = (
+  canal: LogEnvio['canal'],
+  tipo: LogEnvio['tipo'],
+  mensaje: string,
+  detalles?: string,
+) => {
+  const item: LogEnvio = {
+    id: ++logsContador,
+    at: Date.now(),
+    canal,
+    tipo,
+    mensaje,
+    detalles,
+  };
+  logsMemoria.unshift(item);
+  if (logsMemoria.length > MAX_LOGS) logsMemoria.pop();
+  logListeners.forEach((fn) => fn([...logsMemoria]));
+};
+
+export const obtenerLogsEnvio = (): LogEnvio[] => [...logsMemoria];
+
+export const alLogsEnvio = (fn: LogListener): (() => void) => {
+  logListeners.add(fn);
+  return () => {
+    logListeners.delete(fn);
+  };
+};
+
+export const limpiarLogsEnvio = () => {
+  logsMemoria.length = 0;
+  logListeners.forEach((fn) => fn([]));
+};
+
 /** Cómo se arma el JSON. Ninguno es mejor: depende de quién lo reciba. */
 export type Formato = 'plano' | 'lista';
 
@@ -92,12 +140,12 @@ export interface AjustesEnvio {
 export const ENVIO_POR_DEFECTO: AjustesEnvio = {
   socket: { activo: false, url: 'ws://192.168.60.2:9977', cadaSeg: 2 },
   api: {
-    activo: false,
+    activo: true,
     url: 'https://miskimayo-back.wapsi.io/api/tracing/{{unit_id}}',
     token: '', cadaSeg: 10, lote: 100, historico: true,
   },
   mqtt: {
-    activo: false,
+    activo: true,
     broker: 'paranoid.lat',
     puerto: 1883,
     usuario: 'test',
@@ -301,48 +349,77 @@ class Envio {
   private marca = Number(localStorage.getItem(MARCA)) || 0;
 
   aplicar(cfg: AjustesEnvio) {
+    const socketCambio = JSON.stringify(cfg.socket) !== JSON.stringify(this.cfg.socket);
+    const apiCambio = JSON.stringify(cfg.api) !== JSON.stringify(this.cfg.api);
+    const mqttCambio =
+      JSON.stringify(cfg.mqtt) !== JSON.stringify(this.cfg.mqtt) || cfg.equipo !== this.cfg.equipo;
+
+    const primeraVez = !this.relojMqtt && !this.relojApi && !this.relojSocket;
+
     this.cfg = cfg;
-    this.parar();
 
-    if (cfg.socket.activo && cfg.socket.url.trim()) {
-      this.socket = {
-        ...CANAL_PARADO, enviados: this.socket.enviados, ultimo: this.socket.ultimo,
-      };
-      this.abrirSocket();
-      this.relojSocket = setInterval(
-        () => this.porSocket(), Math.max(500, cfg.socket.cadaSeg * 1000),
-      );
+    // 1. Socket
+    if (socketCambio || primeraVez) {
+      if (this.relojSocket) clearInterval(this.relojSocket);
+      this.relojSocket = null;
+      this.cerrarSocket();
+      if (cfg.socket.activo && cfg.socket.url.trim()) {
+        this.socket = {
+          ...CANAL_PARADO, enviados: this.socket.enviados, ultimo: this.socket.ultimo,
+        };
+        this.abrirSocket();
+        this.relojSocket = setInterval(
+          () => this.porSocket(), Math.max(500, cfg.socket.cadaSeg * 1000),
+        );
+      } else {
+        this.socket = { ...CANAL_PARADO };
+      }
     }
 
-    if (cfg.api.activo && cfg.api.url.trim()) {
-      this.api = {
-        ...CANAL_PARADO,
-        estado: 'conectando',
-        enviados: this.api.enviados,
-        ultimo: this.api.ultimo,
-      };
-      this.relojApi = setInterval(
-        () => this.porApi(), Math.max(5000, cfg.api.cadaSeg * 1000),
-      );
+    // 2. API
+    if (apiCambio || primeraVez) {
+      if (this.relojApi) clearInterval(this.relojApi);
+      this.relojApi = null;
+      if (cfg.api.activo && cfg.api.url.trim()) {
+        this.api = {
+          ...CANAL_PARADO,
+          estado: 'conectando',
+          enviados: this.api.enviados,
+          ultimo: this.api.ultimo,
+        };
+        this.relojApi = setInterval(
+          () => this.porApi(), Math.max(2000, cfg.api.cadaSeg * 1000),
+        );
+      } else {
+        this.api = { ...CANAL_PARADO };
+      }
     }
 
-    /* MQTT: conectar si hay broker configurado y activo. */
-    if (cfg.mqtt.activo && cfg.mqtt.broker.trim() && hayMqtt()) {
-      this.mqttCh = { ...CANAL_PARADO, estado: 'conectando' };
-      mqtt.conectar({
-        broker: cfg.mqtt.broker.trim(),
-        puerto: cfg.mqtt.puerto,
-        usuario: cfg.mqtt.usuario,
-        clave: cfg.mqtt.contrasena,
-        clientId: `diplus-${cfg.equipo || 'tablet'}`,
-      }).then(() => {
-        this.mqttCh = { ...this.mqttCh, estado: 'abierto', error: null };
-      }).catch((e: Error) => {
-        this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
-      });
-      this.relojMqtt = setInterval(
-        () => this.porMqtt(), Math.max(1000, cfg.mqtt.cadaSeg * 1000),
-      );
+    // 3. MQTT
+    if (mqttCambio || primeraVez) {
+      if (this.relojMqtt) clearInterval(this.relojMqtt);
+      this.relojMqtt = null;
+
+      if (cfg.mqtt.activo && cfg.mqtt.broker.trim() && hayMqtt()) {
+        this.mqttCh = { ...CANAL_PARADO, estado: 'conectando' };
+        mqtt.conectar({
+          broker: cfg.mqtt.broker.trim(),
+          puerto: cfg.mqtt.puerto,
+          usuario: cfg.mqtt.usuario,
+          clave: cfg.mqtt.contrasena,
+          clientId: `diplus-${cfg.equipo || 'tablet'}`,
+        }).then(() => {
+          this.mqttCh = { ...this.mqttCh, estado: 'abierto', error: null };
+        }).catch((e: Error) => {
+          this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
+        });
+        this.relojMqtt = setInterval(
+          () => this.porMqtt(), Math.max(1000, cfg.mqtt.cadaSeg * 1000),
+        );
+      } else {
+        if (hayMqtt()) mqtt.desconectar().catch(() => undefined);
+        this.mqttCh = { ...CANAL_PARADO };
+      }
     }
   }
 
