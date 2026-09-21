@@ -6,6 +6,10 @@
     
     <base href="/" />
     
+    <script>
+      window.Capacitor = window.Capacitor || {};
+      window.Capacitor.triggerEvent = window.Capacitor.triggerEvent || function() { return false; };
+    </script>
     <meta name="color-scheme" content="light dark" />
     <meta
       name="viewport"

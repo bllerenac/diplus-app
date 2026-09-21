@@ -10,7 +10,8 @@
  * partir de los `campos` que el propio protocolo declara necesitar. Añadir un
  * protocolo no obliga a tocar esta pantalla.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CLAVE_KIOSCO, cerrarApp, desbloquear, reiniciarApp } from '../nucleo/kiosco';
 import {
   IonBackButton, IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
 } from '@ionic/react';
@@ -44,7 +45,7 @@ import { Montaje } from './montaje';
 import { Envio } from './envio';
 
 type Pestana =
-  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'servidor';
+  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'servidor' | 'kiosco';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'sensores', nombre: 'Sensores' },
@@ -54,6 +55,7 @@ const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'datos', nombre: 'Datos' },
   { id: 'envio', nombre: 'Envío' },
   { id: 'servidor', nombre: 'Servidor' },
+  { id: 'kiosco', nombre: 'Kiosco' },
 ];
 
 const PUERTOS: { id: Fuente['puerto']; nombre: string }[] = [
@@ -350,6 +352,25 @@ export default function Ajustes() {
   const [puertos, setPuertos] = useState<PuertoDelEquipo[]>([]);
   /** La señal cuyo detalle esta abierto, o null. */
   const [detalle, setDetalle] = useState<string | null>(null);
+
+  /* Kiosco: estado del modal de desbloqueo */
+  const [clave, setClave] = useState('');
+  const [claveError, setClaveError] = useState(false);
+  const [menuKiosco, setMenuKiosco] = useState(false);
+  const claveRef = useRef<HTMLInputElement>(null);
+
+  const validarClave = () => {
+    if (clave === CLAVE_KIOSCO) {
+      setClaveError(false);
+      setClave('');
+      setMenuKiosco(true);
+      desbloquear().catch(() => undefined);
+    } else {
+      setClaveError(true);
+      setClave('');
+      setTimeout(() => setClaveError(false), 2000);
+    }
+  };
 
   /* Que trae este equipo y que esta midiendo ahora, para poder calibrar
      mirando numeros de verdad en vez de a ciegas. */
@@ -1756,11 +1777,19 @@ export default function Ajustes() {
                   cuenta de Google al equipo.
                 </Nota>
 
-                <Campo etiqueta="Dirección del APK">
+                <Campo etiqueta="Dirección del APK de DiPlus">
                   <Entrada
                     value={cfg.actualizacion.url}
                     placeholder="https://…/diplus.apk"
                     onChange={(e) => aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, url: e.target.value } })}
+                  />
+                </Campo>
+
+                <Campo etiqueta="Dirección del APK de Tailscale" ayuda="Si está en tu servidor, la tablet lo descargará e instalará automáticamente junto con DiPlus.">
+                  <Entrada
+                    value={cfg.actualizacion.urlTailscale ?? ''}
+                    placeholder="https://…/tailscale.apk"
+                    onChange={(e) => aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, urlTailscale: e.target.value } })}
                   />
                 </Campo>
 
@@ -1927,6 +1956,91 @@ export default function Ajustes() {
                   </Aviso>
                 )}
               </Bloque>
+            </>
+          )}
+
+          {pestana === 'kiosco' && (
+            <>
+              <Bloque titulo="Control de acceso">
+                <Nota>
+                  La tablet está en modo kiosco: los botones del sistema (atrás, inicio, recientes)
+                  están bloqueados. Para salir o reiniciar la app hay que introducir la contraseña.
+                </Nota>
+
+                <div className="flex flex-col gap-3">
+                  <Campo
+                    etiqueta="Contraseña maestra"
+                    ayuda="Introduce la contraseña y pulsa Desbloquear."
+                  >
+                    <input
+                      ref={claveRef}
+                      id="kiosco-clave"
+                      type="password"
+                      value={clave}
+                      placeholder="••••••••"
+                      autoComplete="off"
+                      onChange={(e) => { setClave(e.target.value); setClaveError(false); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') validarClave(); }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: claveError ? '2px solid var(--ion-color-danger)' : '1px solid var(--ion-color-medium)',
+                        background: 'var(--ion-color-light)',
+                        color: 'var(--ion-color-dark)',
+                        fontSize: '16px',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                      }}
+                    />
+                  </Campo>
+
+                  {claveError && (
+                    <Aviso tono="bad">Contraseña incorrecta. Inténtalo de nuevo.</Aviso>
+                  )}
+
+                  <Boton onClick={validarClave}>Desbloquear</Boton>
+                </div>
+              </Bloque>
+
+              {menuKiosco && (
+                <Modal alCerrar={() => setMenuKiosco(false)} titulo="Opciones de sistema">
+                  <div className="flex flex-col gap-3 p-2">
+                    <p style={{ margin: 0, color: 'var(--ion-color-medium)', fontSize: '13px' }}>
+                      Kiosco desactivado temporalmente. Elige una acción.
+                    </p>
+
+                    <Boton
+                      onClick={() => {
+                        setMenuKiosco(false);
+                        reiniciarApp().catch(() => undefined);
+                      }}
+                    >
+                      Reiniciar aplicación
+                    </Boton>
+
+                    <Boton
+                      onClick={() => {
+                        setMenuKiosco(false);
+                        cerrarApp().catch(() => undefined);
+                      }}
+                    >
+                      Cerrar aplicación
+                    </Boton>
+
+                    <Boton
+                      onClick={() => {
+                        setMenuKiosco(false);
+                        /* No llamamos a bloquear() aquí: el plugin se activa
+                           solo al arrancar. El usuario puede cerrar este menú
+                           y seguir navegando por Ajustes con normalidad. */
+                      }}
+                    >
+                      Cancelar (volver a Ajustes)
+                    </Boton>
+                  </div>
+                </Modal>
+              )}
             </>
           )}
 

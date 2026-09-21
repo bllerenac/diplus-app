@@ -1,10 +1,11 @@
 /**
  * A dónde sale lo que el equipo mide.
  *
- * Están juntos los dos caminos porque la pregunta es la misma —«¿esto sale del
- * camión?»— pero separados en dos bloques porque las respuestas no se parecen:
- * el socket es para mirar en directo y la API es para no perder nada. Ver
- * `nucleo/envio.ts` para el porqué de esa diferencia.
+ * Están juntos los tres caminos porque la pregunta es la misma —«¿esto sale del
+ * camión?»— pero separados en bloques porque las respuestas no se parecen:
+ * MQTT es para tiempo real con el payload de Miskimayo; el socket es para mirar
+ * en directo; la API es para no perder nada. Ver `nucleo/envio.ts` para el
+ * porqué de esa diferencia.
  *
  * Lo que **no** se decide aquí es qué señales salen. Eso va señal por señal, en
  * su detalle, junto a su nombre y su curva, porque es una propiedad de la señal
@@ -15,11 +16,14 @@
 import { useEffect, useState } from 'react';
 import { Senal } from '../nucleo/lecturas';
 import { AjustesEnvio, EstadoCanal, Formato, envio } from '../nucleo/envio';
+import { hayMqtt } from '../nucleo/mqtt';
+import { hardware } from '../nucleo/hardware';
+import { cuantosSnapshotsPendientes } from '../nucleo/base';
 import { Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Selector, Vacio } from './piezas';
 
 const DICHO: Record<EstadoCanal['estado'], string> = {
   parado: 'Apagado',
-  conectando: 'Esperando su turno…',
+  conectando: 'Conectando…',
   abierto: 'Conectado',
   fallo: 'Sin conexión',
 };
@@ -59,15 +63,20 @@ export function Envio({
   const [muestra, setMuestra] = useState('');
   const [eco, setEco] = useState<string | null>(null);
   const [probando, setProbando] = useState(false);
+  const [ecoMqtt, setEcoMqtt] = useState<string | null>(null);
+  const [probandoMqtt, setProbandoMqtt] = useState(false);
+  const [snapsPendientes, setSnapsPendientes] = useState(0);
 
   /* El estado y la muestra del JSON se miran solos: son las dos cosas que hay
      que ver cambiar para creerse que esto está mandando de verdad. */
   useEffect(() => {
-    const t = setInterval(() => {
+    const t = setInterval(async () => {
       setEstado(envio.estado());
       setMuestra(envio.vistaPrevia());
+      setSnapsPendientes(await cuantosSnapshotsPendientes().catch(() => 0));
     }, 1000);
     setMuestra(envio.vistaPrevia());
+    cuantosSnapshotsPendientes().then(setSnapsPendientes).catch(() => 0);
     return () => clearInterval(t);
   }, []);
 
@@ -75,6 +84,10 @@ export function Envio({
     alCambiar({ ...ajustes, socket: { ...ajustes.socket, ...c } });
   const api = (c: Partial<AjustesEnvio['api']>) =>
     alCambiar({ ...ajustes, api: { ...ajustes.api, ...c } });
+  const mqttCfg = (c: Partial<AjustesEnvio['mqtt']>) =>
+    alCambiar({ ...ajustes, mqtt: { ...ajustes.mqtt, ...c } });
+
+  const senalesDisponibles = hardware.senalesPorClave();
 
   return (
     <>
@@ -148,6 +161,185 @@ export function Envio({
               {muestra}
             </pre>
           </div>
+        )}
+      </Bloque>
+
+      {/* ── MQTT ────────────────────────────────────────────────────────── */}
+      <Bloque titulo="En tiempo real, por MQTT">
+        <Nota>
+          Publica en un broker MQTT con el payload de Miskimayo cada pocos segundos. Usa TCP puro
+          (puerto 1883): solo funciona en la tablet, no en el navegador. Los datos se reciben por
+          Ethernet (RJ45/TCP).
+        </Nota>
+
+        <Interruptor
+          activo={ajustes.mqtt.activo}
+          alCambiar={(v) => mqttCfg({ activo: v })}
+          etiqueta="Mandar por MQTT"
+        />
+
+        <div className="grid grid-cols-[2fr_1fr] gap-3">
+          <Campo etiqueta="Broker" ayuda="Solo el host o IP, sin tcp://. Ej: paranoid.lat">
+            <Entrada
+              value={ajustes.mqtt.broker}
+              placeholder="paranoid.lat"
+              onChange={(e) => mqttCfg({ broker: e.target.value })}
+            />
+          </Campo>
+          <Campo etiqueta="Puerto">
+            <Entrada
+              type="number" min={1} max={65535}
+              value={ajustes.mqtt.puerto}
+              onChange={(e) => mqttCfg({ puerto: Number(e.target.value) || 1883 })}
+            />
+          </Campo>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Usuario">
+            <Entrada
+              value={ajustes.mqtt.usuario}
+              placeholder="test"
+              onChange={(e) => mqttCfg({ usuario: e.target.value })}
+            />
+          </Campo>
+          <Campo etiqueta="Contraseña">
+            <Entrada
+              type="password"
+              value={ajustes.mqtt.contrasena}
+              placeholder="••••••••"
+              onChange={(e) => mqttCfg({ contrasena: e.target.value })}
+            />
+          </Campo>
+        </div>
+
+        <div className="grid grid-cols-[2fr_1fr] gap-3">
+          <Campo
+            etiqueta="Topic"
+            ayuda="{{unit_id}} se reemplaza por el nombre del equipo."
+          >
+            <Entrada
+              value={ajustes.mqtt.topic}
+              placeholder="/miskimayo/diplus/{{unit_id}}"
+              onChange={(e) => mqttCfg({ topic: e.target.value })}
+            />
+          </Campo>
+          <Campo etiqueta="Cada cuántos segundos">
+            <Entrada
+              type="number" min={1}
+              value={ajustes.mqtt.cadaSeg}
+              onChange={(e) => mqttCfg({ cadaSeg: Number(e.target.value) || 5 })}
+            />
+          </Campo>
+        </div>
+
+        {/* Mapeo de Sensores RJ45/TCP */}
+        <div className="grid grid-cols-3 gap-3">
+          <Campo etiqueta="Caudal Entrada (inputFlow)" ayuda="Sensor principal">
+            <Selector
+              value={ajustes.mqtt.claveInputFlow ?? ''}
+              onChange={(e) => mqttCfg({ claveInputFlow: e.target.value || undefined })}
+            >
+              <option value="">(Automático por nombre)</option>
+              {senalesDisponibles.map(([clave, s]) => (
+                <option key={clave} value={clave}>
+                  {s.nombre} ({clave})
+                </option>
+              ))}
+            </Selector>
+          </Campo>
+
+          <Campo etiqueta="Caudal Retorno (outputFlow)" ayuda="Sensor de retorno">
+            <Selector
+              value={ajustes.mqtt.claveOutputFlow ?? ''}
+              onChange={(e) => mqttCfg({ claveOutputFlow: e.target.value || undefined })}
+            >
+              <option value="">(Automático / "retorno")</option>
+              {senalesDisponibles.map(([clave, s]) => (
+                <option key={clave} value={clave}>
+                  {s.nombre} ({clave})
+                </option>
+              ))}
+            </Selector>
+          </Campo>
+
+          <Campo etiqueta="Sensor Nivel (sensorVolume)" ayuda="Sensor de nivel">
+            <Selector
+              value={ajustes.mqtt.claveSensorNivel ?? ''}
+              onChange={(e) => mqttCfg({ claveSensorNivel: e.target.value || undefined })}
+            >
+              <option value="">(Automático / "nivel")</option>
+              {senalesDisponibles.map(([clave, s]) => (
+                <option key={clave} value={clave}>
+                  {s.nombre} ({clave})
+                </option>
+              ))}
+            </Selector>
+          </Campo>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Totalizador Entrada (totalized)" ayuda="Totalizador principal">
+            <Selector
+              value={ajustes.mqtt.claveTotalizadorInput ?? ''}
+              onChange={(e) => mqttCfg({ claveTotalizadorInput: e.target.value || undefined })}
+            >
+              <option value="">(Automático / "totaliz")</option>
+              {senalesDisponibles.map(([clave, s]) => (
+                <option key={clave} value={clave}>
+                  {s.nombre} ({clave})
+                </option>
+              ))}
+            </Selector>
+          </Campo>
+
+          <Campo etiqueta="Totalizador Retorno" ayuda="Totalizador de retorno (opcional)">
+            <Selector
+              value={ajustes.mqtt.claveTotalizadorOutput ?? ''}
+              onChange={(e) => mqttCfg({ claveTotalizadorOutput: e.target.value || undefined })}
+            >
+              <option value="">(Ninguno / Automático)</option>
+              {senalesDisponibles.map(([clave, s]) => (
+                <option key={clave} value={clave}>
+                  {s.nombre} ({clave})
+                </option>
+              ))}
+            </Selector>
+          </Campo>
+        </div>
+
+        <Marcador e={estado.mqtt} unidad="publicaciones" />
+
+        {snapsPendientes > 0 && (
+          <div className="rounded-xl border border-line bg-sur2 px-3.5 py-2.5 font-mono text-[11px] text-ink2">
+            📊 <b>{snapsPendientes}</b> snapshots guardados en BD pendientes de envío por API (100 cada 10s).
+          </div>
+        )}
+
+        {!hayMqtt() && (
+          <Aviso tono="warn">
+            MQTT usa TCP nativo: este canal solo funciona instalado en la tablet, no al abrir la
+            app en un navegador de escritorio.
+          </Aviso>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Boton
+            variante="fuerte"
+            disabled={probandoMqtt}
+            onClick={async () => {
+              setProbandoMqtt(true);
+              setEcoMqtt(await envio.probarMqtt());
+              setProbandoMqtt(false);
+              setEstado(envio.estado());
+            }}
+          >
+            {probandoMqtt ? 'Probando…' : 'Probar ahora'}
+          </Boton>
+        </div>
+
+        {ecoMqtt && (
+          <Aviso tono={ecoMqtt.startsWith('Publicado') ? 'ok' : 'warn'}>{ecoMqtt}</Aviso>
         )}
       </Bloque>
 

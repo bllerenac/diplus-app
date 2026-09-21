@@ -25,6 +25,8 @@ export interface Descarga {
 interface PluginActualizador {
   version(): Promise<VersionInstalada>;
   descargar(o: { url: string }): Promise<Descarga>;
+  /** Descarga cualquier APK sin comprobar que sea de esta aplicacion. Para Tailscale y similares. */
+  descargarCualquier(o: { url: string }): Promise<Descarga>;
   instalar(o: { ruta: string }): Promise<void>;
   addListener(evento: 'onDescarga', fn: (d: { bytes: number; total: number }) => void): Promise<{ remove: () => void }>;
 }
@@ -94,6 +96,19 @@ export const actualizador = {
     }
   },
 
+  /** Descarga cualquier APK sin verificar que sea del paquete de DiPlus. Para Tailscale y similares. */
+  async descargarCualquier(url: string, alAvanzar?: (bytes: number, total: number) => void): Promise<Descarga> {
+    let quitar: { remove: () => void } | null = null;
+    if (alAvanzar) {
+      quitar = await Nativo.addListener('onDescarga', (d) => alAvanzar(d.bytes, d.total));
+    }
+    try {
+      return await Nativo.descargarCualquier({ url: arreglarDireccion(url) });
+    } finally {
+      quitar?.remove?.();
+    }
+  },
+
   instalar: (ruta: string) => Nativo.instalar({ ruta }),
 };
 
@@ -141,3 +156,40 @@ export const revisarSola = async (
     return null;
   }
 };
+
+const CLAVE_REVISION_TAILSCALE = 'diplus.revision.tailscale.at';
+
+/**
+ * Descarga e instala Tailscale desde la URL configurada.
+ *
+ * Funciona igual que revisarSola pero para un paquete externo: no comprueba
+ * la versión instalada de DiPlus, sino si el archivo que hay en la URL es un
+ * APK válido y lo instala directamente. Tailscale se actualiza cuando el APK
+ * del servidor sea distinto (el plugin acepta cualquier paquete cuando se le
+ * pasa anyPackage: true).
+ *
+ * Se llama desde el mismo punto que revisarSola, justo al arrancar la app.
+ */
+export const revisarTailscale = async (
+  cfg: { urlTailscale: string; automatica: boolean; cadaHoras: number },
+  ahoraMismo = false,
+): Promise<Descarga | null> => {
+  if (!hayActualizador() || !cfg.urlTailscale.trim()) return null;
+  if (!ahoraMismo && !cfg.automatica) return null;
+
+  if (!ahoraMismo) {
+    const antes = Number(localStorage.getItem(CLAVE_REVISION_TAILSCALE)) || 0;
+    const cada = Math.max(1, cfg.cadaHoras) * 3600000;
+    if (Date.now() - antes < cada) return null;
+  }
+  localStorage.setItem(CLAVE_REVISION_TAILSCALE, String(Date.now()));
+
+  try {
+    const d = await actualizador.descargarCualquier(cfg.urlTailscale);
+    await actualizador.instalar(d.ruta).catch(() => undefined);
+    return d;
+  } catch {
+    return null;
+  }
+};
+

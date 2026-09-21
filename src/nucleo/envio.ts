@@ -21,9 +21,19 @@
  * cuánto y con qué forma.
  */
 import { CapacitorHttp, Capacitor } from '@capacitor/core';
-import { Lectura, encolar, leerDesde, pendientes, quitarPendiente } from './base';
+import {
+  Lectura,
+  encolar,
+  leerDesde,
+  pendientes,
+  quitarPendiente,
+  guardarSnapshot,
+  leerSnapshotsPendientes,
+  marcarSnapshotsEnviados,
+} from './base';
 import { gps } from './gps';
 import { hardware } from './hardware';
+import { mqtt, hayMqtt } from './mqtt';
 
 /** Cómo se arma el JSON. Ninguno es mejor: depende de quién lo reciba. */
 export type Formato = 'plano' | 'lista';
@@ -52,9 +62,28 @@ export interface PorApi {
   historico: boolean;
 }
 
+export interface PorMqtt {
+  activo: boolean;
+  /** Solo el hostname o IP, sin tcp://. Ej: paranoid.lat */
+  broker: string;
+  puerto: number;
+  usuario: string;
+  contrasena: string;
+  /** Topic donde publica. {{unit_id}} se reemplaza por el nombre del equipo. */
+  topic: string;
+  cadaSeg: number;
+  /** Mapeo explícito de señales Ethernet (RJ45/TCP) para el payload Miskimayo */
+  claveInputFlow?: string;
+  claveOutputFlow?: string;
+  claveSensorNivel?: string;
+  claveTotalizadorInput?: string;
+  claveTotalizadorOutput?: string;
+}
+
 export interface AjustesEnvio {
   socket: PorSocket;
   api: PorApi;
+  mqtt: PorMqtt;
   /** Con qué nombre se identifica este equipo en lo que manda. */
   equipo: string;
   formato: Formato;
@@ -63,7 +92,18 @@ export interface AjustesEnvio {
 export const ENVIO_POR_DEFECTO: AjustesEnvio = {
   socket: { activo: false, url: 'ws://192.168.60.2:9977', cadaSeg: 2 },
   api: {
-    activo: false, url: '', token: '', cadaSeg: 30, lote: 200, historico: true,
+    activo: false,
+    url: 'https://miskimayo-back.wapsi.io/api/tracing/{{unit_id}}',
+    token: '', cadaSeg: 10, lote: 100, historico: true,
+  },
+  mqtt: {
+    activo: false,
+    broker: 'paranoid.lat',
+    puerto: 1883,
+    usuario: 'test',
+    contrasena: 'test1234',
+    topic: '/miskimayo/diplus/{{unit_id}}',
+    cadaSeg: 5,
   },
   equipo: '',
   formato: 'lista',
@@ -129,7 +169,6 @@ export const cuerpoAhora = (
   };
 };
 
-/** Un lote de lo guardado. Aquí no cabe `plano`: cada fila tiene su instante. */
 export const cuerpoHistorico = (equipo: string, filas: Lectura[]): Record<string, unknown> => ({
   equipo,
   at: Date.now(),
@@ -144,6 +183,104 @@ export const cuerpoHistorico = (equipo: string, filas: Lectura[]): Record<string
   })),
 });
 
+/**
+ * Payload MQTT con el modelo especifico de Miskimayo.
+ *
+ * Busca los sensores por nombre (no por clave) para ser robusto frente a
+ * cambios de configuracion: si se recablea el sensor a otro puerto, el nombre
+ * sigue siendo el mismo y el campo sigue llegando con el valor correcto.
+ *
+ * Los campos calculados:
+ *   caudalFlow = max(inputFlow - outputFlow, 0)
+ *   netTotalized = max(totalizedInput - totalizedOutput, 0)
+ *
+ * Los campos de IMU vienen del modulo de movimiento del propio equipo.
+ */
+export const cuerpoMqtt = (
+  equipo: string,
+  topic: string,
+  cfgMqtt?: PorMqtt,
+): { topic: string; payload: string } => {
+  const pos = gps.posicion();
+  const senales = hardware.senalesPorClave();
+
+  /* Busca por clave exacta si fue seleccionada, o por nombre/palabra clave como fallback. */
+  const porClaveONombre = (claveDeseada?: string, terminoNombre?: string): number | null => {
+    if (claveDeseada) {
+      const match = senales.find(([k]) => k === claveDeseada);
+      if (match && typeof match[1].valor === 'number') return match[1].valor;
+    }
+    if (terminoNombre) {
+      const n = terminoNombre.toLowerCase();
+      for (const [, s] of senales) {
+        if (s.nombre.toLowerCase().includes(n) && typeof s.valor === 'number') {
+          return s.valor as number;
+        }
+      }
+    }
+    return null;
+  };
+
+  let inputFlow: number | null = null;
+  if (cfgMqtt?.claveInputFlow) {
+    const match = senales.find(([k]) => k === cfgMqtt.claveInputFlow);
+    if (match && typeof match[1].valor === 'number') inputFlow = match[1].valor;
+  }
+  if (inputFlow === null) {
+    const principal = hardware.senalesPara('enviar')[0]?.senal;
+    inputFlow = typeof principal?.valor === 'number' ? principal.valor : null;
+  }
+
+  const rawValue = inputFlow;
+  const outputFlow = porClaveONombre(cfgMqtt?.claveOutputFlow, 'retorno');
+  const sensorVol = porClaveONombre(cfgMqtt?.claveSensorNivel, 'nivel');
+
+  const caudalFlow = inputFlow !== null && outputFlow !== null
+    ? Math.max(0, inputFlow - outputFlow)
+    : (inputFlow !== null ? inputFlow : null);
+
+  /* Totalizadores */
+  const totInput  = porClaveONombre(cfgMqtt?.claveTotalizadorInput, 'totaliz');
+  const totOutput = porClaveONombre(cfgMqtt?.claveTotalizadorOutput, 'tot_retorno');
+
+  const netTotalizedNum = totInput !== null && totOutput !== null
+    ? Math.max(0, totInput - totOutput)
+    : (totInput !== null ? totInput : null);
+
+  const netTotalized = netTotalizedNum !== null ? String(netTotalizedNum) : null;
+
+  /* IMU: el hardware las inyecta como señales con clave 'imu.*'. */
+  const imuPitch   = porClaveONombre(undefined, 'inclinaci');
+  const imuRoll    = porClaveONombre(undefined, 'giro');
+  const imuHeading = null;  /* No disponible en este hardware */
+
+  const unitId = equipo || 'HT-01';
+  const topicReal = topic.replace('{{unit_id}}', unitId);
+
+  const payload = {
+    unit:          unitId,
+    speed:         pos?.velocidad ?? null,
+    lat:           pos?.lat       ?? null,
+    lon:           pos?.lon       ?? null,
+    timestamp:     new Date().toISOString(),
+    caudalFlow,
+    inputFlow,
+    outputFlow,
+    sensorVolume:  sensorVol,
+    sensorLevel:   sensorVol,
+    fuelMotor:     netTotalized,
+    rawValue,
+    totalized:     netTotalized,
+    gpsAlt:        pos?.alt       ?? null,
+    pitch:         imuPitch,
+    roll:          imuRoll,
+    heading:       imuHeading,
+  };
+
+  return { topic: topicReal, payload: JSON.stringify(payload) };
+};
+
+
 // ── El que manda ────────────────────────────────────────────────────────────
 
 class Envio {
@@ -152,10 +289,12 @@ class Envio {
   private ws: WebSocket | null = null;
   private relojSocket: ReturnType<typeof setInterval> | null = null;
   private relojApi: ReturnType<typeof setInterval> | null = null;
+  private relojMqtt: ReturnType<typeof setInterval> | null = null;
   private reintento: ReturnType<typeof setTimeout> | null = null;
 
   private socket: EstadoCanal = { ...CANAL_PARADO };
   private api: EstadoCanal = { ...CANAL_PARADO };
+  private mqttCh: EstadoCanal = { ...CANAL_PARADO };
   private enCola = 0;
   private mandando = false;
 
@@ -176,9 +315,6 @@ class Envio {
     }
 
     if (cfg.api.activo && cfg.api.url.trim()) {
-      /* `conectando` y no `parado`: la API no mantiene ninguna conexión, así
-         que hasta el primer envío no se sabe nada. Decir «apagado» de algo que
-         está encendido y esperando su turno es mentira. */
       this.api = {
         ...CANAL_PARADO,
         estado: 'conectando',
@@ -189,26 +325,49 @@ class Envio {
         () => this.porApi(), Math.max(5000, cfg.api.cadaSeg * 1000),
       );
     }
+
+    /* MQTT: conectar si hay broker configurado y activo. */
+    if (cfg.mqtt.activo && cfg.mqtt.broker.trim() && hayMqtt()) {
+      this.mqttCh = { ...CANAL_PARADO, estado: 'conectando' };
+      mqtt.conectar({
+        broker: cfg.mqtt.broker.trim(),
+        puerto: cfg.mqtt.puerto,
+        usuario: cfg.mqtt.usuario,
+        clave: cfg.mqtt.contrasena,
+        clientId: `diplus-${cfg.equipo || 'tablet'}`,
+      }).then(() => {
+        this.mqttCh = { ...this.mqttCh, estado: 'abierto', error: null };
+      }).catch((e: Error) => {
+        this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
+      });
+      this.relojMqtt = setInterval(
+        () => this.porMqtt(), Math.max(1000, cfg.mqtt.cadaSeg * 1000),
+      );
+    }
   }
 
   parar() {
     if (this.relojSocket) clearInterval(this.relojSocket);
-    if (this.relojApi) clearInterval(this.relojApi);
-    if (this.reintento) clearTimeout(this.reintento);
+    if (this.relojApi)    clearInterval(this.relojApi);
+    if (this.relojMqtt)   clearInterval(this.relojMqtt);
+    if (this.reintento)  clearTimeout(this.reintento);
     this.relojSocket = null;
-    this.relojApi = null;
-    this.reintento = null;
+    this.relojApi    = null;
+    this.relojMqtt   = null;
+    this.reintento   = null;
     this.cerrarSocket();
-    /* El contador y la hora del ultimo envio sobreviven al apagado: son lo que
-       dice si esto llego a funcionar alguna vez, y borrarlos al apagar deja la
-       duda de si nunca mando o es que se apago. */
-    this.socket = {
-      ...CANAL_PARADO, enviados: this.socket.enviados, ultimo: this.socket.ultimo,
-    };
+    if (hayMqtt()) mqtt.desconectar().catch(() => undefined);
+    this.socket  = { ...CANAL_PARADO, enviados: this.socket.enviados,  ultimo: this.socket.ultimo };
+    this.mqttCh  = { ...CANAL_PARADO, enviados: this.mqttCh.enviados,  ultimo: this.mqttCh.ultimo };
   }
 
   estado() {
-    return { socket: { ...this.socket }, api: { ...this.api }, enCola: this.enCola };
+    return {
+      socket:  { ...this.socket },
+      api:     { ...this.api },
+      mqtt:    { ...this.mqttCh },
+      enCola:  this.enCola,
+    };
   }
 
   /** El JSON tal y como saldría ahora mismo, para poder verlo antes de mandarlo. */
@@ -299,7 +458,8 @@ class Envio {
    * escritorio, donde no hay puente.
    */
   private async entregar(cuerpo: unknown): Promise<void> {
-    const url = this.cfg.api.url.trim();
+    const unitId = this.cfg.equipo || 'HT-01';
+    const url = this.cfg.api.url.replace('{{unit_id}}', unitId).trim();
     const headers = {
       'Content-Type': 'application/json',
       ...(this.cfg.api.token ? { Authorization: `Bearer ${this.cfg.api.token}` } : {}),
@@ -320,18 +480,43 @@ class Envio {
   /**
    * Una vuelta de la API.
    *
-   * Primero lo atrasado y después lo nuevo, siempre en ese orden: al revés, un
-   * equipo que estuvo sin cobertura mandaría lo de ahora y dejaría lo viejo al
-   * final de una cola que no se vacía nunca, y el histórico quedaría del revés
-   * en el servidor.
+   * 1. Revisa si hay snapshots del formato Miskimayo pendientes en IndexedDB.
+   *    Si los hay, manda hasta 100 por POST (un array JSON) a la API.
+   * 2. Si no hay snapshots o falla, ejecuta la lógica estándar de envío histórico.
    */
   async porApi(): Promise<void> {
-    /* Una vuelta cada vez. Con la red mala una entrega puede tardar más que el
-       periodo, y dos a la vez mandarían el mismo lote dos veces. */
     if (this.mandando) return;
     this.mandando = true;
 
     try {
+      // Intentar primero enviar snapshots históricos de Miskimayo
+      const snaps = await leerSnapshotsPendientes(100).catch(() => []);
+      if (snaps.length > 0) {
+        const ids = snaps.map((s) => s.id!).filter((id) => id !== undefined);
+        const loteObjetos = snaps
+          .map((s) => {
+            try { return JSON.parse(s.datos); } catch { return null; }
+          })
+          .filter(Boolean);
+
+        if (loteObjetos.length > 0) {
+          try {
+            await this.entregar(loteObjetos);
+            await marcarSnapshotsEnviados(ids);
+            this.api = {
+              estado: 'abierto',
+              enviados: this.api.enviados + loteObjetos.length,
+              ultimo: Date.now(),
+              error: null,
+            };
+            return;
+          } catch (e) {
+            this.api = { ...this.api, estado: 'fallo', error: dicho(e) };
+            return;
+          }
+        }
+      }
+
       await this.soltarCola();
 
       const filas = this.cfg.api.historico
@@ -357,9 +542,6 @@ class Envio {
         };
         if (filas.length) this.recordar(filas[filas.length - 1].at);
       } catch (e) {
-        /* Lo que no se pudo entregar se guarda, y la marca avanza igual: el
-           dato ya no está solo en `lecturas`, está también en la cola, y no
-           avanzarla lo mandaría dos veces. */
         this.api = { ...this.api, estado: 'fallo', error: dicho(e) };
         await encolar(cuerpo).catch(() => undefined);
         if (filas.length) this.recordar(filas[filas.length - 1].at);
@@ -394,6 +576,46 @@ class Envio {
         /* Sigue sin haber red: se deja la cola como está y se prueba luego. */
         return;
       }
+    }
+  }
+
+  // ── MQTT ────────────────────────────────────────────────────────────────
+
+  private porMqtt() {
+    const { topic } = this.cfg.mqtt;
+
+    const { topic: topicReal, payload } = cuerpoMqtt(this.cfg.equipo, topic, this.cfg.mqtt);
+
+    // Guardar snapshot en BD local para el envío histórico por API
+    guardarSnapshot(payload).catch(() => undefined);
+
+    if (!hayMqtt()) return;
+
+    mqtt.publicar(topicReal, payload).then(() => {
+      this.mqttCh = {
+        ...this.mqttCh,
+        estado: 'abierto',
+        enviados: this.mqttCh.enviados + 1,
+        ultimo: Date.now(),
+        error: null,
+      };
+    }).catch((e: Error) => {
+      this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
+    });
+  }
+
+  /** Prueba el canal MQTT publicando un mensaje ahora mismo. */
+  async probarMqtt(): Promise<string> {
+    if (!hayMqtt()) return 'MQTT solo funciona en la tablet (no en el navegador).';
+    if (!this.cfg.mqtt.broker.trim()) return 'Falta el broker MQTT.';
+    const { topic } = this.cfg.mqtt;
+    const { topic: topicReal, payload } = cuerpoMqtt(this.cfg.equipo, topic, this.cfg.mqtt);
+    try {
+      await mqtt.publicar(topicReal, payload);
+      this.mqttCh = { ...this.mqttCh, estado: 'abierto', ultimo: Date.now(), error: null };
+      return `Publicado en ${topicReal}.`;
+    } catch (e) {
+      return `No se pudo publicar: ${e instanceof Error ? e.message : String(e)}`;
     }
   }
 

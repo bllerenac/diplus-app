@@ -21,7 +21,7 @@
  */
 
 const BASE = 'diplus';
-const VERSION = 2;
+const VERSION = 3;
 
 export interface Lectura {
   id?: number;
@@ -71,6 +71,15 @@ const abrir = (): Promise<IDBDatabase> =>
       if (!db.objectStoreNames.contains('calibraciones')) {
         const c = db.createObjectStore('calibraciones', { keyPath: 'id', autoIncrement: true });
         c.createIndex('que_at', ['que', 'at']);
+      }
+
+      /* Snapshots del payload Miskimayo: un registro por ciclo MQTT. Se borran
+         una vez confirmado el envio por API para no crecer indefinidamente. */
+      if (!db.objectStoreNames.contains('snapshots')) {
+        const sn = db.createObjectStore('snapshots', { keyPath: 'id', autoIncrement: true });
+        sn.createIndex('at', 'at');
+        /* Indice compuesto para leer eficientemente los no enviados en orden. */
+        sn.createIndex('enviado_at', ['enviado', 'at']);
       }
     };
 
@@ -274,3 +283,77 @@ export const cuantosPendientes = (): Promise<number> =>
 
 /** `true` si el navegador de este equipo tiene IndexedDB. */
 export const hayBase = (): boolean => typeof indexedDB !== 'undefined';
+
+/* ── Snapshots (Miskimayo payload histórico) ──────────────────────────────── */
+
+export interface Snapshot {
+  id?: number;
+  at: number;
+  enviado: number; // 0 = pendiente, 1 = enviado
+  datos: string;
+}
+
+export const guardarSnapshot = (datos: string): Promise<IDBValidKey> =>
+  conTienda('snapshots', 'readwrite', (t) =>
+    t.add({ at: Date.now(), enviado: 0, datos }),
+  );
+
+export const leerSnapshotsPendientes = async (limite = 100): Promise<Snapshot[]> => {
+  const db = await abrir();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snapshots', 'readonly');
+    const store = tx.objectStore('snapshots');
+    const idx = store.index('enviado_at');
+    const resultados: Snapshot[] = [];
+
+    // Busca los registros con enviado = 0 ordenados por tiempo
+    const range = IDBKeyRange.bound([0, 0], [0, Infinity]);
+    const req = idx.openCursor(range);
+
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor && resultados.length < limite) {
+        resultados.push(cursor.value as Snapshot);
+        cursor.continue();
+      } else {
+        resolve(resultados);
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+};
+
+export const marcarSnapshotsEnviados = async (ids: number[]): Promise<void> => {
+  if (ids.length === 0) return;
+  const db = await abrir();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snapshots', 'readwrite');
+    const store = tx.objectStore('snapshots');
+
+    let processed = 0;
+    for (const id of ids) {
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const item = getReq.result as Snapshot;
+        if (item) {
+          item.enviado = 1;
+          store.put(item);
+        }
+        processed++;
+        if (processed === ids.length) resolve();
+      };
+      getReq.onerror = () => reject(getReq.error);
+    }
+  });
+};
+
+export const cuantosSnapshotsPendientes = async (): Promise<number> => {
+  const db = await abrir();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snapshots', 'readonly');
+    const idx = tx.objectStore('snapshots').index('enviado_at');
+    const req = idx.count(IDBKeyRange.bound([0, 0], [0, Infinity]));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};

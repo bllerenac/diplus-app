@@ -33,6 +33,8 @@ export interface Servidor {
 /** De dónde se baja la aplicación, y si se mira sola. */
 export interface Actualizacion {
   url: string;
+  /** URL del APK de Tailscale alojado en el servidor propio. */
+  urlTailscale: string;
   /** Mira si hay versión nueva por su cuenta, sin que nadie pulse. */
   automatica: boolean;
   /** Cada cuántas horas mira. */
@@ -96,11 +98,16 @@ const POR_DEFECTO: Config = {
     cadaSeg: 30, equipo: '', usuario: '', clave: '',
   },
   envio: ENVIO_POR_DEFECTO,
-  actualizacion: { url: '', automatica: false, cadaHoras: 6 },
+  actualizacion: {
+    url: 'https://miskimayo.wapsi.io/apks/diplus.apk',
+    urlTailscale: 'https://miskimayo.wapsi.io/apks/tailscale.apk',
+    automatica: true,
+    cadaHoras: 6,
+  },
   canal: { activo: false, puerto: 8787, token: '' },
   movimiento: MOVIMIENTO_POR_DEFECTO,
   senales: {},
-  maqueta: false,
+  maqueta: true,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
 };
@@ -129,21 +136,30 @@ export const cargar = (): Config => {
  * exactamente como se veia antes.
  */
 const alDia = (c: Config): Config => {
+  let res = c;
   const panel = (c.panel as unknown[]) ?? [];
 
   if (panel.length && panel.every((x) => typeof x === 'string')) {
-    return {
-      ...c,
+    res = {
+      ...res,
       panel: (panel as string[]).map((clave) => ({ ...nuevaTarjeta('numero'), id: `t${clave}`, claves: [clave] })),
     };
+  } else if (!panel.length) {
+    res = { ...res, panel: panelFijo() };
   }
 
-  /* Un panel vacio ya no significa «enseñalo todo»: significa que nadie ha
-     puesto los huecos todavia. Se ponen aqui para que la pantalla tenga
-     siempre la misma cara, con o sin sensores conectados. */
-  if (!panel.length) return { ...c, panel: panelFijo() };
+  const act = res.actualizacion || {};
+  res = {
+    ...res,
+    actualizacion: {
+      url: act.url && act.url.trim() ? act.url : 'https://miskimayo.wapsi.io/apks/diplus.apk',
+      urlTailscale: act.urlTailscale && act.urlTailscale.trim() ? act.urlTailscale : 'https://miskimayo.wapsi.io/apks/tailscale.apk',
+      automatica: act.automatica ?? true,
+      cadaHoras: act.cadaHoras || 6,
+    },
+  };
 
-  return c;
+  return res;
 };
 
 /**

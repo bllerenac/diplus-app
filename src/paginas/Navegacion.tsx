@@ -28,7 +28,7 @@ import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 import { planoGuardado } from '../nucleo/plano';
 import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
-import { revisarSola } from '../nucleo/actualizacion';
+import { revisarSola, revisarTailscale } from '../nucleo/actualizacion';
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -393,6 +393,7 @@ export default function Navegacion() {
       },
     });
     revisarSola(cfg.actualizacion);
+    revisarTailscale(cfg.actualizacion);
   }, [cfg.canal.activo, cfg.canal.puerto, cfg.canal.token, cfg.actualizacion.automatica]);
 
   /**
