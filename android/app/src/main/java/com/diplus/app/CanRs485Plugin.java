@@ -105,13 +105,17 @@ public class CanRs485Plugin extends Plugin {
     }
 
     private String resolverDevicePath(String path) {
-        if (path == null || path.isEmpty()) return "/dev/ttyHSL0";
+        if (path == null || path.isEmpty()) return "/dev/ttyUSB0";
         File f = new File(path);
-        if (!f.exists() && (path.contains("ttyUSB") || path.equals("/dev/ttyUSB0"))) {
-            File fallback = new File("/dev/ttyHSL0");
-            if (fallback.exists()) {
-                Log.w(TAG, "Dispositivo " + path + " no existe. Usando fallback RS485 del hardware: /dev/ttyHSL0");
-                return "/dev/ttyHSL0";
+        if (f.exists()) return path;
+
+        if (path.contains("ttyUSB")) {
+            for (int i = 0; i <= 3; i++) {
+                File candidate = new File("/dev/ttyUSB" + i);
+                if (candidate.exists()) {
+                    Log.i(TAG, "Puerto " + path + " no encontrado, usando puerto USB activo: " + candidate.getAbsolutePath());
+                    return candidate.getAbsolutePath();
+                }
             }
         }
         return path;
@@ -119,7 +123,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void setPortBaudrate(PluginCall call) {
-        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyUSB0"));
         int baudrate = call.getInt("baudrate", 9600);
 
         try {
@@ -140,7 +144,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendEurosensQuery(PluginCall call) {
-        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyUSB0"));
         int address = call.getInt("address", 1);
         int command = call.getInt("command", 6);
 
@@ -177,7 +181,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendModbusQuery(PluginCall call) {
-        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyUSB0"));
         int address = call.getInt("address", 1);
         int functionCode = call.getInt("functionCode", 3);
         int startRegister = call.getInt("startRegister", 0);
@@ -226,7 +230,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendRawBytes(PluginCall call) {
-        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyUSB0"));
         String hexString = call.getString("hexData", "0103000000044409");
 
         try {
@@ -883,26 +887,32 @@ public class CanRs485Plugin extends Plugin {
      * a otro. Por eso el SDK del fabricante no escribe el nombre a fuego, sino
      * que busca el nodo por su posicion en el bus USB:
      *
-     *   serial0 = "/dev/ttyHSL0"                            COM1  RS232
-     *   serial1 = getSerialDeviceNodeByName("3/1-1.3:1.0")  COM2  RS232
-     *   serial2 = getSerialDeviceNodeByName("2/1-1.2:1.0")  RS485
+     * Lista los puertos serie visibles en la tablet, tanto los del
+     * procesador como los que aparecen por USB.
      *
-     * Aqui se hace lo mismo: se sigue el enlace de /sys/class/tty y se mira en
-     * que rama del bus cuelga cada uno. Asi el RS485 sigue siendo el RS485
-     * aunque manana el sistema lo llame ttyUSB1.
+     * Ademas comprueba si el archivo en `/dev` existe de verdad, para que
+     * la pantalla de configuracion pueda marcar en gris los que estan
+     * desconectados en vez de dejar que el usuario los elija y luego falle.
      */
     @PluginMethod
     public void listarPuertos(PluginCall call) {
         JSArray lista = new JSArray();
 
-        /* Los USB del latiguillo, por su rama del bus. */
-        File[] enlaces = new File("/sys/class/tty").listFiles(
-                (dir, nombre) -> nombre.startsWith("ttyUSB"));
+        /*
+         * En Android los adaptadores USB-serie se cuelgan de /sys/class/tty/ttyUSB*
+         * y enlazan al arbol de dispositivos USB.
+         */
+        File claseTty = new File("/sys/class/tty");
+        File[] enlaces =
+                claseTty.listFiles(
+                        (dir, nombre) -> nombre.startsWith("ttyUSB"));
 
+        boolean vioTtyUsb0 = false;
         if (enlaces != null) {
             java.util.Arrays.sort(enlaces);
             for (File enlace : enlaces) {
                 String ruta = "/dev/" + enlace.getName();
+                if (enlace.getName().equals("ttyUSB0")) vioTtyUsb0 = true;
                 String destino;
                 try {
                     destino = enlace.getCanonicalPath();
@@ -919,8 +929,12 @@ public class CanRs485Plugin extends Plugin {
             }
         }
 
+        if (!vioTtyUsb0) {
+            lista.put(puerto("/dev/ttyUSB0", "RS485 (Bornera P4)", "USB interno (1-1.2)", new File("/dev/ttyUSB0").exists()));
+        }
+
         /* Los del procesador, que si son fijos. */
-        lista.put(puerto("/dev/ttyHSL0", "RS485 / COM1", "SoC", new File("/dev/ttyHSL0").exists()));
+        lista.put(puerto("/dev/ttyHSL0", "COM1 (RS232)", "SoC", new File("/dev/ttyHSL0").exists()));
         lista.put(puerto("/dev/ttyHSL1", "Reservado", "SoC", new File("/dev/ttyHSL1").exists()));
         lista.put(puerto("/dev/ttyHSL2", "GPS", "SoC", new File("/dev/ttyHSL2").exists()));
         lista.put(puerto("/dev/ttyHSL3", "Reservado", "SoC", new File("/dev/ttyHSL3").exists()));
