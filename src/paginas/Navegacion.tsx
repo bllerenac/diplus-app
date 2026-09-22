@@ -28,6 +28,7 @@ import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 import { planoGuardado } from '../nucleo/plano';
 import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
+import { horometro } from '../nucleo/horometro';
 import { revisarSola, revisarTailscale } from '../nucleo/actualizacion';
 
 /**
@@ -423,6 +424,7 @@ export default function Navegacion() {
        aunque nadie haya abierto la configuración en todo el turno. */
     envio.aplicar(cfg.envio);
     rumbo.aplicar(cfg.rumbo);
+    if (cfg.horometro) horometro.aplicar(cfg.horometro);
 
     const quitarTramas = hardware.alRecibir((t: TramaVista) => {
       setValores((prev) => {

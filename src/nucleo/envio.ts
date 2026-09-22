@@ -34,6 +34,7 @@ import {
 import { gps } from './gps';
 import { hardware } from './hardware';
 import { mqtt, hayMqtt } from './mqtt';
+import { horometro } from './horometro';
 
 export interface LogEnvio {
   id: number;
@@ -110,6 +111,35 @@ export interface PorApi {
   historico: boolean;
 }
 
+export interface CampoMqttDef {
+  clave: string;
+  nombre: string;
+  descripcion: string;
+  tipo: 'numero' | 'texto' | 'gps' | 'fecha';
+  sensorSugerido?: string;
+}
+
+export const CAMPOS_MQTT_MISKIMAYO: CampoMqttDef[] = [
+  { clave: 'unit', nombre: 'ID de Unidad', descripcion: 'Identificador del camión/equipo', tipo: 'texto' },
+  { clave: 'speed', nombre: 'Velocidad', descripcion: 'Velocidad de marcha (km/h)', tipo: 'gps', sensorSugerido: 'velocidad' },
+  { clave: 'lat', nombre: 'Latitud', descripcion: 'Coordenada latitud GPS', tipo: 'gps' },
+  { clave: 'lon', nombre: 'Longitud', descripcion: 'Coordenada longitud GPS', tipo: 'gps' },
+  { clave: 'timestamp', nombre: 'Fecha y Hora', descripcion: 'Marca temporal ISO 8601', tipo: 'fecha' },
+  { clave: 'caudalFlow', nombre: 'Caudal Neto', descripcion: 'Flujo efectivo (input - output) en L/h', tipo: 'numero', sensorSugerido: 'caudal' },
+  { clave: 'inputFlow', nombre: 'Caudal Entrada', descripcion: 'Flujo de alimentación/ingreso en L/h', tipo: 'numero', sensorSugerido: 'ingreso' },
+  { clave: 'outputFlow', nombre: 'Caudal Retorno', descripcion: 'Flujo de retorno en L/h', tipo: 'numero', sensorSugerido: 'retorno' },
+  { clave: 'sensorVolume', nombre: 'Volumen Estanque', descripcion: 'Volumen del sensor de estanque en L', tipo: 'numero', sensorSugerido: 'nivel' },
+  { clave: 'sensorLevel', nombre: 'Nivel Estanque', descripcion: 'Nivel del sensor en % o altura', tipo: 'numero', sensorSugerido: 'nivel' },
+  { clave: 'volumen', nombre: 'Volumen Motor', descripcion: 'Volumen acumulado / consumo de combustible en L', tipo: 'numero', sensorSugerido: 'total' },
+  { clave: 'rawValue', nombre: 'Valor Crudo', descripcion: 'Lectura bruta del sensor principal', tipo: 'numero', sensorSugerido: 'ingreso' },
+  { clave: 'totalized', nombre: 'Totalizador Neto', descripcion: 'Totalizador acumulado neto en L', tipo: 'numero', sensorSugerido: 'totaliz' },
+  { clave: 'alt', nombre: 'Altitud', descripcion: 'Altitud sobre el nivel del mar en metros', tipo: 'gps' },
+  { clave: 'pitch', nombre: 'Inclinación (Pitch)', descripcion: 'Inclinación longitudinal en grados', tipo: 'numero', sensorSugerido: 'inclinaci' },
+  { clave: 'roll', nombre: 'Giro (Roll)', descripcion: 'Inclinación lateral / giro en grados', tipo: 'numero', sensorSugerido: 'giro' },
+  { clave: 'heading', nombre: 'Rumbo (Heading)', descripcion: 'Orientación / rumbo en grados', tipo: 'gps', sensorSugerido: 'rumbo' },
+  { clave: 'horometro', nombre: 'Horómetro', descripcion: 'Horas de operación / motor en horas', tipo: 'numero', sensorSugerido: 'horas' },
+];
+
 export interface PorMqtt {
   activo: boolean;
   /** Solo el hostname o IP, sin tcp://. Ej: paranoid.lat */
@@ -120,12 +150,17 @@ export interface PorMqtt {
   /** Topic donde publica. {{unit_id}} se reemplaza por el nombre del equipo. */
   topic: string;
   cadaSeg: number;
-  /** Mapeo explícito de señales Ethernet (RJ45/TCP) para el payload Miskimayo */
+  /** Mapeo explícito de claves del payload a señales del hardware */
+  mapeo?: Record<string, string>;
+  /** Lista de claves que se incluyen en el payload (por defecto todas las 18) */
+  clavesActivas?: string[];
+  /** Mapeo explícito de señales Ethernet (RJ45/TCP) para compatibilidad */
   claveInputFlow?: string;
   claveOutputFlow?: string;
   claveSensorNivel?: string;
   claveTotalizadorInput?: string;
   claveTotalizadorOutput?: string;
+  claveHorometro?: string;
 }
 
 export interface AjustesEnvio {
@@ -232,33 +267,23 @@ export const cuerpoHistorico = (equipo: string, filas: Lectura[]): Record<string
 });
 
 /**
- * Payload MQTT con el modelo especifico de Miskimayo.
- *
- * Busca los sensores por nombre (no por clave) para ser robusto frente a
- * cambios de configuracion: si se recablea el sensor a otro puerto, el nombre
- * sigue siendo el mismo y el campo sigue llegando con el valor correcto.
- *
- * Los campos calculados:
- *   caudalFlow = max(inputFlow - outputFlow, 0)
- *   netTotalized = max(totalizedInput - totalizedOutput, 0)
- *
- * Los campos de IMU vienen del modulo de movimiento del propio equipo.
+ * Calcula los 18 valores para el modelo de Miskimayo en tiempo real.
  */
-export const cuerpoMqtt = (
+export const calcularValoresMqtt = (
   equipo: string,
-  topic: string,
   cfgMqtt?: PorMqtt,
-): { topic: string; payload: string } => {
+): Record<string, unknown> => {
   const pos = gps.posicion();
   const senales = hardware.senalesPorClave();
 
-  /* Busca por clave exacta si fue seleccionada, o por terminos de nombre/clave como fallback. */
-  const porClaveONombre = (claveDeseada?: string, ...terminos: string[]): number | null => {
+  /* Busca por clave exacta si fue seleccionada, o por términos/alternativas como fallback. */
+  const porClaveONombre = (claveDeseada?: string, ...candidatos: (string | string[])[]): number | null => {
     if (claveDeseada) {
       const match = senales.find(([k]) => k === claveDeseada);
       if (match && typeof match[1].valor === 'number') return match[1].valor;
     }
-    if (terminos.length > 0) {
+    for (const candidato of candidatos) {
+      const terminos = Array.isArray(candidato) ? candidato : [candidato];
       for (const [k, s] of senales) {
         const texto = `${k} ${s.nombre}`.toLowerCase();
         if (terminos.every((t) => texto.includes(t.toLowerCase())) && typeof s.valor === 'number') {
@@ -269,19 +294,26 @@ export const cuerpoMqtt = (
     return null;
   };
 
-  const inputFlow = porClaveONombre(cfgMqtt?.claveInputFlow, 'ingreso')
-    ?? (typeof hardware.senalesPara('enviar')[0]?.senal?.valor === 'number' ? hardware.senalesPara('enviar')[0].senal.valor as number : null);
+  const m = cfgMqtt?.mapeo || {};
 
-  const outputFlow = porClaveONombre(cfgMqtt?.claveOutputFlow, 'retorno');
+  const inputFlow = porClaveONombre(m.inputFlow || cfgMqtt?.claveInputFlow, 'ingreso')
+    ?? (typeof hardware.senalesPara('enviar')[0]?.senal?.valor === 'number'
+      ? (hardware.senalesPara('enviar')[0].senal.valor as number)
+      : null);
 
-  const caudalFlow = inputFlow !== null && outputFlow !== null
-    ? Math.max(0, inputFlow - outputFlow)
-    : (inputFlow !== null ? inputFlow : null);
+  const outputFlow = porClaveONombre(m.outputFlow || cfgMqtt?.claveOutputFlow, 'retorno');
 
-  const sensorVol = porClaveONombre(cfgMqtt?.claveSensorNivel, 'nivel');
+  const caudalFlow = m.caudalFlow
+    ? porClaveONombre(m.caudalFlow)
+    : (inputFlow !== null && outputFlow !== null
+        ? Math.max(0, inputFlow - outputFlow)
+        : (inputFlow !== null ? inputFlow : null));
+
+  const sensorVol = porClaveONombre(m.sensorVolume || cfgMqtt?.claveSensorNivel, 'nivel');
+  const sensorLev = porClaveONombre(m.sensorLevel) ?? sensorVol;
 
   /* Totalizadores */
-  const totInput  = porClaveONombre(cfgMqtt?.claveTotalizadorInput, 'totaliz', 'ingreso')
+  const totInput = porClaveONombre(m.totalized || cfgMqtt?.claveTotalizadorInput, 'totaliz', 'ingreso')
     ?? porClaveONombre(undefined, 'totaliz');
   const totOutput = porClaveONombre(cfgMqtt?.claveTotalizadorOutput, 'totaliz', 'retorno')
     ?? porClaveONombre(undefined, 'tot_retorno');
@@ -290,37 +322,97 @@ export const cuerpoMqtt = (
     ? Math.max(0, totInput - totOutput)
     : (totInput !== null ? totInput : null);
 
-  /* IMU: el hardware las inyecta como señales con clave 'imu.*'. */
-  const imuPitch   = porClaveONombre(undefined, 'inclinaci');
-  const imuRoll    = porClaveONombre(undefined, 'giro');
-  const imuHeading = null;  /* No disponible en este hardware */
+  // volumen (en lugar de fuelMotor)
+  const volumenVal = porClaveONombre(m.volumen) ?? netTotalizedNum ?? 0;
 
+  // rawValue
+  const rawVal = porClaveONombre(m.rawValue) ?? inputFlow ?? 0;
+
+  // totalized
+  const totalizedVal = porClaveONombre(m.totalized) ?? netTotalizedNum ?? 0;
+
+  // IMU
+  const imuPitch = porClaveONombre(m.pitch, 'inclinaci');
+  const imuRoll = porClaveONombre(m.roll, 'giro');
+  const imuHeading = porClaveONombre(m.heading, 'rumbo') ?? pos?.rumbo ?? 0;
+
+  // GPS / posición
+  const speedVal = porClaveONombre(m.speed) ?? pos?.velocidad ?? 0;
+  const latVal = porClaveONombre(m.lat) ?? pos?.lat ?? 0;
+  const lonVal = porClaveONombre(m.lon) ?? pos?.lon ?? 0;
+  const altVal = porClaveONombre(m.alt) ?? pos?.alt ?? 0;
+
+  // horometro
+  let horometroVal: number | null = null;
+  if (m.horometro || cfgMqtt?.claveHorometro) {
+    horometroVal = porClaveONombre(m.horometro || cfgMqtt?.claveHorometro);
+  } else {
+    // Buscar en sensores externos (excluyendo la propia señal de la tablet si no fue elegida explícitamente)
+    for (const [k, s] of senales) {
+      if (k === 'sistema.horometro') continue;
+      const texto = `${k} ${s.nombre}`.toLowerCase();
+      if ((texto.includes('horas_motor') || texto.includes('horometro') || texto.includes('horas')) && typeof s.valor === 'number') {
+        horometroVal = s.valor;
+        break;
+      }
+    }
+    if (horometroVal === null) {
+      horometroVal = horometro.horasTotales();
+    }
+  }
+
+  const unitId = equipo || 'SC-03';
+
+  return {
+    unit: unitId,
+    speed: speedVal,
+    lat: latVal,
+    lon: lonVal,
+    timestamp: new Date().toISOString(),
+    caudalFlow: caudalFlow ?? 0,
+    inputFlow: inputFlow ?? 0,
+    outputFlow: outputFlow ?? 0,
+    sensorVolume: sensorVol ?? 0,
+    sensorLevel: sensorLev ?? 0,
+    volumen: volumenVal,
+    rawValue: rawVal,
+    totalized: totalizedVal,
+    alt: altVal,
+    pitch: imuPitch ?? 0,
+    roll: imuRoll ?? 0,
+    heading: imuHeading,
+    horometro: horometroVal,
+  };
+};
+
+/**
+ * Payload MQTT con el modelo especifico de Miskimayo.
+ *
+ * Busca los sensores según el mapeo explícito o por nombre/clave como fallback.
+ * Contiene exactamente las claves del esquema de Miskimayo, respetando
+ * 'alt' (en vez de gpsAlt), 'volumen' (en vez de fuelMotor) y 'horometro'.
+ */
+export const cuerpoMqtt = (
+  equipo: string,
+  topic: string,
+  cfgMqtt?: PorMqtt,
+): { topic: string; payload: string; valores: Record<string, unknown> } => {
+  const todosValores = calcularValoresMqtt(equipo, cfgMqtt);
   const unitId = equipo || 'SC-03';
   const topicReal = topic.replace('{{unit_id}}', unitId);
 
-  const payload = {
-    unit:            unitId,
-    speed:           pos?.velocidad ?? 0,
-    lat:             pos?.lat       ?? 0,
-    lon:             pos?.lon       ?? 0,
-    timestamp:       new Date().toISOString(),
-    caudalFlow:      caudalFlow     ?? 0,
-    inputFlow:       inputFlow      ?? 0,
-    outputFlow:      outputFlow     ?? 0,
-    sensorVolume:    sensorVol      ?? 0,
-    sensorLevel:     sensorVol      ?? 0,
-    fuelMotor:       netTotalizedNum ?? 0,
-    rawValue:        inputFlow      ?? 0,
-    totalized:       netTotalizedNum ?? 0,
-    totalizedInput:  totInput       ?? 0,
-    totalizedOutput: totOutput      ?? 0,
-    gpsAlt:          pos?.alt       ?? 0,
-    pitch:           imuPitch       ?? 0,
-    roll:            imuRoll        ?? 0,
-    heading:         imuHeading     ?? 0,
-  };
+  const clavesDeseadas = cfgMqtt?.clavesActivas && cfgMqtt.clavesActivas.length > 0
+    ? cfgMqtt.clavesActivas
+    : CAMPOS_MQTT_MISKIMAYO.map((c) => c.clave);
 
-  return { topic: topicReal, payload: JSON.stringify(payload) };
+  const payload: Record<string, unknown> = {};
+  for (const c of CAMPOS_MQTT_MISKIMAYO) {
+    if (clavesDeseadas.includes(c.clave)) {
+      payload[c.clave] = todosValores[c.clave] ?? 0;
+    }
+  }
+
+  return { topic: topicReal, payload: JSON.stringify(payload), valores: payload };
 };
 
 
@@ -447,6 +539,21 @@ class Envio {
     const s = hardware.senalesPara('enviar');
     if (!s.length) return '';
     return JSON.stringify(cuerpoAhora(this.cfg.equipo, this.cfg.formato, s), null, 2);
+  }
+
+  /** El JSON del payload MQTT tal y como saldría ahora mismo. */
+  vistaPreviaMqtt(): string {
+    const { payload } = cuerpoMqtt(this.cfg.equipo, this.cfg.mqtt.topic, this.cfg.mqtt);
+    try {
+      return JSON.stringify(JSON.parse(payload), null, 2);
+    } catch {
+      return payload;
+    }
+  }
+
+  /** Valores actuales calculados para la lista de mapeo MQTT. */
+  valoresMqtt(): Record<string, unknown> {
+    return calcularValoresMqtt(this.cfg.equipo, this.cfg.mqtt);
   }
 
   // ── Socket ──────────────────────────────────────────────────────────────

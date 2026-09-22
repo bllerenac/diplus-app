@@ -117,9 +117,11 @@ import {
 } from './piezas';
 import { Montaje } from './montaje';
 import { Envio } from './envio';
+import { HorometroAjuste } from './HorometroAjuste';
+import { horometro } from '../nucleo/horometro';
 
 type Pestana =
-  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'servidor' | 'kiosco';
+  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'horometro' | 'servidor' | 'kiosco';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'sensores', nombre: 'Sensores' },
@@ -128,6 +130,7 @@ const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'posicion', nombre: 'Posición' },
   { id: 'datos', nombre: 'Datos' },
   { id: 'envio', nombre: 'Envío' },
+  { id: 'horometro', nombre: 'Horómetro' },
   { id: 'servidor', nombre: 'Servidor' },
   { id: 'kiosco', nombre: 'Kiosco' },
 ];
@@ -525,6 +528,7 @@ export default function Ajustes() {
     registro.aplicar(c.registro);
     envio.aplicar(c.envio);
     rumbo.aplicar(c.rumbo);
+    if (c.horometro) horometro.aplicar(c.horometro);
     setEco(`Guardado a las ${new Date().toLocaleTimeString('es-PE')}`);
     setTimeout(() => setEco(null), 2500);
   };
@@ -1849,6 +1853,14 @@ export default function Ajustes() {
               alCambiar={(envio) => aplicar({ ...cfg, envio })}
               salen={disponibles.filter(([c]) => ajustesDe(cfg.senales, c).enviar)}
               alDetalle={setDetalle}
+            />
+          )}
+
+          {/* ── Horómetro ──────────────────────────────────────────────── */}
+          {pestana === 'horometro' && (
+            <HorometroAjuste
+              ajustes={cfg.horometro}
+              alCambiar={(horometroAjustes) => aplicar({ ...cfg, horometro: horometroAjustes })}
             />
           )}
 

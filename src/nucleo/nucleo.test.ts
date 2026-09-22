@@ -16,6 +16,10 @@ import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
 import { Rumbo } from './rumbo';
+import { cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
+import { hardware } from './hardware';
+import { senal } from './lecturas';
+import { horometro } from './horometro';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 
@@ -677,3 +681,109 @@ describe('el rumbo del mapa', () => {
     expect(r.siguiente(300, 8)).toBe(300);
   });
 });
+
+describe('payload MQTT y snapshot (Miskimayo)', () => {
+  it('contiene exactamente las 18 claves de la imagen con alt, volumen y horometro', () => {
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}');
+    const obj = JSON.parse(payload);
+
+    // Debe contener las 18 claves
+    expect(Object.keys(obj).sort()).toEqual(
+      CAMPOS_MQTT_MISKIMAYO.map((c) => c.clave).sort(),
+    );
+
+    // Verificar renombrados específicos
+    expect(obj).toHaveProperty('alt');
+    expect(obj).not.toHaveProperty('gpsAlt');
+
+    expect(obj).toHaveProperty('volumen');
+    expect(obj).not.toHaveProperty('fuelMotor');
+
+    // Verificar horometro
+    expect(obj).toHaveProperty('horometro');
+    expect(obj.unit).toBe('CA-99');
+  });
+
+  it('resuelve horometro desde una señal inyectada', () => {
+    hardware.inyectar('dfm', 'CAN1', [
+      senal('horas_motor', 'Horas de motor', 'h', 1450.5),
+    ]);
+
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}');
+    const obj = JSON.parse(payload);
+    expect(obj.horometro).toBe(1450.5);
+
+    hardware.limpiar();
+  });
+
+  it('permite mapear explícitamente horometro a otra señal personalizada', () => {
+    hardware.inyectar('sensor', 'RS485', [
+      senal('mi_contador_horas', 'Contador Externo', 'h', 8765.25),
+    ]);
+
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}', {
+      activo: true,
+      broker: 'localhost',
+      puerto: 1883,
+      usuario: '',
+      contrasena: '',
+      topic: 'test',
+      cadaSeg: 5,
+      mapeo: {
+        horometro: 'sensor.mi_contador_horas',
+      },
+    });
+    const obj = JSON.parse(payload);
+    expect(obj.horometro).toBe(8765.25);
+
+    hardware.limpiar();
+  });
+
+  it('filtra campos según clavesActivas si el usuario desmarca claves', () => {
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}', {
+      activo: true,
+      broker: 'localhost',
+      puerto: 1883,
+      usuario: '',
+      contrasena: '',
+      topic: 'test',
+      cadaSeg: 5,
+      clavesActivas: ['unit', 'timestamp', 'alt', 'volumen', 'horometro'],
+    });
+    const obj = JSON.parse(payload);
+    expect(Object.keys(obj).sort()).toEqual(['alt', 'horometro', 'timestamp', 'unit', 'volumen']);
+  });
+});
+
+describe('horómetro interno de la tablet', () => {
+  it('permite fijar valor inicial y calcular horas totales', () => {
+    horometro.setValorInicial(1200.5);
+    expect(horometro.valorInicial()).toBe(1200.5);
+    expect(horometro.horasTotales()).toBeGreaterThanOrEqual(1200.5);
+  });
+
+  it('permite calibrar directamente la lectura total del camión', () => {
+    horometro.setHorasTotales(5000.0);
+    expect(horometro.horasTotales()).toBe(5000.0);
+    expect(horometro.segundosAcumulados()).toBe(0);
+  });
+
+  it('inyecta la señal sistema.horometro en hardware', () => {
+    horometro.setHorasTotales(3456.78);
+    const senales = hardware.senalesPorClave();
+    const s = senales.find(([k]) => k === 'sistema.horometro');
+    expect(s).toBeDefined();
+    expect(s![1].nombre).toBe('Horómetro de motor');
+    expect(s![1].valor).toBe(3456.78);
+    expect(s![1].unidad).toBe('h');
+  });
+
+  it('se envía en cuerpoMqtt de forma automática si no hay otro sensor configurado', () => {
+    horometro.setHorasTotales(9999.5);
+    const { payload } = cuerpoMqtt('CA-01', '/truck/{{unit_id}}');
+    const obj = JSON.parse(payload);
+    expect(obj.horometro).toBe(9999.5);
+  });
+});
+
+

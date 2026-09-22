@@ -22,6 +22,7 @@ import com.getcapacitor.PermissionState;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -142,6 +143,27 @@ public class CanRs485Plugin extends Plugin {
         }
     }
 
+    private final java.util.concurrent.ConcurrentHashMap<String, FileOutputStream> openOutputStreams = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private synchronized void writeToDevice(String devicePath, byte[] bytes) throws IOException {
+        FileOutputStream fos = openOutputStreams.get(devicePath);
+        if (fos == null) {
+            fos = new FileOutputStream(new File(devicePath), true);
+            openOutputStreams.put(devicePath, fos);
+        }
+        try {
+            fos.write(bytes);
+            fos.flush();
+        } catch (IOException e) {
+            try { fos.close(); } catch (Exception ignored) {}
+            openOutputStreams.remove(devicePath);
+            fos = new FileOutputStream(new File(devicePath), true);
+            openOutputStreams.put(devicePath, fos);
+            fos.write(bytes);
+            fos.flush();
+        }
+    }
+
     @PluginMethod
     public void sendEurosensQuery(PluginCall call) {
         String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyUSB0"));
@@ -159,10 +181,7 @@ public class CanRs485Plugin extends Plugin {
             int crc = calculateEurosensCrc8(head, 3);
             byte[] packet = new byte[] { head[0], head[1], head[2], (byte) crc };
 
-            try (FileOutputStream fos = new FileOutputStream(devFile)) {
-                fos.write(packet);
-                fos.flush();
-            }
+            writeToDevice(devicePath, packet);
 
             StringBuilder sb = new StringBuilder();
             for (byte b : packet) sb.append(String.format("%02X ", b));
@@ -208,10 +227,7 @@ public class CanRs485Plugin extends Plugin {
             packet[6] = (byte) (crc & 0xff);        // CRC Low Byte
             packet[7] = (byte) ((crc >> 8) & 0xff); // CRC High Byte
 
-            try (FileOutputStream fos = new FileOutputStream(devFile)) {
-                fos.write(packet);
-                fos.flush();
-            }
+            writeToDevice(devicePath, packet);
 
             StringBuilder sb = new StringBuilder();
             for (byte b : packet) sb.append(String.format("%02X ", b));
@@ -241,10 +257,7 @@ public class CanRs485Plugin extends Plugin {
             }
 
             byte[] bytes = hexStringToByteArray(hexString);
-            try (FileOutputStream fos = new FileOutputStream(devFile)) {
-                fos.write(bytes);
-                fos.flush();
-            }
+            writeToDevice(devicePath, bytes);
 
             JSObject ret = new JSObject();
             ret.put("status", "sent");

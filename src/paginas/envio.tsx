@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Senal } from '../nucleo/lecturas';
 import {
   AjustesEnvio,
+  CAMPOS_MQTT_MISKIMAYO,
   EstadoCanal,
   Formato,
   LogEnvio,
@@ -70,6 +71,8 @@ export function Envio({
 }) {
   const [estado, setEstado] = useState(envio.estado());
   const [muestra, setMuestra] = useState('');
+  const [muestraMqtt, setMuestraMqtt] = useState('');
+  const [valoresMqtt, setValoresMqtt] = useState<Record<string, unknown>>({});
   const [eco, setEco] = useState<string | null>(null);
   const [probando, setProbando] = useState(false);
   const [ecoMqtt, setEcoMqtt] = useState<string | null>(null);
@@ -84,13 +87,16 @@ export function Envio({
      que ver cambiar para creerse que esto está mandando de verdad. */
   useEffect(() => {
     const unsub = alLogsEnvio((nuevosLogs) => setLogs(nuevosLogs));
-    const t = setInterval(async () => {
+    const actualizar = async () => {
       setEstado(envio.estado());
       setMuestra(envio.vistaPrevia());
+      setMuestraMqtt(envio.vistaPreviaMqtt());
+      setValoresMqtt(envio.valoresMqtt());
       setSnapsPendientes(await cuantosSnapshotsPendientes().catch(() => 0));
-    }, 1000);
-    setMuestra(envio.vistaPrevia());
-    cuantosSnapshotsPendientes().then(setSnapsPendientes).catch(() => 0);
+    };
+
+    const t = setInterval(actualizar, 1000);
+    actualizar();
     return () => {
       unsub();
       clearInterval(t);
@@ -105,6 +111,8 @@ export function Envio({
     alCambiar({ ...ajustes, mqtt: { ...ajustes.mqtt, ...c } });
 
   const senalesDisponibles = hardware.senalesPorClave();
+
+  const clavesActivas = ajustes.mqtt.clavesActivas ?? CAMPOS_MQTT_MISKIMAYO.map((c) => c.clave);
 
   return (
     <>
@@ -195,135 +203,189 @@ export function Envio({
           etiqueta="Mandar por MQTT"
         />
 
-        <div className="grid grid-cols-[2fr_1fr] gap-3">
-          <Campo etiqueta="Broker" ayuda="Solo el host o IP, sin tcp://. Ej: paranoid.lat">
-            <Entrada
-              value={ajustes.mqtt.broker}
-              placeholder="paranoid.lat"
-              onChange={(e) => mqttCfg({ broker: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Puerto">
-            <Entrada
-              type="number" min={1} max={65535}
-              value={ajustes.mqtt.puerto}
-              onChange={(e) => mqttCfg({ puerto: Number(e.target.value) || 1883 })}
-            />
-          </Campo>
-        </div>
+        {ajustes.mqtt.activo && (
+          <>
+            <div className="grid grid-cols-[2fr_1fr] gap-3">
+              <Campo etiqueta="Broker" ayuda="Solo el host o IP, sin tcp://. Ej: paranoid.lat">
+                <Entrada
+                  value={ajustes.mqtt.broker}
+                  placeholder="paranoid.lat"
+                  onChange={(e) => mqttCfg({ broker: e.target.value })}
+                />
+              </Campo>
+              <Campo etiqueta="Puerto">
+                <Entrada
+                  type="number" min={1} max={65535}
+                  value={ajustes.mqtt.puerto}
+                  onChange={(e) => mqttCfg({ puerto: Number(e.target.value) || 1883 })}
+                />
+              </Campo>
+            </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Campo etiqueta="Usuario">
-            <Entrada
-              value={ajustes.mqtt.usuario}
-              placeholder="test"
-              onChange={(e) => mqttCfg({ usuario: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Contraseña">
-            <Entrada
-              type="password"
-              value={ajustes.mqtt.contrasena}
-              placeholder="••••••••"
-              onChange={(e) => mqttCfg({ contrasena: e.target.value })}
-            />
-          </Campo>
-        </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="Usuario">
+                <Entrada
+                  value={ajustes.mqtt.usuario}
+                  placeholder="test"
+                  onChange={(e) => mqttCfg({ usuario: e.target.value })}
+                />
+              </Campo>
+              <Campo etiqueta="Contraseña">
+                <Entrada
+                  type="password"
+                  value={ajustes.mqtt.contrasena}
+                  placeholder="••••••••"
+                  onChange={(e) => mqttCfg({ contrasena: e.target.value })}
+                />
+              </Campo>
+            </div>
 
-        <div className="grid grid-cols-[2fr_1fr] gap-3">
-          <Campo
-            etiqueta="Topic"
-            ayuda="{{unit_id}} se reemplaza por el nombre del equipo."
-          >
-            <Entrada
-              value={ajustes.mqtt.topic}
-              placeholder="/miskimayo/diplus/{{unit_id}}"
-              onChange={(e) => mqttCfg({ topic: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Cada cuántos segundos">
-            <Entrada
-              type="number" min={1}
-              value={ajustes.mqtt.cadaSeg}
-              onChange={(e) => mqttCfg({ cadaSeg: Number(e.target.value) || 5 })}
-            />
-          </Campo>
-        </div>
+            <div className="grid grid-cols-[2fr_1fr] gap-3">
+              <Campo
+                etiqueta="Topic"
+                ayuda="{{unit_id}} se reemplaza por el nombre del equipo."
+              >
+                <Entrada
+                  value={ajustes.mqtt.topic}
+                  placeholder="/miskimayo/diplus/{{unit_id}}"
+                  onChange={(e) => mqttCfg({ topic: e.target.value })}
+                />
+              </Campo>
+              <Campo etiqueta="Cada cuántos segundos">
+                <Entrada
+                  type="number" min={1}
+                  value={ajustes.mqtt.cadaSeg}
+                  onChange={(e) => mqttCfg({ cadaSeg: Number(e.target.value) || 5 })}
+                />
+              </Campo>
+            </div>
 
-        {/* Mapeo de Sensores RJ45/TCP */}
-        <div className="grid grid-cols-3 gap-3">
-          <Campo etiqueta="Caudal Entrada (inputFlow)" ayuda="Sensor principal">
-            <Selector
-              value={ajustes.mqtt.claveInputFlow ?? ''}
-              onChange={(e) => mqttCfg({ claveInputFlow: e.target.value || undefined })}
-            >
-              <option value="">(Automático por nombre)</option>
-              {senalesDisponibles.map(([clave, s]) => (
-                <option key={clave} value={clave}>
-                  {s.nombre} ({clave})
-                </option>
-              ))}
-            </Selector>
-          </Campo>
+            {/* ── Mapeo de datos para MQTT y Snapshot (Miskimayo) ── */}
+            <div className="flex flex-col gap-2.5 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="rotulo text-[11px] text-ink font-semibold">
+                    Datos del payload MQTT / Snapshot ({clavesActivas.length}/{CAMPOS_MQTT_MISKIMAYO.length} seleccionados)
+                  </p>
+                  <p className="text-[11px] text-ink3">
+                    Selecciona qué claves salen y qué sensor alimenta cada dato (o déjalo en automático).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Boton
+                    variante="tenue"
+                    onClick={() => mqttCfg({ clavesActivas: CAMPOS_MQTT_MISKIMAYO.map((c) => c.clave) })}
+                  >
+                    Marcar todos
+                  </Boton>
+                  <Boton
+                    variante="tenue"
+                    onClick={() => mqttCfg({ clavesActivas: [] })}
+                  >
+                    Desmarcar todos
+                  </Boton>
+                </div>
+              </div>
 
-          <Campo etiqueta="Caudal Retorno (outputFlow)" ayuda="Sensor de retorno">
-            <Selector
-              value={ajustes.mqtt.claveOutputFlow ?? ''}
-              onChange={(e) => mqttCfg({ claveOutputFlow: e.target.value || undefined })}
-            >
-              <option value="">(Automático / "retorno")</option>
-              {senalesDisponibles.map(([clave, s]) => (
-                <option key={clave} value={clave}>
-                  {s.nombre} ({clave})
-                </option>
-              ))}
-            </Selector>
-          </Campo>
+              <div className="overflow-hidden rounded-xl border border-line">
+                {CAMPOS_MQTT_MISKIMAYO.map((c, i) => {
+                  const activa = clavesActivas.includes(c.clave);
+                  const valorActual = valoresMqtt[c.clave];
+                  const senalMapeada = ajustes.mqtt.mapeo?.[c.clave]
+                    ?? (c.clave === 'inputFlow' ? ajustes.mqtt.claveInputFlow : undefined)
+                    ?? (c.clave === 'outputFlow' ? ajustes.mqtt.claveOutputFlow : undefined)
+                    ?? (c.clave === 'sensorVolume' ? ajustes.mqtt.claveSensorNivel : undefined)
+                    ?? (c.clave === 'totalized' ? ajustes.mqtt.claveTotalizadorInput : undefined)
+                    ?? (c.clave === 'horometro' ? ajustes.mqtt.claveHorometro : undefined)
+                    ?? '';
 
-          <Campo etiqueta="Sensor Nivel (sensorVolume)" ayuda="Sensor de nivel">
-            <Selector
-              value={ajustes.mqtt.claveSensorNivel ?? ''}
-              onChange={(e) => mqttCfg({ claveSensorNivel: e.target.value || undefined })}
-            >
-              <option value="">(Automático / "nivel")</option>
-              {senalesDisponibles.map(([clave, s]) => (
-                <option key={clave} value={clave}>
-                  {s.nombre} ({clave})
-                </option>
-              ))}
-            </Selector>
-          </Campo>
-        </div>
+                  return (
+                    <div
+                      key={c.clave}
+                      className={`flex flex-col gap-2 sm:flex-row sm:items-center justify-between px-3.5 py-2.5 transition-opacity ${
+                        i % 2 ? 'bg-bg' : 'bg-sur2'
+                      } ${!activa ? 'opacity-40' : ''}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 sm:w-1/3">
+                        <input
+                          type="checkbox"
+                          checked={activa}
+                          onChange={(e) => {
+                            const nuevas = e.target.checked
+                              ? [...clavesActivas, c.clave]
+                              : clavesActivas.filter((k) => k !== c.clave);
+                            mqttCfg({ clavesActivas: nuevas });
+                          }}
+                          className="h-4 w-4 rounded border-line2 text-acc focus:ring-acc cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-[12px] font-bold text-ink">
+                              {c.clave}
+                            </span>
+                            <span className="text-[11px] text-ink3 truncate">
+                              {c.nombre}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-ink3 truncate">
+                            {c.descripcion}
+                          </div>
+                        </div>
+                      </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Campo etiqueta="Totalizador Entrada (totalized)" ayuda="Totalizador principal">
-            <Selector
-              value={ajustes.mqtt.claveTotalizadorInput ?? ''}
-              onChange={(e) => mqttCfg({ claveTotalizadorInput: e.target.value || undefined })}
-            >
-              <option value="">(Automático / "totaliz")</option>
-              {senalesDisponibles.map(([clave, s]) => (
-                <option key={clave} value={clave}>
-                  {s.nombre} ({clave})
-                </option>
-              ))}
-            </Selector>
-          </Campo>
+                      <div className="flex-1 min-w-[200px] max-w-sm">
+                        <Selector
+                          value={senalMapeada}
+                          disabled={!activa}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const nuevoMapeo = { ...(ajustes.mqtt.mapeo ?? {}) };
+                            if (val) {
+                              nuevoMapeo[c.clave] = val;
+                            } else {
+                              delete nuevoMapeo[c.clave];
+                            }
+                            mqttCfg({ mapeo: nuevoMapeo });
+                          }}
+                          className="text-[11.5px] py-1.5"
+                        >
+                          <option value="">
+                            (Automático {c.sensorSugerido ? `· "${c.sensorSugerido}"` : ''})
+                          </option>
+                          {senalesDisponibles.map(([k, s]) => (
+                            <option key={k} value={k}>
+                              {s.nombre} ({k})
+                            </option>
+                          ))}
+                        </Selector>
+                      </div>
 
-          <Campo etiqueta="Totalizador Retorno" ayuda="Totalizador de retorno (opcional)">
-            <Selector
-              value={ajustes.mqtt.claveTotalizadorOutput ?? ''}
-              onChange={(e) => mqttCfg({ claveTotalizadorOutput: e.target.value || undefined })}
-            >
-              <option value="">(Ninguno / Automático)</option>
-              {senalesDisponibles.map(([clave, s]) => (
-                <option key={clave} value={clave}>
-                  {s.nombre} ({clave})
-                </option>
-              ))}
-            </Selector>
-          </Campo>
-        </div>
+                      <div className="shrink-0 flex items-center justify-end gap-2 text-right sm:w-28 font-mono">
+                        <span className="text-[10px] text-ink3">Valor:</span>
+                        <b className="tabular-nums text-[12px] text-ink2 truncate max-w-[110px]">
+                          {valorActual === null || valorActual === undefined
+                            ? '—'
+                            : typeof valorActual === 'number'
+                            ? valorActual.toFixed(2).replace(/\.00$/, '')
+                            : String(valorActual)}
+                        </b>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {muestraMqtt && (
+              <div>
+                <p className="rotulo mb-1.5">Así saldrá el payload MQTT / Snapshot</p>
+                <pre className="m-0 max-h-52 overflow-auto rounded-xl border border-line bg-bg px-3.5 py-3 font-mono text-[11px] leading-relaxed text-ink2">
+                  {muestraMqtt}
+                </pre>
+              </div>
+            )}
+          </>
+        )}
 
         <Marcador e={estado.mqtt} unidad="publicaciones" />
 

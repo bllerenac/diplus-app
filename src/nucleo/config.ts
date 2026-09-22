@@ -14,6 +14,7 @@ import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 import { AjustesPorSenal } from './senales';
 import { AjustesEnvio, ENVIO_POR_DEFECTO } from './envio';
 import { AjustesRumbo, RUMBO_POR_DEFECTO } from './rumbo';
+import { AjustesHorometro, HOROMETRO_POR_DEFECTO } from './horometro';
 
 const CLAVE = 'diplus.config.v1';
 
@@ -67,6 +68,8 @@ export interface Config {
   envio: AjustesEnvio;
   actualizacion: Actualizacion;
   canal: Canal;
+  /** Horómetro interno por tiempo de encendido de la tablet */
+  horometro: AjustesHorometro;
   /** La unidad inercial del propio equipo: inclinacion, conduccion y via. */
   movimiento: AjustesMovimiento;
   /**
@@ -105,6 +108,7 @@ const POR_DEFECTO: Config = {
     cadaHoras: 6,
   },
   canal: { activo: false, puerto: 8787, token: '' },
+  horometro: HOROMETRO_POR_DEFECTO,
   movimiento: MOVIMIENTO_POR_DEFECTO,
   senales: {},
   maqueta: false,
@@ -173,6 +177,9 @@ const alDia = (c: Config): Config => {
   }
   if (!res.servidor?.equipo || !res.servidor.equipo.trim()) {
     res = { ...res, servidor: { ...res.servidor, equipo: 'SC-03' } };
+  }
+  if (!res.horometro) {
+    res = { ...res, horometro: { ...HOROMETRO_POR_DEFECTO } };
   }
 
   return res;
