@@ -198,40 +198,17 @@ export const guardar = (c: Config): Config => {
   return memoria;
 };
 
-export const nuevaFuenteCaudalimetro = (
-  tipo: 'ingreso' | 'retorno',
-  protoId: 'modbus-rtu' | 'eurosens-dds' = 'modbus-rtu',
-): Fuente => {
+export const nuevaFuenteCaudalimetro = (tipo: 'ingreso' | 'retorno'): Fuente => {
   const esclavo = tipo === 'ingreso' ? 2 : 3;
   const tag = tipo === 'ingreso' ? 'Ingreso' : 'Retorno';
   const clavePrefix = tipo === 'ingreso' ? 'ingreso' : 'retorno';
 
-  const proto = protocolo(protoId);
+  const proto = protocolo('modbus-rtu');
   const cfgDefectos = defectosDe(proto);
-
-  if (protoId === 'eurosens-dds') {
-    return {
-      id: `f${Date.now().toString(36)}`,
-      nombre: `Caudalímetro Eurosens ${tag} (Dirección ${esclavo})`,
-      puerto: 'rs485',
-      ruta: '/dev/ttyUSB0',
-      baudios: 9600,
-      bitrate: 0,
-      protocoloId: 'eurosens-dds',
-      config: {
-        ...cfgDefectos,
-        direccion: esclavo,
-        escala: 1,
-        unidad: 'L/h',
-        preguntar_cada_ms: 1000,
-      },
-      activa: true,
-    };
-  }
 
   return {
     id: `f${Date.now().toString(36)}`,
-    nombre: `Caudalímetro Modbus ${tag} (Esclavo ${esclavo})`,
+    nombre: `Caudalímetro ${tag}`,
     puerto: 'rs485',
     ruta: '/dev/ttyUSB0',
     baudios: 9600,
@@ -242,12 +219,27 @@ export const nuevaFuenteCaudalimetro = (
       esclavo,
       funcion: '3',
       registro: 0,
-      cantidad: 4,
-      agrupacion: 'f32',
-      escala: 1,
-      columnas: `caudal_${clavePrefix},totalizador_${clavePrefix}`,
+      cantidad: 3,
       preguntar_cada_ms: 1000,
       exigir_crc: 'si',
+      registros_modbus: [
+        {
+          registro: 0,
+          clave: `totalizador_${clavePrefix}`,
+          nombre: 'Totalizador',
+          tipo: 'u32be',
+          escala: 1,
+          unidad: 'L',
+        },
+        {
+          registro: 2,
+          clave: `caudal_${clavePrefix}`,
+          nombre: 'Caudal',
+          tipo: 'u16be',
+          escala: 1,
+          unidad: 'L/h',
+        },
+      ],
     },
     activa: true,
   };

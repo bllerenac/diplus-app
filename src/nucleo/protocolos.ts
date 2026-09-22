@@ -27,7 +27,7 @@ import {
 } from './lecturas';
 import { aAscii, aHex, aTexto } from './tramas';
 
-export type TipoCampo = 'numero' | 'texto' | 'seleccion' | 'senales';
+export type TipoCampo = 'numero' | 'texto' | 'seleccion' | 'senales' | 'registros_modbus';
 
 export interface CampoProtocolo {
   clave: string;
@@ -40,6 +40,15 @@ export interface CampoProtocolo {
   ayuda?: string;
   /** Se esconde tras «mostrar avanzado»: son los del manual del fabricante. */
   avanzado?: boolean;
+}
+
+export interface RegistroModbus {
+  registro: number;
+  clave: string;
+  nombre: string;
+  tipo: TipoLectura;
+  escala: number | string;
+  unidad?: string;
 }
 
 /** Una señal definida a mano sobre una trama cualquiera. */
@@ -270,7 +279,7 @@ const modbusRtu: Protocolo = {
   campos: [
     {
       clave: 'esclavo',
-      etiqueta: 'Dirección de esclavo',
+      etiqueta: 'Dirección de esclavo (ID)',
       tipo: 'numero',
       defecto: 1,
       min: 0,
@@ -278,28 +287,38 @@ const modbusRtu: Protocolo = {
       ayuda: 'Con 0 se acepta cualquiera.',
     },
     {
+      clave: 'registros_modbus',
+      etiqueta: 'Registros Modbus (independientes)',
+      tipo: 'registros_modbus',
+      defecto: [],
+      ayuda:
+        'Define cada registro por separado: número de registro (0 = Totalizador, 2 = Caudal, etc.), nombre, tipo (u32, u16, f32), escala y unidad.',
+    },
+    {
       clave: 'agrupacion',
-      etiqueta: 'Cómo se leen los datos',
+      etiqueta: 'Cómo se leen los datos (modo legacy)',
       tipo: 'seleccion',
       defecto: 'u16',
       opciones: ['u16', 's16', 'u32', 'f32'],
+      avanzado: true,
       ayuda:
-        'u16: un registro por valor. u32 y f32: dos registros por valor — así es ' +
-        'como manda un caudalímetro el caudal y el totalizador en coma flotante.',
+        'u16: un registro por valor. u32 y f32: dos registros por valor.',
     },
     {
       clave: 'escala',
-      etiqueta: 'Escala',
+      etiqueta: 'Escala global (modo legacy)',
       tipo: 'numero',
       defecto: 1,
-      ayuda: 'Cada valor se multiplica por esto. En el HelperBox suele ser 0,01.',
+      avanzado: true,
+      ayuda: 'Cada valor se multiplica por esto.',
     },
     {
       clave: 'columnas',
-      etiqueta: 'Nombre de cada valor',
+      etiqueta: 'Nombre de cada valor (modo legacy)',
       tipo: 'texto',
       defecto: '',
-      ayuda: 'Separados por coma, en orden. Los que falten salen como reg1, reg2…',
+      avanzado: true,
+      ayuda: 'Separados por coma, en orden.',
     },
     {
       clave: 'exigir_crc',
@@ -321,19 +340,21 @@ const modbusRtu: Protocolo = {
     },
     {
       clave: 'registro',
-      etiqueta: 'Registro donde empieza',
+      etiqueta: 'Registro donde empieza (modo legacy)',
       tipo: 'numero',
       defecto: 0,
       min: 0,
       max: 65535,
+      avanzado: true,
     },
     {
       clave: 'cantidad',
-      etiqueta: 'Cuántos registros se piden',
+      etiqueta: 'Cuántos registros se piden (modo legacy)',
       tipo: 'numero',
       defecto: 2,
       min: 1,
       max: 125,
+      avanzado: true,
     },
   ],
   /**
@@ -346,15 +367,33 @@ const modbusRtu: Protocolo = {
     const esclavo = num(cfg, 'esclavo', 1);
     if (esclavo <= 0) return null;
 
-    const registro = num(cfg, 'registro', 0);
-    const cantidad = num(cfg, 'cantidad', 2);
     const funcion = num(cfg, 'funcion', 3);
+    const lista: RegistroModbus[] = cfg?.registros_modbus ?? [];
+
+    let registroStart = num(cfg, 'registro', 0);
+    let cantidad = num(cfg, 'cantidad', 2);
+
+    if (lista.length > 0) {
+      let minReg = Infinity;
+      let maxReg = -1;
+      for (const r of lista) {
+        const reg = Number(r.registro ?? 0);
+        const tipo = r.tipo ?? 'u16be';
+        const numRegs = (tipo.startsWith('u32') || tipo.startsWith('s32') || tipo.startsWith('f32')) ? 2 : 1;
+        if (reg < minReg) minReg = reg;
+        if (reg + numRegs > maxReg) maxReg = reg + numRegs;
+      }
+      if (Number.isFinite(minReg) && maxReg > minReg) {
+        registroStart = minReg;
+        cantidad = maxReg - minReg;
+      }
+    }
 
     const t = new Uint8Array(8);
     t[0] = esclavo;
     t[1] = funcion;
-    t[2] = (registro >> 8) & 0xff;
-    t[3] = registro & 0xff;
+    t[2] = (registroStart >> 8) & 0xff;
+    t[3] = registroStart & 0xff;
     t[4] = (cantidad >> 8) & 0xff;
     t[5] = cantidad & 0xff;
 
@@ -382,6 +421,37 @@ const modbusRtu: Protocolo = {
     const crcOk = esperado === recibido;
     if (!crcOk && (cfg.exigir_crc ?? 'si') === 'si') return [];
 
+    const lista: RegistroModbus[] = cfg?.registros_modbus ?? [];
+
+    if (lista.length > 0) {
+      let minReg = Infinity;
+      for (const r of lista) {
+        const reg = Number(r.registro ?? 0);
+        if (reg < minReg) minReg = reg;
+      }
+      if (!Number.isFinite(minReg)) minReg = num(cfg, 'registro', 0);
+
+      const salida: Senal[] = [];
+      for (const r of lista) {
+        const reg = Number(r.registro ?? 0);
+        const offsetReg = reg - minReg;
+        const byteOffset = offsetReg * 2;
+        const tipo = r.tipo ?? 'u16be';
+        const escala = r.escala === undefined || r.escala === '' ? 1 : Number(r.escala);
+
+        const crudo = leer(trama, 3 + byteOffset, tipo);
+        const clave = r.clave || `reg_${reg}`;
+        const nombre = r.nombre || r.clave || `Registro ${reg}`;
+        const unidad = r.unidad || '';
+
+        salida.push(senal(clave, nombre, unidad, crudo === null ? null : crudo * escala));
+      }
+
+      if (!crcOk) salida.push(senal('crc_ok', 'CRC correcto', '', 0));
+      return salida;
+    }
+
+    /* Fallback a la decodificacion clasica si no hay lista de registros */
     const modo = (cfg.agrupacion as string) || 'u16';
     const escala = num(cfg, 'escala', 1);
     const nombres = String(cfg.columnas || '')

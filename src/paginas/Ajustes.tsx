@@ -18,8 +18,82 @@ import {
 
 import { Config, Servidor, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro } from '../nucleo/config';
 import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
-import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
-import { TIPOS_LECTURA } from '../nucleo/lecturas';
+import { CampoProtocolo, RegistroModbus, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
+import { TIPOS_LECTURA, TipoLectura } from '../nucleo/lecturas';
+
+/** Editor de registros Modbus independientes */
+function EditorRegistrosModbus({
+  lista, alCambiar,
+}: {
+  lista: RegistroModbus[];
+  alCambiar: (l: RegistroModbus[]) => void;
+}) {
+  const cambiar = (i: number, k: keyof RegistroModbus, v: unknown) =>
+    alCambiar(lista.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+
+  const OPCIONES_TIPO: { id: TipoLectura; nombre: string }[] = [
+    { id: 'u32be', nombre: 'u32 (32 bits sin signo)' },
+    { id: 'u16be', nombre: 'u16 (16 bits sin signo)' },
+    { id: 's32be', nombre: 's32 (32 bits con signo)' },
+    { id: 's16be', nombre: 's16 (16 bits con signo)' },
+    { id: 'f32be', nombre: 'f32 (float 32 bits)' },
+    { id: 'u8', nombre: 'u8 (8 bits sin signo)' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {lista.map((r, i) => (
+        <div key={i} className="rounded-xl border border-line bg-bg p-3.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+            <Campo etiqueta="Registro #">
+              <Entrada
+                type="number" min={0} max={65535}
+                value={r.registro ?? 0}
+                onChange={(e) => cambiar(i, 'registro', Number(e.target.value))}
+              />
+            </Campo>
+            <Campo etiqueta="Nombre / Clave">
+              <Entrada
+                value={r.clave ?? ''} placeholder="totalizador"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  cambiar(i, 'clave', val);
+                  if (!r.nombre || r.nombre === r.clave) cambiar(i, 'nombre', val);
+                }}
+              />
+            </Campo>
+            <Campo etiqueta="Tipo de dato">
+              <Selector value={r.tipo ?? 'u16be'} onChange={(e) => cambiar(i, 'tipo', e.target.value as TipoLectura)}>
+                {OPCIONES_TIPO.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Escala">
+              <Entrada value={String(r.escala ?? 1)} onChange={(e) => cambiar(i, 'escala', e.target.value)} />
+            </Campo>
+            <Campo etiqueta="Unidad">
+              <Entrada value={r.unidad ?? ''} placeholder="L" onChange={(e) => cambiar(i, 'unidad', e.target.value)} />
+            </Campo>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Nota>Registro {r.registro} ({r.tipo}) → <b>{r.nombre || r.clave || 'sin nombre'}</b></Nota>
+            <Boton variante="peligro" onClick={() => alCambiar(lista.filter((_, j) => j !== i))}>
+              Quitar
+            </Boton>
+          </div>
+        </div>
+      ))}
+      <Boton
+        onClick={() => alCambiar([...lista, {
+          registro: lista.length > 0 ? (lista[lista.length - 1].registro + 2) : 0,
+          clave: '', nombre: '', tipo: 'u16be', escala: 1, unidad: '',
+        }])}
+        className="self-start"
+      >
+        + Añadir registro
+      </Boton>
+    </div>
+  );
+}
 import {
   Calibracion, calibraciones, guardarCalibracion, hayBase, podar, resumen, vaciar,
 } from '../nucleo/base';
@@ -822,7 +896,7 @@ export default function Ajustes() {
 
                     <div className="grid grid-cols-2 gap-3">
                       {proto.campos
-                        .filter((c) => c.tipo !== 'senales' && (avanzado || !c.avanzado))
+                        .filter((c) => c.tipo !== 'senales' && c.tipo !== 'registros_modbus' && (avanzado || !c.avanzado))
                         .map((c) => (
                           <CampoDeclarado
                             key={c.clave}
@@ -832,6 +906,17 @@ export default function Ajustes() {
                           />
                         ))}
                     </div>
+
+                    {proto.campos.filter((c) => c.tipo === 'registros_modbus').map((c) => (
+                      <div key={c.clave} className="flex flex-col gap-2">
+                        <span className="rotulo">{c.etiqueta}</span>
+                        <Nota>{c.ayuda}</Nota>
+                        <EditorRegistrosModbus
+                          lista={(f.config[c.clave] as RegistroModbus[]) ?? []}
+                          alCambiar={(l) => cambiarFuente(i, { ...f, config: { ...f.config, [c.clave]: l } })}
+                        />
+                      </div>
+                    ))}
 
                     {proto.campos.filter((c) => c.tipo === 'senales').map((c) => (
                       <div key={c.clave} className="flex flex-col gap-2">
