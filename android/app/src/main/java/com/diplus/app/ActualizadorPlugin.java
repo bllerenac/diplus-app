@@ -207,12 +207,24 @@ public class ActualizadorPlugin extends Plugin {
             return;
         }
 
-        /* Intentar la instalacion via session: el usuario solo ve un dialogo
-           compacto del sistema, no el instalador completo. */
-        try {
-            instalarViaSession(f, call);
-        } catch (Exception e) {
-            Log.w(TAG, "session falló, usando instalador clásico: " + e.getMessage());
+        PackageManager pm = getContext().getPackageManager();
+        PackageInfo info = pm.getPackageArchiveInfo(f.getAbsolutePath(), 0);
+        String targetPackage = info != null ? info.packageName : null;
+        boolean esNuestraApp = targetPackage != null && targetPackage.equals(getContext().getPackageName());
+
+        if (esNuestraApp) {
+            /* Intentar la instalacion via session: el usuario solo ve un dialogo
+               compacto del sistema para actualizar DiPlus. */
+            try {
+                instalarViaSession(f, call);
+            } catch (Exception e) {
+                Log.w(TAG, "session falló, usando instalador clásico: " + e.getMessage());
+                instalarViaIntent(f, call);
+            }
+        } else {
+            /* Para aplicaciones externas como Tailscale (com.tailscale.ipn), se abre
+               directamente el instalador clásico de Android (Intent ACTION_VIEW). */
+            Log.i(TAG, "Instalando app externa (" + targetPackage + ") via instalador clásico");
             instalarViaIntent(f, call);
         }
     }
