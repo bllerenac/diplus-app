@@ -301,28 +301,49 @@ public class CanRs485Plugin extends Plugin {
             getActivity().runOnUiThread(() -> {
                 try {
                     locationManager = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
-                    if (locationManager != null && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, new LocationListener() {
-                            @Override
-                            public void onLocationChanged(Location location) {
-                                JSObject data = new JSObject();
-                                data.put("latitude", location.getLatitude());
-                                data.put("longitude", location.getLongitude());
-                                data.put("speed", location.getSpeed() * 3.6);
-                                if (location.hasBearing()) data.put("bearing", location.getBearing());
-                                if (location.hasAccuracy()) data.put("accuracy", location.getAccuracy());
-                                data.put("altitude", location.getAltitude());
-                                data.put("timestamp", System.currentTimeMillis());
-                                notifyListeners("onGpsLocationFix", data);
+                    if (locationManager == null) return;
+
+                    LocationListener listener = new LocationListener() {
+                        @Override
+                        public void onLocationChanged(Location location) {
+                            if (location == null) return;
+                            JSObject data = new JSObject();
+                            data.put("latitude", location.getLatitude());
+                            data.put("longitude", location.getLongitude());
+                            data.put("speed", location.getSpeed() * 3.6);
+                            if (location.hasBearing()) data.put("bearing", location.getBearing());
+                            if (location.hasAccuracy()) data.put("accuracy", location.getAccuracy());
+                            data.put("altitude", location.getAltitude());
+                            data.put("timestamp", System.currentTimeMillis());
+                            notifyListeners("onGpsLocationFix", data);
+                        }
+                        @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+                        @Override public void onProviderEnabled(String provider) {}
+                        @Override public void onProviderDisabled(String provider) {}
+                    };
+
+                    String[] providers = new String[] {
+                        LocationManager.GPS_PROVIDER,
+                        LocationManager.NETWORK_PROVIDER,
+                        LocationManager.PASSIVE_PROVIDER
+                    };
+
+                    for (String provider : providers) {
+                        try {
+                            if (locationManager.isProviderEnabled(provider)) {
+                                locationManager.requestLocationUpdates(provider, 1000, 0, listener);
+                                Location last = locationManager.getLastKnownLocation(provider);
+                                if (last != null) {
+                                    listener.onLocationChanged(last);
+                                }
                             }
-                            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-                            @Override public void onProviderEnabled(String provider) {}
-                            @Override public void onProviderDisabled(String provider) {}
-                        });
-                        Log.i(TAG, "LocationManager activado con exito.");
+                        } catch (SecurityException se) {
+                            Log.w(TAG, "Sin permiso de ubicacion para " + provider + ": " + se.getMessage());
+                        } catch (Exception e) {
+                            Log.w(TAG, "No se pudo registrar " + provider + ": " + e.getMessage());
+                        }
                     }
-                } catch (SecurityException se) {
-                    Log.e(TAG, "Sin permiso de ubicacion para LocationManager: " + se.getMessage());
+                    Log.i(TAG, "LocationManager activado con exito (GPS, Network, Passive).");
                 } catch (Exception e) {
                     Log.e(TAG, "Error activando LocationManager: " + e.getMessage());
                 }
