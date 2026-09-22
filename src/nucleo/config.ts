@@ -159,6 +159,15 @@ const alDia = (c: Config): Config => {
     },
   };
 
+  if (Array.isArray(res.fuentes)) {
+    res.fuentes = res.fuentes.map((f) => {
+      if (f.puerto === 'rs485' && (!f.ruta || f.ruta === '/dev/ttyUSB0')) {
+        return { ...f, ruta: '/dev/ttyHSL0' };
+      }
+      return f;
+    });
+  }
+
   if (!res.envio?.equipo || !res.envio.equipo.trim()) {
     res = { ...res, envio: { ...res.envio, equipo: 'SC-03' } };
   }
@@ -210,7 +219,7 @@ export const nuevaFuenteCaudalimetro = (tipo: 'ingreso' | 'retorno'): Fuente => 
     id: `f${Date.now().toString(36)}`,
     nombre: `Caudalímetro ${tag}`,
     puerto: 'rs485',
-    ruta: '/dev/ttyUSB0',
+    ruta: '/dev/ttyHSL0',
     baudios: 9600,
     bitrate: 0,
     protocoloId: 'modbus-rtu',
@@ -270,7 +279,7 @@ export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
     id: `f${Date.now().toString(36)}`,
     nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
     puerto,
-    ruta: puerto === 'rs485' ? '/dev/ttyUSB0' : '/dev/ttyHSL0',
+    ruta: '/dev/ttyHSL0',
     baudios: 9600,
     bitrate: 250000,
     protocoloId: protoId,

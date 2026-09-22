@@ -104,9 +104,22 @@ public class CanRs485Plugin extends Plugin {
         return crc & 0xffff;
     }
 
+    private String resolverDevicePath(String path) {
+        if (path == null || path.isEmpty()) return "/dev/ttyHSL0";
+        File f = new File(path);
+        if (!f.exists() && (path.contains("ttyUSB") || path.equals("/dev/ttyUSB0"))) {
+            File fallback = new File("/dev/ttyHSL0");
+            if (fallback.exists()) {
+                Log.w(TAG, "Dispositivo " + path + " no existe. Usando fallback RS485 del hardware: /dev/ttyHSL0");
+                return "/dev/ttyHSL0";
+            }
+        }
+        return path;
+    }
+
     @PluginMethod
     public void setPortBaudrate(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
         int baudrate = call.getInt("baudrate", 9600);
 
         try {
@@ -127,7 +140,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendEurosensQuery(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
         int address = call.getInt("address", 1);
         int command = call.getInt("command", 6);
 
@@ -164,7 +177,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendModbusQuery(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
         int address = call.getInt("address", 1);
         int functionCode = call.getInt("functionCode", 3);
         int startRegister = call.getInt("startRegister", 0);
@@ -213,7 +226,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void sendRawBytes(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
         String hexString = call.getString("hexData", "0103000000044409");
 
         try {
@@ -353,17 +366,40 @@ public class CanRs485Plugin extends Plugin {
         }
     }
 
+    private void enviarDespertadorRtk(String devicePath) {
+        try {
+            File dev = new File(devicePath);
+            if (!dev.exists()) return;
+            try (FileOutputStream fos = new FileOutputStream(dev)) {
+                // Secuencia oficial de inicio AT-RTK para despertar flujo NMEA (UM982 / F9P)
+                byte[] wakeup = new byte[] {
+                    0x55, (byte) 0xFA, (byte) 0xDD, 0x02, 0x01, 0x01, 0x02, (byte) 0xC3, 0x3C
+                };
+                fos.write(wakeup);
+                fos.flush();
+                fos.write("CONFIG COM1 921600\r\n".getBytes());
+                fos.write("GPGGA COM1 1\r\n".getBytes());
+                fos.write("GPRMC COM1 1\r\n".getBytes());
+                fos.write("GPGSV COM1 1\r\n".getBytes());
+                fos.write("SAVECONFIG\r\n".getBytes());
+                fos.flush();
+                Log.i(TAG, "Enviado paquete despertador NMEA a " + devicePath);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "No se pudo enviar despertador RTK a " + devicePath + ": " + e.getMessage());
+        }
+    }
+
     private void arrancarGps(PluginCall call) {
         String devicePath = call.getString("devicePath", "/dev/ttyHSL2");
         int baudrate = call.getInt("baudrate", 921600);
 
-        if (getPermissionState(UBICACION) == PermissionState.GRANTED) {
-            activarLocationManager();
-        }
+        activarLocationManager();
 
         if (!isGpsListening.get()) {
             isGpsListening.set(true);
             configureStty(devicePath, baudrate);
+            enviarDespertadorRtk(devicePath);
             gpsThread = new Thread(() -> readTextStream(devicePath, "onGpsData", isGpsListening));
             gpsThread.start();
         }
@@ -737,7 +773,7 @@ public class CanRs485Plugin extends Plugin {
 
     @PluginMethod
     public void startRs485Listener(PluginCall call) {
-        String devicePath = call.getString("devicePath", "/dev/ttyUSB0");
+        String devicePath = resolverDevicePath(call.getString("devicePath", "/dev/ttyHSL0"));
         int baudrate = call.getInt("baudrate", 9600);
         enableRs485HardwarePower(true);
         if (!isRs485Listening.get()) {
@@ -884,7 +920,7 @@ public class CanRs485Plugin extends Plugin {
         }
 
         /* Los del procesador, que si son fijos. */
-        lista.put(puerto("/dev/ttyHSL0", "COM1 (RS232)", "SoC", new File("/dev/ttyHSL0").exists()));
+        lista.put(puerto("/dev/ttyHSL0", "RS485 / COM1", "SoC", new File("/dev/ttyHSL0").exists()));
         lista.put(puerto("/dev/ttyHSL1", "Reservado", "SoC", new File("/dev/ttyHSL1").exists()));
         lista.put(puerto("/dev/ttyHSL2", "GPS", "SoC", new File("/dev/ttyHSL2").exists()));
         lista.put(puerto("/dev/ttyHSL3", "Reservado", "SoC", new File("/dev/ttyHSL3").exists()));
