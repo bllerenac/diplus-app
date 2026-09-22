@@ -16,7 +16,7 @@ import {
   IonBackButton, IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
 } from '@ionic/react';
 
-import { Config, Servidor, cargar, guardar, nuevaFuente } from '../nucleo/config';
+import { Config, Servidor, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro } from '../nucleo/config';
 import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA } from '../nucleo/lecturas';
@@ -614,7 +614,13 @@ export default function Ajustes() {
             <Bloque
               titulo="De dónde se lee"
               accion={
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuenteCaudalimetro('ingreso')] })}>
+                    + Caudalímetro Ingreso (E2)
+                  </Boton>
+                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuenteCaudalimetro('retorno')] })}>
+                    + Caudalímetro Retorno (E3)
+                  </Boton>
                   <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('rs485')] })}>
                     + RS485
                   </Boton>

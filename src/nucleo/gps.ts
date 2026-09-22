@@ -88,11 +88,13 @@ class Gps {
   async pedirPermiso() {
     if (!Capacitor.isNativePlatform()) return;
     try {
-      if (typeof Nativo.solicitarPermisosUbicacion === 'function') {
+      if (typeof (Nativo as any).requestPermissions === 'function') {
+        await (Nativo as any).requestPermissions();
+      } else if (typeof Nativo.solicitarPermisosUbicacion === 'function') {
         await Nativo.solicitarPermisosUbicacion();
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn('Error al solicitar permisos de ubicación:', err);
     }
   }
 

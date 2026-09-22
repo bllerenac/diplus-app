@@ -198,6 +198,61 @@ export const guardar = (c: Config): Config => {
   return memoria;
 };
 
+export const nuevaFuenteCaudalimetro = (
+  tipo: 'ingreso' | 'retorno',
+  protoId: 'modbus-rtu' | 'eurosens-dds' = 'modbus-rtu',
+): Fuente => {
+  const esclavo = tipo === 'ingreso' ? 2 : 3;
+  const tag = tipo === 'ingreso' ? 'Ingreso' : 'Retorno';
+  const clavePrefix = tipo === 'ingreso' ? 'ingreso' : 'retorno';
+
+  const proto = protocolo(protoId);
+  const cfgDefectos = defectosDe(proto);
+
+  if (protoId === 'eurosens-dds') {
+    return {
+      id: `f${Date.now().toString(36)}`,
+      nombre: `Caudalímetro Eurosens ${tag} (Dirección ${esclavo})`,
+      puerto: 'rs485',
+      ruta: '/dev/ttyUSB0',
+      baudios: 9600,
+      bitrate: 0,
+      protocoloId: 'eurosens-dds',
+      config: {
+        ...cfgDefectos,
+        direccion: esclavo,
+        escala: 1,
+        unidad: 'L/h',
+        preguntar_cada_ms: 1000,
+      },
+      activa: true,
+    };
+  }
+
+  return {
+    id: `f${Date.now().toString(36)}`,
+    nombre: `Caudalímetro Modbus ${tag} (Esclavo ${esclavo})`,
+    puerto: 'rs485',
+    ruta: '/dev/ttyUSB0',
+    baudios: 9600,
+    bitrate: 0,
+    protocoloId: 'modbus-rtu',
+    config: {
+      ...cfgDefectos,
+      esclavo,
+      funcion: '3',
+      registro: 0,
+      cantidad: 4,
+      agrupacion: 'f32',
+      escala: 1,
+      columnas: `caudal_${clavePrefix},totalizador_${clavePrefix}`,
+      preguntar_cada_ms: 1000,
+      exigir_crc: 'si',
+    },
+    activa: true,
+  };
+};
+
 export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
   /* Por red llegan las mismas lineas de JSON que manda el puente del HelperBox
      por el cable serie, asi que se reaprovecha el protocolo tal cual. */
@@ -223,20 +278,6 @@ export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
     id: `f${Date.now().toString(36)}`,
     nombre: puerto === 'rs485' ? 'HelperBox por RS485' : 'Bus CAN',
     puerto,
-    /* Cual es el puerto del RS485 esta sin resolver, y las dos fuentes que hay
-       no coinciden. Por eso se elige desde un selector en Configuracion.
-
-       El SDK de la AT-10A dice que el RS485 es el conversor USB de la rama
-       1-1.2 del bus —hoy ttyUSB0— y que ttyHSL0 es COM1, RS232:
-
-         ComC.setPort(serial2);   // RS485 = 1-1.2
-         ComA.setPort(serial0);   // COM1  = /dev/ttyHSL0
-
-       Pero el codigo original de esta unidad, escrito cuando leia, usaba
-       ttyHSL0 y lo etiquetaba «P4 RS485». Y la AT-10L no es la AT-10A.
-
-       Se deja ttyUSB0 porque es lo unico documentado, pero no esta comprobado:
-       ninguno de los dos ha entregado una sola trama todavia. Ver NOTAS-RS485.md. */
     ruta: puerto === 'rs485' ? '/dev/ttyUSB0' : '/dev/ttyHSL0',
     baudios: 9600,
     bitrate: 250000,
@@ -245,3 +286,4 @@ export const nuevaFuente = (puerto: Fuente['puerto'] = 'rs485'): Fuente => {
     activa: true,
   };
 };
+

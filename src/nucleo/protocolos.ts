@@ -466,6 +466,9 @@ const eurosens: Protocolo = {
   decodificar(trama, cfg) {
     if (trama.length < 9 || trama[0] !== 0x3e) return [];
 
+    const direccion = num(cfg, 'direccion', 1);
+    if (direccion !== 0 && trama[1] !== direccion) return [];
+
     const esperado = crc8Eurosens(trama, 8);
     const crcOk = trama[8] === esperado;
     if (!crcOk) return [];

@@ -252,16 +252,16 @@ export const cuerpoMqtt = (
   const pos = gps.posicion();
   const senales = hardware.senalesPorClave();
 
-  /* Busca por clave exacta si fue seleccionada, o por nombre/palabra clave como fallback. */
-  const porClaveONombre = (claveDeseada?: string, terminoNombre?: string): number | null => {
+  /* Busca por clave exacta si fue seleccionada, o por terminos de nombre/clave como fallback. */
+  const porClaveONombre = (claveDeseada?: string, ...terminos: string[]): number | null => {
     if (claveDeseada) {
       const match = senales.find(([k]) => k === claveDeseada);
       if (match && typeof match[1].valor === 'number') return match[1].valor;
     }
-    if (terminoNombre) {
-      const n = terminoNombre.toLowerCase();
-      for (const [, s] of senales) {
-        if (s.nombre.toLowerCase().includes(n) && typeof s.valor === 'number') {
+    if (terminos.length > 0) {
+      for (const [k, s] of senales) {
+        const texto = `${k} ${s.nombre}`.toLowerCase();
+        if (terminos.every((t) => texto.includes(t.toLowerCase())) && typeof s.valor === 'number') {
           return s.valor as number;
         }
       }
@@ -269,33 +269,26 @@ export const cuerpoMqtt = (
     return null;
   };
 
-  let inputFlow: number | null = null;
-  if (cfgMqtt?.claveInputFlow) {
-    const match = senales.find(([k]) => k === cfgMqtt.claveInputFlow);
-    if (match && typeof match[1].valor === 'number') inputFlow = match[1].valor;
-  }
-  if (inputFlow === null) {
-    const principal = hardware.senalesPara('enviar')[0]?.senal;
-    inputFlow = typeof principal?.valor === 'number' ? principal.valor : null;
-  }
+  const inputFlow = porClaveONombre(cfgMqtt?.claveInputFlow, 'ingreso')
+    ?? (typeof hardware.senalesPara('enviar')[0]?.senal?.valor === 'number' ? hardware.senalesPara('enviar')[0].senal.valor as number : null);
 
-  const rawValue = inputFlow;
   const outputFlow = porClaveONombre(cfgMqtt?.claveOutputFlow, 'retorno');
-  const sensorVol = porClaveONombre(cfgMqtt?.claveSensorNivel, 'nivel');
 
   const caudalFlow = inputFlow !== null && outputFlow !== null
     ? Math.max(0, inputFlow - outputFlow)
     : (inputFlow !== null ? inputFlow : null);
 
+  const sensorVol = porClaveONombre(cfgMqtt?.claveSensorNivel, 'nivel');
+
   /* Totalizadores */
-  const totInput  = porClaveONombre(cfgMqtt?.claveTotalizadorInput, 'totaliz');
-  const totOutput = porClaveONombre(cfgMqtt?.claveTotalizadorOutput, 'tot_retorno');
+  const totInput  = porClaveONombre(cfgMqtt?.claveTotalizadorInput, 'totaliz', 'ingreso')
+    ?? porClaveONombre(undefined, 'totaliz');
+  const totOutput = porClaveONombre(cfgMqtt?.claveTotalizadorOutput, 'totaliz', 'retorno')
+    ?? porClaveONombre(undefined, 'tot_retorno');
 
   const netTotalizedNum = totInput !== null && totOutput !== null
     ? Math.max(0, totInput - totOutput)
     : (totInput !== null ? totInput : null);
-
-  const netTotalized = netTotalizedNum !== null ? String(netTotalizedNum) : null;
 
   /* IMU: el hardware las inyecta como señales con clave 'imu.*'. */
   const imuPitch   = porClaveONombre(undefined, 'inclinaci');
@@ -306,23 +299,25 @@ export const cuerpoMqtt = (
   const topicReal = topic.replace('{{unit_id}}', unitId);
 
   const payload = {
-    unit:          unitId,
-    speed:         pos?.velocidad ?? 0,
-    lat:           pos?.lat       ?? 0,
-    lon:           pos?.lon       ?? 0,
-    timestamp:     new Date().toISOString(),
-    caudalFlow:    caudalFlow     ?? 0,
-    inputFlow:     inputFlow      ?? 0,
-    outputFlow:    outputFlow     ?? 0,
-    sensorVolume:  sensorVol      ?? 0,
-    sensorLevel:   sensorVol      ?? 0,
-    fuelMotor:     netTotalizedNum ?? 0,
-    rawValue:      rawValue       ?? 0,
-    totalized:     netTotalizedNum ?? 0,
-    gpsAlt:        pos?.alt       ?? 0,
-    pitch:         imuPitch       ?? 0,
-    roll:          imuRoll        ?? 0,
-    heading:       imuHeading     ?? 0,
+    unit:            unitId,
+    speed:           pos?.velocidad ?? 0,
+    lat:             pos?.lat       ?? 0,
+    lon:             pos?.lon       ?? 0,
+    timestamp:       new Date().toISOString(),
+    caudalFlow:      caudalFlow     ?? 0,
+    inputFlow:       inputFlow      ?? 0,
+    outputFlow:      outputFlow     ?? 0,
+    sensorVolume:    sensorVol      ?? 0,
+    sensorLevel:     sensorVol      ?? 0,
+    fuelMotor:       netTotalizedNum ?? 0,
+    rawValue:        inputFlow      ?? 0,
+    totalized:       netTotalizedNum ?? 0,
+    totalizedInput:  totInput       ?? 0,
+    totalizedOutput: totOutput      ?? 0,
+    gpsAlt:          pos?.alt       ?? 0,
+    pitch:           imuPitch       ?? 0,
+    roll:            imuRoll        ?? 0,
+    heading:         imuHeading     ?? 0,
   };
 
   return { topic: topicReal, payload: JSON.stringify(payload) };
