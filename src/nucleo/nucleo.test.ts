@@ -704,6 +704,51 @@ describe('payload MQTT y snapshot (Miskimayo)', () => {
     expect(obj.unit).toBe('CA-99');
   });
 
+  /**
+   * El mismo caudalimetro llega como `totalizador` por RS485 y como `total`
+   * —«Total consumido»— cuando el HelperBox lo lee por CAN. Se reconocen los
+   * dos, y siempre pareados con ingreso o retorno: buscando solo «totaliz» se
+   * cogia el del retorno para el campo del ingreso.
+   */
+  it('reconoce los totalizadores del HelperBox por CAN sin cruzar ingreso con retorno', () => {
+    hardware.inyectar('helperbox', 'RED', [
+      senal('Caudalimetro Ingreso.total', 'Total consumido', 'L', 900939.69),
+      senal('Caudalimetro Retorno.total', 'Total consumido', 'L', 800000),
+      senal('Caudalimetro Ingreso.caudal', 'Caudal', 'L/h', 42.5),
+      senal('Caudalimetro Retorno.caudal', 'Caudal', 'L/h', 12.5),
+    ]);
+
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}');
+    const obj = JSON.parse(payload);
+
+    expect(obj.inputFlow).toBe(42.5);
+    expect(obj.outputFlow).toBe(12.5);
+    expect(obj.caudalFlow).toBe(30);
+    expect(obj.totalized).toBeCloseTo(100939.69, 2);
+
+    hardware.limpiar();
+  });
+
+  /* El camino de la caja que ya trabaja: los DFM leidos por Modbus sobre RS485,
+     donde la señal se llama `totalizador`. No debe romperse por lo de arriba. */
+  it('sigue reconociendo los totalizadores que llegan por RS485 como totalizador', () => {
+    hardware.inyectar('helperbox', 'RED', [
+      senal('Caudalimetro Ingreso.totalizador', 'Totalizador', 'L', 5000),
+      senal('Caudalimetro Retorno.totalizador', 'Totalizador', 'L', 1200),
+      senal('Caudalimetro Ingreso.caudal', 'Caudal', 'L/h', 30),
+      senal('Caudalimetro Retorno.caudal', 'Caudal', 'L/h', 8),
+    ]);
+
+    const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}');
+    const obj = JSON.parse(payload);
+
+    expect(obj.inputFlow).toBe(30);
+    expect(obj.outputFlow).toBe(8);
+    expect(obj.totalized).toBe(3800);
+
+    hardware.limpiar();
+  });
+
   it('resuelve horometro desde una señal inyectada', () => {
     hardware.inyectar('dfm', 'CAN1', [
       senal('horas_motor', 'Horas de motor', 'h', 1450.5),

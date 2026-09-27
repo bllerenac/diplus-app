@@ -541,6 +541,20 @@ export default function Ajustes() {
   const cambiarServidor = (s: Partial<Servidor>) =>
     aplicar({ ...cfg, servidor: { ...cfg.servidor, ...s } });
 
+  /**
+   * El nombre del equipo es uno, aunque se pueda escribir desde dos pantallas.
+   *
+   * Vivia en `servidor.equipo` y en `envio.equipo`, con la misma etiqueta en
+   * Servidor y en Envio, y habia que cambiarlo en los dos sitios o el equipo
+   * salia con un nombre en el tracing y con otro en MQTT.
+   */
+  const cambiarNombreEquipo = (equipo: string) =>
+    aplicar({
+      ...cfg,
+      servidor: { ...cfg.servidor, equipo },
+      envio: { ...cfg.envio, equipo },
+    });
+
   /* ── Actualización de la aplicación ───────────────────────────────────── */
   const [instalada, setInstalada] = useState<VersionInstalada | null>(null);
   const [bajada, setBajada] = useState<Descarga | null>(null);
@@ -1850,7 +1864,9 @@ export default function Ajustes() {
           {pestana === 'envio' && (
             <Envio
               ajustes={cfg.envio}
-              alCambiar={(envio) => aplicar({ ...cfg, envio })}
+              alCambiar={(envio) =>
+                aplicar({ ...cfg, envio, servidor: { ...cfg.servidor, equipo: envio.equipo } })
+              }
               salen={disponibles.filter(([c]) => ajustesDe(cfg.senales, c).enviar)}
               alDetalle={setDetalle}
             />
@@ -1878,9 +1894,12 @@ export default function Ajustes() {
                   <Entrada value={cfg.servidor.url} placeholder="https://…"
                     onChange={(e) => cambiarServidor({ url: e.target.value })} />
                 </Campo>
-                <Campo etiqueta="Nombre de este equipo" ayuda="Con qué nombre aparece allá.">
+                <Campo
+                  etiqueta="Nombre de este equipo"
+                  ayuda="El mismo que en Envío: se cambia aquí o allá, da igual."
+                >
                   <Entrada value={cfg.servidor.equipo} placeholder="CA-14"
-                    onChange={(e) => cambiarServidor({ equipo: e.target.value })} />
+                    onChange={(e) => cambiarNombreEquipo(e.target.value)} />
                 </Campo>
                 <Campo etiqueta="Token">
                   <Entrada type="password" value={cfg.servidor.token}

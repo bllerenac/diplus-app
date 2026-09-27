@@ -296,12 +296,22 @@ export const calcularValoresMqtt = (
 
   const m = cfgMqtt?.mapeo || {};
 
-  const inputFlow = porClaveONombre(m.inputFlow || cfgMqtt?.claveInputFlow, 'ingreso')
+  const inputFlow = porClaveONombre(
+    m.inputFlow || cfgMqtt?.claveInputFlow,
+    ['ingreso.caudal'],
+    ['.caudal ', 'ingreso'],
+    'ingreso',
+  )
     ?? (typeof hardware.senalesPara('enviar')[0]?.senal?.valor === 'number'
       ? (hardware.senalesPara('enviar')[0].senal.valor as number)
       : null);
 
-  const outputFlow = porClaveONombre(m.outputFlow || cfgMqtt?.claveOutputFlow, 'retorno');
+  const outputFlow = porClaveONombre(
+    m.outputFlow || cfgMqtt?.claveOutputFlow,
+    ['retorno.caudal'],
+    ['.caudal ', 'retorno'],
+    'retorno',
+  );
 
   const caudalFlow = m.caudalFlow
     ? porClaveONombre(m.caudalFlow)
@@ -313,10 +323,20 @@ export const calcularValoresMqtt = (
   const sensorLev = porClaveONombre(m.sensorLevel) ?? sensorVol;
 
   /* Totalizadores */
-  const totInput = porClaveONombre(m.totalized || cfgMqtt?.claveTotalizadorInput, 'totaliz', 'ingreso')
-    ?? porClaveONombre(undefined, 'totaliz');
-  const totOutput = porClaveONombre(cfgMqtt?.claveTotalizadorOutput, 'totaliz', 'retorno')
-    ?? porClaveONombre(undefined, 'tot_retorno');
+  const totInput = porClaveONombre(
+    m.totalized || cfgMqtt?.claveTotalizadorInput,
+    ['ingreso.totalizador'],
+    ['ingreso.total', 'total consumido'],
+    ['totaliz', 'ingreso'],
+    ['total', 'ingreso'],
+  ) ?? porClaveONombre(undefined, 'totaliz');
+  const totOutput = porClaveONombre(
+    cfgMqtt?.claveTotalizadorOutput,
+    ['retorno.totalizador'],
+    ['retorno.total', 'total consumido'],
+    ['totaliz', 'retorno'],
+    ['total', 'retorno'],
+  ) ?? porClaveONombre(undefined, 'tot_retorno');
 
   const netTotalizedNum = totInput !== null && totOutput !== null
     ? Math.max(0, totInput - totOutput)

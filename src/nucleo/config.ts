@@ -172,12 +172,18 @@ const alDia = (c: Config): Config => {
     });
   }
 
-  if (!res.envio?.equipo || !res.envio.equipo.trim()) {
-    res = { ...res, envio: { ...res.envio, equipo: 'SC-03' } };
-  }
-  if (!res.servidor?.equipo || !res.servidor.equipo.trim()) {
-    res = { ...res, servidor: { ...res.servidor, equipo: 'SC-03' } };
-  }
+  /* Un solo nombre de equipo. Se guardaba en `envio` y en `servidor`, y en las
+     instalaciones donde se cambio solo en uno vienen distintos: manda el que
+     alguien puso a mano, no el de fabrica. */
+  const nombreEquipo =
+    [res.envio?.equipo, res.servidor?.equipo]
+      .map((n) => (n ?? '').trim())
+      .find((n) => n && n !== 'SC-03') ?? 'SC-03';
+  res = {
+    ...res,
+    envio: { ...res.envio, equipo: nombreEquipo },
+    servidor: { ...res.servidor, equipo: nombreEquipo },
+  };
   if (!res.horometro) {
     res = { ...res, horometro: { ...HOROMETRO_POR_DEFECTO } };
   }
