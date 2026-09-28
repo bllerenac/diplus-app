@@ -255,7 +255,7 @@ export function Envio({
                 <Entrada
                   type="number" min={1}
                   value={ajustes.mqtt.cadaSeg}
-                  onChange={(e) => mqttCfg({ cadaSeg: Number(e.target.value) || 5 })}
+                  onChange={(e) => mqttCfg({ cadaSeg: Number(e.target.value) || 2 })}
                 />
               </Campo>
             </div>

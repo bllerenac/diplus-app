@@ -172,6 +172,12 @@ const alDia = (c: Config): Config => {
     });
   }
 
+  /* El MQTT pasa de 5 s a 2 s. Solo se cambia a quien tenga exactamente el
+     valor viejo de fabrica: si alguien puso otro numero a mano, manda el suyo. */
+  if (res.envio?.mqtt?.cadaSeg === 5) {
+    res = { ...res, envio: { ...res.envio, mqtt: { ...res.envio.mqtt, cadaSeg: 2 } } };
+  }
+
   /* Un solo nombre de equipo. Se guardaba en `envio` y en `servidor`, y en las
      instalaciones donde se cambio solo en uno vienen distintos: manda el que
      alguien puso a mano, no el de fabrica. */

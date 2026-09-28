@@ -186,7 +186,9 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
     usuario: 'test',
     contrasena: 'test1234',
     topic: '/miskimayo/diplus/{{unit_id}}',
-    cadaSeg: 5,
+    /* Cada 2 s, como el HelperBox emite a la tablet. Con 5 s el tablero de
+       control iba medio minuto por detras del camion en las maniobras. */
+    cadaSeg: 2,
   },
   equipo: 'SC-03',
   formato: 'lista',
