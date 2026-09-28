@@ -3,8 +3,10 @@ package com.diplus.app;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 
@@ -38,6 +40,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         activarInmersivo();
+        cargarBrillo();
     }
 
     @Override
@@ -102,6 +105,60 @@ public class MainActivity extends BridgeActivity {
     }
 
     /** Bloquea el botón de Atrás cuando el kiosco está activo. */
+    /* ── Los dos botones fisicos de la carcasa ────────────────────────────────
+     *
+     * El `soc:gpio_keys` de esta tablet da KEY_F1 y KEY_F2, y el keylayout del
+     * sistema no los remapea, asi que llegan aqui como F1 y F2 y se pueden usar
+     * para lo que haga falta. Se usan para el brillo: en una cabina, de noche
+     * la pantalla deslumbra y a mediodia no se ve, y el conductor no deberia
+     * tener que salir de la aplicacion —ni poder— para arreglarlo.
+     *
+     * Es el brillo **de esta ventana**, no el del sistema: cambiar el del
+     * sistema pide WRITE_SETTINGS, que es un permiso especial que hay que
+     * conceder a mano en cada equipo. Como la aplicacion ocupa la pantalla
+     * entera, el efecto es el mismo.
+     */
+    private static final String PREFS = "diplus.pantalla";
+    private static final String CLAVE_BRILLO = "brillo";
+    private static final float PASO = 0.12f;
+
+    private float brillo = -1f;
+
+    private void cargarBrillo() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        brillo = p.getFloat(CLAVE_BRILLO, -1f);
+        if (brillo >= 0f) aplicarBrillo(brillo, false);
+    }
+
+    private void aplicarBrillo(float v, boolean guardar) {
+        brillo = Math.max(0.05f, Math.min(1f, v));
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = brillo;
+        getWindow().setAttributes(lp);
+        if (guardar) {
+            getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit().putFloat(CLAVE_BRILLO, brillo).apply();
+        }
+    }
+
+    /* Se intercepta en dispatchKeyEvent y no en onKeyDown: el WebView tiene
+       el foco y se come las teclas antes de que lleguen a la actividad. Aqui
+       pasan todas, antes de repartirlas a las vistas. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent evento) {
+        int codigo = evento.getKeyCode();
+        if (codigo == KeyEvent.KEYCODE_F1 || codigo == KeyEvent.KEYCODE_F2) {
+            if (evento.getAction() == KeyEvent.ACTION_DOWN) {
+                /* Sin valor guardado se parte de la mitad: el del sistema no se
+                   puede leer sin permisos y adivinarlo daria un salto feo. */
+                float actual = brillo >= 0f ? brillo : 0.5f;
+                aplicarBrillo(codigo == KeyEvent.KEYCODE_F1 ? actual + PASO : actual - PASO, true);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(evento);
+    }
+
     @Override
     public void onBackPressed() {
         if (!kioscoActivo) {
