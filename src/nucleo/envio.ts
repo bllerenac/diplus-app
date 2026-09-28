@@ -32,7 +32,7 @@ import {
   marcarSnapshotsEnviados,
 } from './base';
 import { gps } from './gps';
-import { hardware } from './hardware';
+import { hardware, enviarPorRed } from './hardware';
 import { mqtt, hayMqtt } from './mqtt';
 import { horometro } from './horometro';
 
@@ -91,6 +91,14 @@ export interface PorSocket {
   activo: boolean;
   /** `ws://maquina:puerto`. Con `wss://` si el otro lado lleva certificado. */
   url: string;
+  cadaSeg: number;
+}
+
+/** Difusion por WiFi a la red del camion, para que la recoja un HelperBox. */
+export interface PorRed {
+  activo: boolean;
+  /** Donde escucha el HelperBox. Distinto del 9977 que el usa para emitir. */
+  puerto: number;
   cadaSeg: number;
 }
 
@@ -167,6 +175,7 @@ export interface AjustesEnvio {
   socket: PorSocket;
   api: PorApi;
   mqtt: PorMqtt;
+  red: PorRed;
   /** Con qué nombre se identifica este equipo en lo que manda. */
   equipo: string;
   formato: Formato;
@@ -190,6 +199,8 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
        control iba medio minuto por detras del camion en las maniobras. */
     cadaSeg: 2,
   },
+  /* Apagado de fabrica: se enciende cuando hay un HelperBox escuchando. */
+  red: { activo: false, puerto: 9978, cadaSeg: 2 },
   equipo: 'SC-03',
   formato: 'lista',
 };
@@ -447,6 +458,7 @@ class Envio {
   private relojSocket: ReturnType<typeof setInterval> | null = null;
   private relojApi: ReturnType<typeof setInterval> | null = null;
   private relojMqtt: ReturnType<typeof setInterval> | null = null;
+  private relojRed: ReturnType<typeof setInterval> | null = null;
   private reintento: ReturnType<typeof setTimeout> | null = null;
 
   private socket: EstadoCanal = { ...CANAL_PARADO };
@@ -530,16 +542,33 @@ class Envio {
         this.mqttCh = { ...CANAL_PARADO };
       }
     }
+
+    this.aplicarRed(cfg);
+  }
+
+  /** Enciende o apaga la difusion por WiFi segun la configuracion. */
+  private aplicarRed(cfg: AjustesEnvio) {
+    if (this.relojRed) {
+      clearInterval(this.relojRed);
+      this.relojRed = null;
+    }
+    if (cfg.red?.activo) {
+      this.relojRed = setInterval(
+        () => this.porRed(), Math.max(1000, (cfg.red.cadaSeg || 2) * 1000),
+      );
+    }
   }
 
   parar() {
     if (this.relojSocket) clearInterval(this.relojSocket);
     if (this.relojApi)    clearInterval(this.relojApi);
     if (this.relojMqtt)   clearInterval(this.relojMqtt);
+    if (this.relojRed)    clearInterval(this.relojRed);
     if (this.reintento)  clearTimeout(this.reintento);
     this.relojSocket = null;
     this.relojApi    = null;
     this.relojMqtt   = null;
+    this.relojRed    = null;
     this.reintento   = null;
     this.cerrarSocket();
     if (hayMqtt()) mqtt.desconectar().catch(() => undefined);
@@ -803,6 +832,38 @@ class Envio {
   }
 
   // ── MQTT ────────────────────────────────────────────────────────────────
+
+  /**
+   * Difunde por WiFi lo que este equipo tiene ahora mismo.
+   *
+   * Van **todas** las señales: las propias —GPS, inercial, horómetro, RS485,
+   * CAN— y tambien las que llegaron de un HelperBox, porque quien escucha al
+   * otro lado decide que le sirve y que no. El formato es el mismo JSON plano
+   * que emite el panel del HelperBox, para que las dos puntas hablen igual.
+   *
+   * Se manda a la difusion de cada interfaz, no a una IP: en una red de camion
+   * las direcciones cambian cada vez que alguien reengancha el WiFi.
+   */
+  private async porRed() {
+    const cfg = this.cfg.red;
+    if (!cfg?.activo) return;
+
+    const cuerpo: Record<string, unknown> = {
+      equipo: this.cfg.equipo,
+      at: Date.now(),
+    };
+    for (const [clave, senal] of hardware.senalesPorClave()) {
+      const v = senal?.valor;
+      cuerpo[clave] = typeof v === 'number' || typeof v === 'string' ? v : null;
+    }
+
+    try {
+      await enviarPorRed(cfg.puerto, JSON.stringify(cuerpo));
+    } catch {
+      /* Sin WiFi no hay a quien difundir. No se reintenta ni se guarda: esto
+         es el momento, y el momento siguiente llega en dos segundos. */
+    }
+  }
 
   private porMqtt() {
     const { topic } = this.cfg.mqtt;

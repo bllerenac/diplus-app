@@ -714,6 +714,68 @@ public class CanRs485Plugin extends Plugin {
     private Thread udpThread;
     private final AtomicBoolean udpEscuchando = new AtomicBoolean(false);
 
+    /* ── Y el sentido contrario, por WiFi ─────────────────────────────────────
+     *
+     * Lo de arriba dice que esta boca de red no transmite, y es cierto: la del
+     * **cable**. Por WiFi este equipo habla igual que cualquiera —ya manda MQTT
+     * y la API por ahi—, asi que la vuelta al HelperBox va por ahi.
+     *
+     * Se manda a la difusion de **cada** interfaz, no a 255.255.255.255 a secas:
+     * esa se va por la ruta por defecto, que en este equipo suele ser el 4G, y
+     * entonces el datagrama sale a internet en vez de a la red del camion.
+     */
+    @PluginMethod
+    public void enviarPorRed(PluginCall call) {
+        final int puerto = call.getInt("puerto", 9978);
+        final String texto = call.getString("texto", "");
+        if (texto.isEmpty()) {
+            call.reject("No hay nada que mandar");
+            return;
+        }
+
+        new Thread(() -> {
+            DatagramSocket s = null;
+            int enviados = 0;
+            StringBuilder destinos = new StringBuilder();
+            try {
+                s = new DatagramSocket();
+                s.setBroadcast(true);
+                byte[] datos = texto.getBytes("UTF-8");
+
+                java.util.Enumeration<java.net.NetworkInterface> ifaces =
+                        java.net.NetworkInterface.getNetworkInterfaces();
+                while (ifaces != null && ifaces.hasMoreElements()) {
+                    java.net.NetworkInterface iface = ifaces.nextElement();
+                    if (iface.isLoopback() || !iface.isUp()) continue;
+                    for (java.net.InterfaceAddress dir : iface.getInterfaceAddresses()) {
+                        java.net.InetAddress difusion = dir.getBroadcast();
+                        if (difusion == null) continue;
+                        try {
+                            s.send(new DatagramPacket(datos, datos.length, difusion, puerto));
+                            enviados++;
+                            if (destinos.length() > 0) destinos.append(", ");
+                            destinos.append(iface.getName()).append(":")
+                                    .append(difusion.getHostAddress());
+                        } catch (Exception ignorada) {
+                            /* una interfaz que no deja difundir no frena a las demas */
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                call.reject("No se pudo mandar: " + e.getMessage());
+                return;
+            } finally {
+                if (s != null) s.close();
+            }
+
+            JSObject r = new JSObject();
+            r.put("enviados", enviados);
+            r.put("destinos", destinos.toString());
+            r.put("puerto", puerto);
+            call.resolve(r);
+        }).start();
+    }
+
     @PluginMethod
     public void startRedListener(PluginCall call) {
         final int puerto = call.getInt("puerto", 9977);

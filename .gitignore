@@ -31,3 +31,6 @@ yarn-error.log*
 .eslintcache
 android/node_modules/
 apk/
+
+# Pruebas sueltas y SDK del fabricante: no son del proyecto.
+scratch/

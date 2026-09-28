@@ -172,6 +172,14 @@ const alDia = (c: Config): Config => {
     });
   }
 
+  /* La difusion por WiFi es nueva: las configuraciones guardadas no la traen. */
+  if (!res.envio?.red) {
+    res = {
+      ...res,
+      envio: { ...res.envio, red: { activo: false, puerto: 9978, cadaSeg: 2 } },
+    };
+  }
+
   /* El MQTT pasa de 5 s a 2 s. Solo se cambia a quien tenga exactamente el
      valor viejo de fabrica: si alguien puso otro numero a mano, manda el suyo. */
   if (res.envio?.mqtt?.cadaSeg === 5) {

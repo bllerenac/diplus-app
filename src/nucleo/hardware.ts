@@ -111,6 +111,7 @@ export interface PluginNativo {
   startCan2Listener(o: { baudrate?: number; serialBaudrate?: number }): Promise<any>;
   startRs485Listener(o: { devicePath: string; baudrate?: number }): Promise<any>;
   startRedListener(o: { puerto: number }): Promise<any>;
+  enviarPorRed(o: { puerto: number; texto: string }): Promise<{ enviados: number; destinos: string }>;
   stopRedListener(): Promise<any>;
   sendRawBytes(o: { devicePath: string; hexData: string }): Promise<any>;
   sendModbusQuery(o: {
@@ -457,3 +458,15 @@ class Hardware {
 }
 
 export const hardware = new Hardware();
+
+/**
+ * Manda un texto por UDP a la difusion de cada interfaz.
+ *
+ * Es la vuelta del `startRedListener`: lo que este equipo lee puede salir a la
+ * red del camion para que lo recoja un HelperBox. Solo va por WiFi —la boca de
+ * red cableada de esta tablet recibe pero no transmite—.
+ */
+export const enviarPorRed = async (puerto: number, texto: string) => {
+  if (!Capacitor.isNativePlatform()) return { enviados: 0, destinos: '' };
+  return Nativo.enviarPorRed({ puerto, texto });
+};

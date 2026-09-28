@@ -107,6 +107,9 @@ export function Envio({
     alCambiar({ ...ajustes, socket: { ...ajustes.socket, ...c } });
   const api = (c: Partial<AjustesEnvio['api']>) =>
     alCambiar({ ...ajustes, api: { ...ajustes.api, ...c } });
+  const red = (c: Partial<AjustesEnvio['red']>) =>
+    alCambiar({ ...ajustes, red: { ...ajustes.red, ...c } });
+
   const mqttCfg = (c: Partial<AjustesEnvio['mqtt']>) =>
     alCambiar({ ...ajustes, mqtt: { ...ajustes.mqtt, ...c } });
 
@@ -423,6 +426,47 @@ export function Envio({
       </Bloque>
 
       {/* ── Socket ─────────────────────────────────────────────────────── */}
+      <Bloque titulo="Por WiFi, a los HelperBox">
+        <Nota>
+          Difunde por la red WiFi <b>todo lo que este equipo tiene ahora</b>: sus propios
+          sensores y también lo que le haya llegado de un HelperBox. Quien escucha decide qué
+          le sirve. No hace falta saber la dirección de nadie: sale a la difusión de la red,
+          así que vale aunque las IP cambien al reenganchar el WiFi.
+        </Nota>
+
+        <Interruptor
+          activo={ajustes.red.activo}
+          alCambiar={(v) => red({ activo: v })}
+          etiqueta="Difundir por WiFi"
+        />
+
+        <div className="grid grid-cols-[2fr_1fr] gap-3">
+          <Campo
+            etiqueta="Puerto"
+            ayuda="Donde escucha el HelperBox. Distinto del 9977, que es el que él usa para emitir."
+          >
+            <Entrada
+              type="number" min={1} max={65535}
+              value={ajustes.red.puerto}
+              onChange={(e) => red({ puerto: Number(e.target.value) || 9978 })}
+            />
+          </Campo>
+          <Campo etiqueta="Cada cuántos segundos">
+            <Entrada
+              type="number" min={1}
+              value={ajustes.red.cadaSeg}
+              onChange={(e) => red({ cadaSeg: Number(e.target.value) || 2 })}
+            />
+          </Campo>
+        </div>
+
+        <Nota>
+          En el HelperBox hay que dar de alta un sensor de tipo <b>«Lecturas por red (UDP)»</b>
+          con este mismo puerto. A partir de ahí sus señales se ven en su panel, se pueden
+          reemitir por sus salidas y quedan en su histórico.
+        </Nota>
+      </Bloque>
+
       <Bloque titulo="En directo, por socket">
         <Nota>
           Manda el valor del momento cada pocos segundos, sin guardar nada. Es para quien está
