@@ -176,7 +176,7 @@ const alDia = (c: Config): Config => {
   if (!res.envio?.red) {
     res = {
       ...res,
-      envio: { ...res.envio, red: { activo: false, puerto: 9978, cadaSeg: 2 } },
+      envio: { ...res.envio, red: { activo: true, puerto: 9978, cadaSeg: 2 } },
     };
   }
 

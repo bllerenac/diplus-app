@@ -199,8 +199,10 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
        control iba medio minuto por detras del camion en las maniobras. */
     cadaSeg: 2,
   },
-  /* Apagado de fabrica: se enciende cuando hay un HelperBox escuchando. */
-  red: { activo: false, puerto: 9978, cadaSeg: 2 },
+  /* Encendido de fabrica: difundir no molesta a nadie —si no hay quien
+     escuche, el datagrama se pierde y ya— y asi una tablet nueva habla con su
+     HelperBox sin que haya que acordarse de encender nada. */
+  red: { activo: true, puerto: 9978, cadaSeg: 2 },
   equipo: 'SC-03',
   formato: 'lista',
 };
