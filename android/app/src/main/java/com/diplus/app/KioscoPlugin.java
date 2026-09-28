@@ -22,6 +22,7 @@ public class KioscoPlugin extends Plugin {
     @PluginMethod
     public void bloquear(PluginCall call) {
         MainActivity.kioscoActivo = true;
+        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).fijarPantalla());
         call.resolve();
     }
 
@@ -29,6 +30,7 @@ public class KioscoPlugin extends Plugin {
     @PluginMethod
     public void desbloquear(PluginCall call) {
         MainActivity.kioscoActivo = false;
+        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).soltarPantalla());
         call.resolve();
     }
 
@@ -45,6 +47,7 @@ public class KioscoPlugin extends Plugin {
     public void cerrar(PluginCall call) {
         MainActivity.kioscoActivo = false;
         getActivity().runOnUiThread(() -> {
+            ((MainActivity) getActivity()).soltarPantalla();
             getActivity().finishAffinity();
             System.exit(0);
         });
@@ -58,6 +61,7 @@ public class KioscoPlugin extends Plugin {
     @PluginMethod
     public void reiniciar(PluginCall call) {
         Activity act = getActivity();
+        ((MainActivity) act).soltarPantalla();
         Intent intent = act.getPackageManager()
                 .getLaunchIntentForPackage(act.getPackageName());
         if (intent != null) {

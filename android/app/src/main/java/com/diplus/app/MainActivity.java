@@ -1,6 +1,9 @@
 package com.diplus.app;
 
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -41,6 +44,41 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         activarInmersivo();
+        if (kioscoActivo) fijarPantalla();
+    }
+
+    /**
+     * Fija la pantalla en esta app: el panel de arriba deja de bajar y los
+     * botones de inicio y recientes dejan de sacar de aqui.
+     *
+     * El modo inmersivo solo **esconde** las barras. Deslizando desde el borde
+     * vuelven, y desde ahi se despliega el panel de notificaciones entero, con
+     * sus ajustes rapidos: el WiFi, el avion, todo. Lo unico que lo impide de
+     * verdad es el modo de tarea fijada.
+     *
+     * La primera vez el sistema pide confirmacion, salvo que la aplicacion sea
+     * propietaria del dispositivo. Si no se puede —permisos, version— se queda
+     * como estaba, que ya es el inmersivo mas la vuelta al frente.
+     */
+    void fijarPantalla() {
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            boolean yaFijada = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                    ? am.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE
+                    : am.isInLockTaskMode();
+            if (!yaFijada) startLockTask();
+        } catch (Exception e) {
+            /* sin permisos no pasa nada: esto es una mejora sobre lo que ya hacia */
+        }
+    }
+
+    /** Suelta la pantalla. Sin esto no se puede ni cerrar la aplicacion. */
+    void soltarPantalla() {
+        try {
+            stopLockTask();
+        } catch (Exception e) {
+            /* no estaba fijada */
+        }
     }
 
     @Override
