@@ -95,11 +95,15 @@ public class MainActivity extends BridgeActivity {
      *
      * El boton de encendido no se puede interceptar: el sistema procesa esa
      * tecla antes de repartirla. Lo que si se puede es reaccionar, y aqui hace
-     * falta, porque con la pantalla apagada **se deja de guardar**: todos los
-     * relojes de lecturas y de envio son `setInterval` dentro del WebView, y
-     * Chrome estrangula los temporizadores de una vista que no se ve —pasan a
-     * una vez por minuto, y a los cinco minutos a menos—. La tablet seguiria
-     * encendida y el histórico quedaria con un hueco.
+     * falta por los datos: todos los relojes de lecturas y de envio son
+     * setInterval dentro del WebView, y Chrome estrangula los temporizadores de
+     * una vista que no se ve.
+     *
+     * El limite es de una vez por segundo mientras esta oculta, asi que un
+     * apagon corto no pierde nada leyendo cada 2 s. Pero a los **cinco minutos**
+     * oculta entra el estrangulamiento fuerte —una vez por minuto— y ahi si
+     * queda un hueco en el historico, con la tablet encendida y sin que nada
+     * avise.
      *
      * Mientras el kiosco este activo, un apagon de pantalla dura lo que tarda
      * este receptor en despertarla.
