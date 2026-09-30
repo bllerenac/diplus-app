@@ -82,6 +82,10 @@
     <!-- Para netType, isOnline, la señal y la velocidad del enlace: van en la telemetria. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Para volver a encender la pantalla si alguien la apaga: con el WebView
+         oculto se estrangulan los temporizadores y se deja de guardar. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <!-- Para poder actualizarse sola desde una direccion propia, sin Google Play. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

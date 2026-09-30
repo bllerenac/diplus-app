@@ -2,11 +2,15 @@ package com.diplus.app;
 
 import android.app.ActivityManager;
 import android.app.admin.DevicePolicyManager;
+import android.app.KeyguardManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.IntentFilter;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -44,6 +48,13 @@ public class MainActivity extends BridgeActivity {
 
         activarInmersivo();
         cargarBrillo();
+        registerReceiver(receptorPantalla, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+    }
+
+    @Override
+    public void onDestroy() {
+        try { unregisterReceiver(receptorPantalla); } catch (Exception e) { /* no estaba */ }
+        super.onDestroy();
     }
 
     @Override
@@ -76,6 +87,63 @@ public class MainActivity extends BridgeActivity {
             if (!yaFijada) startLockTask();
         } catch (Exception e) {
             /* sin permisos no pasa nada: esto es una mejora sobre lo que ya hacia */
+        }
+    }
+
+    /**
+     * Vuelve a encender la pantalla si alguien la apaga.
+     *
+     * El boton de encendido no se puede interceptar: el sistema procesa esa
+     * tecla antes de repartirla. Lo que si se puede es reaccionar, y aqui hace
+     * falta, porque con la pantalla apagada **se deja de guardar**: todos los
+     * relojes de lecturas y de envio son `setInterval` dentro del WebView, y
+     * Chrome estrangula los temporizadores de una vista que no se ve —pasan a
+     * una vez por minuto, y a los cinco minutos a menos—. La tablet seguiria
+     * encendida y el histórico quedaria con un hueco.
+     *
+     * Mientras el kiosco este activo, un apagon de pantalla dura lo que tarda
+     * este receptor en despertarla.
+     */
+    private final BroadcastReceiver receptorPantalla = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            if (!kioscoActivo) return;
+            if (!Intent.ACTION_SCREEN_OFF.equals(i.getAction())) return;
+            despertarPantalla();
+        }
+    };
+
+    private void despertarPantalla() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+
+            /* FULL_WAKE_LOCK esta obsoleto y es justo lo que hace falta: es lo
+               unico que enciende la pantalla desde una app sin ser el sistema.
+               Se suelta en seguida —lo que mantiene la pantalla despues es el
+               FLAG_KEEP_SCREEN_ON de la ventana, que ya esta puesto. */
+            @SuppressWarnings("deprecation")
+            PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.FULL_WAKE_LOCK
+                            | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                            | PowerManager.ON_AFTER_RELEASE,
+                    "diplus:despertar");
+            wl.acquire(3000);
+            wl.release();
+
+            /* Y que la actividad se ponga delante del bloqueo, si lo hubiera.
+               Con la app propietaria del dispositivo el bloqueo ya esta
+               desactivado, pero sin serlo esto evita quedarse en la cerradura. */
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+            }
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                km.requestDismissKeyguard(this, null);
+            }
+        } catch (Exception e) {
+            Log.w("MainActivity", "despertarPantalla: " + e.getMessage());
         }
     }
 
