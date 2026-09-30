@@ -1,11 +1,14 @@
 package com.diplus.app;
 
 import android.app.ActivityManager;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -69,15 +72,75 @@ public class MainActivity extends BridgeActivity {
             boolean yaFijada = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                     ? am.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE
                     : am.isInLockTaskMode();
+            blindar(true);
             if (!yaFijada) startLockTask();
         } catch (Exception e) {
             /* sin permisos no pasa nada: esto es una mejora sobre lo que ya hacia */
         }
     }
 
+    /**
+     * Cierra lo que la tarea fijada no cierra: el menu de apagado y el bloqueo.
+     *
+     * La tarea fijada impide salir de la app, pero **no** impide apagar el
+     * equipo: una pulsacion larga del boton sigue sacando «Apagar / Reiniciar».
+     * Y una corta apaga la pantalla, que es lo unico que ninguna aplicacion
+     * puede evitar — el sistema procesa esa tecla antes de repartirla, asi que
+     * no llega ni a `dispatchKeyEvent`.
+     *
+     * Con la app **propietaria del dispositivo** si se puede:
+     *
+     * - `setLockTaskFeatures(NONE)` quita el menu de apagado. En tarea fijada
+     *   Android deja ese menu activo por omision; hay que apagarlo a mano.
+     * - `setKeyguardDisabled(true)` quita la pantalla de bloqueo, asi que si
+     *   alguien apaga la pantalla, al volver a pulsar entra directo y sin PIN.
+     * - `setLockTaskPackages` evita el aviso de confirmacion al fijar.
+     *
+     * Sin nombrar propietaria no hace nada y la aplicacion sigue como hoy. Se
+     * nombra una vez, con el equipo sin cuentas:
+     *
+     *   adb shell dpm set-device-owner com.diplus.app/.AdminReceptor
+     */
+    void blindar(boolean activo) {
+        try {
+            DevicePolicyManager dpm =
+                    (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            if (dpm == null || !dpm.isDeviceOwnerApp(getPackageName())) return;
+
+            ComponentName admin = new ComponentName(this, AdminReceptor.class);
+
+            dpm.setLockTaskPackages(admin, activo ? new String[]{ getPackageName() } : new String[0]);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm.setLockTaskFeatures(admin, activo
+                        ? DevicePolicyManager.LOCK_TASK_FEATURE_NONE
+                        : DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
+                          | DevicePolicyManager.LOCK_TASK_FEATURE_HOME
+                          | DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD);
+            }
+
+            dpm.setKeyguardDisabled(admin, activo);
+        } catch (Exception e) {
+            /* Si el sistema no deja, se queda con la tarea fijada a secas. */
+            Log.w("MainActivity", "blindar: " + e.getMessage());
+        }
+    }
+
+    /** Si el blindaje completo esta disponible, para poder decirlo en el panel. */
+    boolean esPropietaria() {
+        try {
+            DevicePolicyManager dpm =
+                    (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            return dpm != null && dpm.isDeviceOwnerApp(getPackageName());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Suelta la pantalla. Sin esto no se puede ni cerrar la aplicacion. */
     void soltarPantalla() {
         try {
+            blindar(false);
             stopLockTask();
         } catch (Exception e) {
             /* no estaba fijada */

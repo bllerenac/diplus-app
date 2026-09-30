@@ -9,7 +9,7 @@ import { registerPlugin } from '@capacitor/core';
 interface KioscoPlugin {
   bloquear(): Promise<void>;
   desbloquear(): Promise<void>;
-  estado(): Promise<{ activo: boolean }>;
+  estado(): Promise<{ activo: boolean; propietaria?: boolean }>;
   cerrar(): Promise<void>;
   reiniciar(): Promise<void>;
 }

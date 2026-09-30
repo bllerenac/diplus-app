@@ -30,6 +30,20 @@
 
         </activity>
 
+        <!-- Para poder ser propietaria del dispositivo. Sin nombrarla, sobra y no
+             molesta; nombrada, permite quitar el menu de apagado y el bloqueo. -->
+        <receiver
+            android:name=".AdminReceptor"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/admin_dispositivo" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Levanta la aplicacion al encender el equipo. Sin esto, un corte de
              energia la deja cerrada y en un camion nadie va a tocar el icono. -->
         <receiver

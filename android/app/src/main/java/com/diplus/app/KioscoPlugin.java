@@ -34,11 +34,19 @@ public class KioscoPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Devuelve si el kiosco está activo en este momento. */
+    /**
+     * Devuelve si el kiosco está activo, y hasta dónde llega el bloqueo.
+     *
+     * "propietaria" es la diferencia entre «no se puede salir de la app» y «no
+     * se puede apagar el equipo». Sin ella, una pulsación larga del botón de
+     * encendido sigue sacando el menú de apagado, y eso no lo arregla ninguna
+     * app: hay que nombrarla propietaria del dispositivo.
+     */
     @PluginMethod
     public void estado(PluginCall call) {
         JSObject r = new JSObject();
         r.put("activo", MainActivity.kioscoActivo);
+        r.put("propietaria", ((MainActivity) getActivity()).esPropietaria());
         call.resolve(r);
     }
 
