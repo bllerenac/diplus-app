@@ -112,6 +112,13 @@ export interface PluginNativo {
   startRs485Listener(o: { devicePath: string; baudrate?: number }): Promise<any>;
   startRedListener(o: { puerto: number }): Promise<any>;
   enviarPorRed(o: { puerto: number; texto: string }): Promise<{ enviados: number; destinos: string }>;
+  estadoRed(): Promise<{
+    netType: string;
+    isOnline: boolean;
+    netSignalDbm: number | null;
+    netSignalPercent: number | null;
+    netLinkSpeed: number | null;
+  }>;
   stopRedListener(): Promise<any>;
   sendRawBytes(o: { devicePath: string; hexData: string }): Promise<any>;
   sendModbusQuery(o: {
@@ -469,4 +476,78 @@ export const hardware = new Hardware();
 export const enviarPorRed = async (puerto: number, texto: string) => {
   if (!Capacitor.isNativePlatform()) return { enviados: 0, destinos: '' };
   return Nativo.enviarPorRed({ puerto, texto });
+};
+
+/**
+ * Estado de la red, para los campos net* de la telemetria.
+ *
+ * El nativo da tipo, salida, señal y velocidad del enlace. La latencia se mide
+ * aqui: un ping bloqueante en el hilo del plugin retrasaria la lectura de los
+ * sensores, y aqui ya hay un bucle con su propio reloj.
+ *
+ * Se refresca aparte de las lecturas porque nada de esto cambia cada dos
+ * segundos, y la medida de latencia cuesta una peticion.
+ */
+const RED_CADA_MS = 15000;
+const LATENCIA_CADA_MS = 60000;
+
+let redCache = {
+  netType: 'none',
+  isOnline: false,
+  netSignalDbm: null as number | null,
+  netSignalPercent: null as number | null,
+  netLatencyMs: null as number | null,
+  netLinkSpeed: null as number | null,
+};
+let redAl = 0;
+let latenciaAl = 0;
+
+/** Ida y vuelta a un recurso chico. Si no contesta, se deja sin dato. */
+const medirLatencia = async (): Promise<number | null> => {
+  const t0 = Date.now();
+  try {
+    const c = new AbortController();
+    const reloj = setTimeout(() => c.abort(), 4000);
+    await fetch('https://www.gstatic.com/generate_204', {
+      method: 'HEAD',
+      cache: 'no-store',
+      signal: c.signal,
+    });
+    clearTimeout(reloj);
+    return Date.now() - t0;
+  } catch {
+    return null;
+  }
+};
+
+export const estadoRed = () => redCache;
+
+export const refrescarEstadoRed = async () => {
+  const ahora = Date.now();
+  if (ahora - redAl < RED_CADA_MS) return redCache;
+  redAl = ahora;
+
+  let base = {
+    netType: 'none',
+    isOnline: false,
+    netSignalDbm: null as number | null,
+    netSignalPercent: null as number | null,
+    netLinkSpeed: null as number | null,
+  };
+  if (hayHardware()) {
+    try {
+      base = await Nativo.estadoRed();
+    } catch {
+      /* sin dato antes que un numero inventado */
+    }
+  }
+
+  let latencia = redCache.netLatencyMs;
+  if (ahora - latenciaAl >= LATENCIA_CADA_MS) {
+    latenciaAl = ahora;
+    latencia = await medirLatencia();
+  }
+
+  redCache = { ...base, netLatencyMs: latencia };
+  return redCache;
 };

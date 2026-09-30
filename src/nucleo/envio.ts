@@ -32,7 +32,7 @@ import {
   marcarSnapshotsEnviados,
 } from './base';
 import { gps } from './gps';
-import { hardware, enviarPorRed } from './hardware';
+import { hardware, enviarPorRed, estadoRed, refrescarEstadoRed } from './hardware';
 import { mqtt, hayMqtt } from './mqtt';
 import { horometro } from './horometro';
 
@@ -125,6 +125,8 @@ export interface CampoMqttDef {
   descripcion: string;
   tipo: 'numero' | 'texto' | 'gps' | 'fecha';
   sensorSugerido?: string;
+  /** Campos donde un 0 seria mentira: van en null cuando no hay dato. */
+  admiteNulo?: boolean;
 }
 
 export const CAMPOS_MQTT_MISKIMAYO: CampoMqttDef[] = [
@@ -146,6 +148,19 @@ export const CAMPOS_MQTT_MISKIMAYO: CampoMqttDef[] = [
   { clave: 'roll', nombre: 'Giro (Roll)', descripcion: 'Inclinación lateral / giro en grados', tipo: 'numero', sensorSugerido: 'giro' },
   { clave: 'heading', nombre: 'Rumbo (Heading)', descripcion: 'Orientación / rumbo en grados', tipo: 'gps', sensorSugerido: 'rumbo' },
   { clave: 'horometro', nombre: 'Horómetro', descripcion: 'Horas de operación / motor en horas', tipo: 'numero', sensorSugerido: 'horas' },
+
+  /* El nombre que el backend espera para el consumo acumulado. Es el mismo
+     numero que 'totalized'; 'volumen' se queda por compatibilidad. Sin este
+     campo el consumo llegaba en cero. */
+  { clave: 'fuelMotor', nombre: 'Consumo acumulado', descripcion: 'El totalizador neto, igual que totalized', tipo: 'numero', sensorSugerido: 'totaliz' },
+
+  /* Los sabe el equipo, no un sensor: vienen del nativo. */
+  { clave: 'netType', nombre: 'Tipo de red', descripcion: 'wifi, cellular u other', tipo: 'texto' },
+  { clave: 'isOnline', nombre: 'Con salida', descripcion: 'Si la red llega de verdad a internet', tipo: 'numero' },
+  { clave: 'netSignalDbm', nombre: 'Señal', descripcion: 'Potencia recibida en dBm', tipo: 'numero' , admiteNulo: true },
+  { clave: 'netSignalPercent', nombre: 'Señal en %', descripcion: 'La misma potencia, en porcentaje', tipo: 'numero' , admiteNulo: true },
+  { clave: 'netLatencyMs', nombre: 'Latencia', descripcion: 'Ida y vuelta en ms', tipo: 'numero' , admiteNulo: true },
+  { clave: 'netLinkSpeed', nombre: 'Velocidad del enlace', descripcion: 'Mbit/s negociados', tipo: 'numero' , admiteNulo: true },
 ];
 
 export interface PorMqtt {
@@ -396,6 +411,8 @@ export const calcularValoresMqtt = (
     }
   }
 
+  const red = estadoRed();
+
   const unitId = equipo || 'SC-03';
 
   return {
@@ -417,6 +434,16 @@ export const calcularValoresMqtt = (
     roll: imuRoll ?? 0,
     heading: imuHeading,
     horometro: horometroVal,
+
+    /* 'fuelMotor' es el nombre que el backend espera para el consumo acumulado,
+       y es el mismo numero que 'totalized'. Se mandaba solo como 'volumen', que
+       la plantilla del backend no tiene: por eso le llegaba en cero. 'volumen'
+       se mantiene para no romper a quien ya lo lea. */
+    fuelMotor: volumenVal,
+
+    /* Los de la red los sabe el equipo, no un sensor. Vienen del nativo por
+       hardware.estadoRed(), que se refresca en su propio reloj. */
+    ...red,
   };
 };
 
@@ -443,7 +470,11 @@ export const cuerpoMqtt = (
   const payload: Record<string, unknown> = {};
   for (const c of CAMPOS_MQTT_MISKIMAYO) {
     if (clavesDeseadas.includes(c.clave)) {
-      payload[c.clave] = todosValores[c.clave] ?? 0;
+      /* Un 0 donde no hay dato es mentira en algunos campos: 0 dBm seria una
+         señal imposiblemente fuerte y 0 ms una respuesta instantanea. Ahi va
+         null, que se distingue de un cero de verdad. */
+      const v = todosValores[c.clave];
+      payload[c.clave] = c.admiteNulo ? (v ?? null) : (v ?? 0);
     }
   }
 
@@ -868,6 +899,10 @@ class Envio {
   }
 
   private porMqtt() {
+    /* Antes de armar: el estado de red tiene su propio reloj dentro, asi que
+       llamarlo en cada vuelta no cuesta mas que una comparacion. */
+    refrescarEstadoRed().catch(() => undefined);
+
     const { topic } = this.cfg.mqtt;
 
     const { topic: topicReal, payload } = cuerpoMqtt(this.cfg.equipo, topic, this.cfg.mqtt);

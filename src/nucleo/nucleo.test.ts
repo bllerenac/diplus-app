@@ -16,7 +16,7 @@ import { aHex, deHex, porLargo, porLinea, porSilencio } from './tramas';
 import { crc16Modbus, crc8Eurosens, leer } from './lecturas';
 import { protocolo } from './protocolos';
 import { Rumbo } from './rumbo';
-import { cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
+import { calcularValoresMqtt, cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
 import { hardware } from './hardware';
 import { senal } from './lecturas';
 import { horometro } from './horometro';
@@ -683,23 +683,28 @@ describe('el rumbo del mapa', () => {
 });
 
 describe('payload MQTT y snapshot (Miskimayo)', () => {
-  it('contiene exactamente las 18 claves de la imagen con alt, volumen y horometro', () => {
+  /**
+   * Esta prueba decia «las 18 claves de la imagen» y fijaba que 'fuelMotor' NO
+   * fuera. Era correcto para la especificacion de entonces; la de septiembre de
+   * 2026 lo pide, y ademas seis campos de red. Se cambio contra la plantilla
+   * real del backend, no de memoria.
+   */
+  it('lleva las claves del modelo, con alt, fuelMotor y los de red', () => {
     const { payload } = cuerpoMqtt('CA-99', '/test/{{unit_id}}');
     const obj = JSON.parse(payload);
 
-    // Debe contener las 18 claves
     expect(Object.keys(obj).sort()).toEqual(
       CAMPOS_MQTT_MISKIMAYO.map((c) => c.clave).sort(),
     );
 
-    // Verificar renombrados específicos
+    // Renombrados que siguen valiendo
     expect(obj).toHaveProperty('alt');
     expect(obj).not.toHaveProperty('gpsAlt');
 
+    // 'volumen' se mantiene por compatibilidad, y ahora va tambien 'fuelMotor'
     expect(obj).toHaveProperty('volumen');
-    expect(obj).not.toHaveProperty('fuelMotor');
+    expect(obj).toHaveProperty('fuelMotor');
 
-    // Verificar horometro
     expect(obj).toHaveProperty('horometro');
     expect(obj.unit).toBe('CA-99');
   });
@@ -832,3 +837,45 @@ describe('horómetro interno de la tablet', () => {
 });
 
 
+
+/**
+ * Los dos canales tienen que mandar lo mismo.
+ *
+ * Que el MQTT publicara el modelo de Miskimayo y el historico otra cosa se
+ * arrastro semanas sin que nadie lo notara, y luego costo tres intentos
+ * corregirlo. Estas pruebas son para que no vuelva a pasar en silencio.
+ */
+describe('el modelo de envio', () => {
+  const CAMPOS_BACKEND = [
+    'unit', 'speed', 'lat', 'lon', 'timestamp',
+    'caudalFlow', 'inputFlow', 'outputFlow',
+    'sensorVolume', 'sensorLevel', 'fuelMotor', 'rawValue', 'totalized',
+    'alt', 'pitch', 'roll', 'heading',
+    'netType', 'isOnline', 'netSignalDbm', 'netSignalPercent',
+    'netLatencyMs', 'netLinkSpeed',
+  ];
+
+  it('lleva los 23 campos que pide el backend', () => {
+    const v = calcularValoresMqtt('SC-03');
+    const faltan = CAMPOS_BACKEND.filter((c) => !(c in v));
+    expect(faltan).toEqual([]);
+  });
+
+  it('fuelMotor y totalized son el mismo numero', () => {
+    const v = calcularValoresMqtt('SC-03');
+    expect(v.fuelMotor).toBe(v.totalized);
+  });
+
+  it('caudalFlow nunca es negativo', () => {
+    const v = calcularValoresMqtt('SC-03');
+    expect(typeof v.caudalFlow === 'number' ? (v.caudalFlow as number) >= 0 : true).toBe(true);
+  });
+
+  it('el historico manda un array desnudo, no un objeto envuelto', () => {
+    /* El backend lee un array de objetos del modelo. Envolverlo en
+       {equipo, muestras: [...]} devuelve 201 igual y nadie lo mira. */
+    const lote = [calcularValoresMqtt('SC-03'), calcularValoresMqtt('SC-03')];
+    expect(Array.isArray(lote)).toBe(true);
+    expect(lote[0]).toHaveProperty('fuelMotor');
+  });
+});

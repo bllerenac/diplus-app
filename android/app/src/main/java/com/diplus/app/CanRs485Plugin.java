@@ -724,6 +724,81 @@ public class CanRs485Plugin extends Plugin {
      * esa se va por la ruta por defecto, que en este equipo suele ser el 4G, y
      * entonces el datagrama sale a internet en vez de a la red del camion.
      */
+
+    /**
+     * Estado de la conexion, para los campos net* de la telemetria.
+     *
+     * La latencia no se mide aqui: un ping bloqueante en el hilo del plugin
+     * retrasaria la lectura de los sensores. La mide la capa JS, que ya vive en
+     * un bucle con reloj propio.
+     */
+    @PluginMethod
+    public void estadoRed(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("netType", "none");
+        r.put("isOnline", false);
+        r.put("netSignalDbm", JSObject.NULL);
+        r.put("netSignalPercent", JSObject.NULL);
+        r.put("netLinkSpeed", JSObject.NULL);
+
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
+                    getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) { call.resolve(r); return; }
+
+            android.net.Network red = cm.getActiveNetwork();
+            android.net.NetworkCapabilities cap = red == null ? null : cm.getNetworkCapabilities(red);
+            if (cap == null) { call.resolve(r); return; }
+
+            boolean esWifi = cap.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+            boolean esMovil = cap.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR);
+            r.put("netType", esWifi ? "wifi" : esMovil ? "cellular" : "other");
+
+            /* VALIDATED es «esta red llega de verdad a internet», no solo «hay
+               enlace». Es lo que distingue un WiFi conectado sin salida. */
+            r.put("isOnline", cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED));
+
+            if (esWifi) {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                        getContext().getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    android.net.wifi.WifiInfo info = wm.getConnectionInfo();
+                    if (info != null) {
+                        int rssi = info.getRssi();
+                        /* Fuera de rango significa «sin dato», no «señal nula». */
+                        if (rssi > -127 && rssi < 0) {
+                            r.put("netSignalDbm", rssi);
+                            r.put("netSignalPercent", aPorcentaje(rssi));
+                        }
+                        int mbps = info.getLinkSpeed();
+                        if (mbps > 0) r.put("netLinkSpeed", mbps);
+                    }
+                }
+            } else if (esMovil) {
+                /* En movil el dBm depende de la tecnologia y pedirlo exige
+                   permisos de telefonia que esta app no tiene. Se deja sin dato
+                   antes que inventar un numero. */
+                int abajo = cap.getLinkDownstreamBandwidthKbps();
+                if (abajo > 0) r.put("netLinkSpeed", abajo / 1000);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "estadoRed: " + e.getMessage());
+        }
+        call.resolve(r);
+    }
+
+    /**
+     * De dBm a porcentaje.
+     *
+     * -50 o mejor es 100 %, -100 es 0 %. No hay una conversion «correcta», pero
+     * esta es la que espera quien lee un porcentaje de señal.
+     */
+    private int aPorcentaje(int dbm) {
+        if (dbm >= -50) return 100;
+        if (dbm <= -100) return 0;
+        return Math.round(2f * (dbm + 100));
+    }
+
     @PluginMethod
     public void enviarPorRed(PluginCall call) {
         final int puerto = call.getInt("puerto", 9978);
