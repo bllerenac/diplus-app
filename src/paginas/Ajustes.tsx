@@ -404,6 +404,9 @@ function DetalleSenal({
 export default function Ajustes() {
   const [cfg, setCfg] = useState<Config>({ ...cargar() });
   const [pestana, setPestana] = useState<Pestana>('sensores');
+  /* Que fuente se esta configurando. Por id y no por indice: al quitar una, el
+     indice del resto se corre y se abriria la de al lado. */
+  const [fuenteAbierta, setFuenteAbierta] = useState<string | null>(null);
   const [avanzado, setAvanzado] = useState(false);
   /* Se guarda tambien el valor, no solo el nombre: al elegir el sensor de un
      cuadro hay que poder ver lo que vale ahora mismo, que es lo unico que
@@ -536,6 +539,12 @@ export default function Ajustes() {
   const cambiarFuente = (i: number, f: Fuente) => {
     aplicar({ ...cfg, fuentes: cfg.fuentes.map((x, j) => (j === i ? f : x)) });
     hardware.arrancar(f).catch(() => undefined);
+  };
+
+  /** Añade una fuente y la abre: es lo que se va a hacer a continuacion. */
+  const agregarFuente = (f: Fuente) => {
+    aplicar({ ...cfg, fuentes: [...cfg.fuentes, f] });
+    setFuenteAbierta(f.id);
   };
 
   const cambiarServidor = (s: Partial<Servidor>) =>
@@ -707,19 +716,19 @@ export default function Ajustes() {
               titulo="De dónde se lee"
               accion={
                 <div className="flex flex-wrap gap-2">
-                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuenteCaudalimetro('ingreso')] })}>
+                  <Boton onClick={() => agregarFuente(nuevaFuenteCaudalimetro('ingreso'))}>
                     + Caudalímetro Ingreso (E2)
                   </Boton>
-                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuenteCaudalimetro('retorno')] })}>
+                  <Boton onClick={() => agregarFuente(nuevaFuenteCaudalimetro('retorno'))}>
                     + Caudalímetro Retorno (E3)
                   </Boton>
-                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('rs485')] })}>
+                  <Boton onClick={() => agregarFuente(nuevaFuente('rs485'))}>
                     + RS485
                   </Boton>
-                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('can1')] })}>
+                  <Boton onClick={() => agregarFuente(nuevaFuente('can1'))}>
                     + CAN
                   </Boton>
-                  <Boton onClick={() => aplicar({ ...cfg, fuentes: [...cfg.fuentes, nuevaFuente('red')] })}>
+                  <Boton onClick={() => agregarFuente(nuevaFuente('red'))}>
                     + Por red
                   </Boton>
                 </div>
@@ -817,8 +826,38 @@ export default function Ajustes() {
                    enseñaba un protocolo que no era el suyo. */
                 const familia = f.puerto === 'can1' || f.puerto === 'can2' ? 'can' : 'serie';
 
+                const senales = Object.values(f.config ?? {})
+                  .filter(Array.isArray)
+                  .reduce((n, l) => n + (l as unknown[]).length, 0);
+
                 return (
-                  <div key={f.id} className="flex flex-col gap-3.5 rounded-xl border border-line bg-sur2 p-4">
+                  <div key={f.id}>
+                    {/* La tarjeta: lo justo para reconocer la fuente de un vistazo. */}
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-sur2 px-4 py-3">
+                      <span
+                        className={
+                          "h-2 w-2 shrink-0 rounded-full " + (f.activa ? "bg-ok" : "bg-ink3/40")
+                        }
+                        title={f.activa ? "Se está leyendo" : "Apagada"}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14px] font-semibold text-ink">{f.nombre || "Sin nombre"}</div>
+                        <div className="truncate font-mono text-[11px] text-ink3">
+                          {PUERTOS.find((x) => x.id === f.puerto)?.nombre ?? f.puerto}
+                          {" · "}{proto?.nombre ?? f.protocoloId}
+                          {senales > 0 ? ` · ${senales} señal${senales === 1 ? "" : "es"}` : ""}
+                        </div>
+                      </div>
+                      <Boton onClick={() => setFuenteAbierta(f.id)}>Configurar</Boton>
+                    </div>
+
+                    {fuenteAbierta === f.id && (
+                    <Modal
+                      titulo={f.nombre || "Fuente"}
+                      subtitulo={(PUERTOS.find((x) => x.id === f.puerto)?.nombre ?? f.puerto) + " · " + (proto?.nombre ?? f.protocoloId)}
+                      alCerrar={() => setFuenteAbierta(null)}
+                    >
+                    <div className="flex flex-col gap-3.5">
                     <div className="grid grid-cols-2 gap-3">
                       <Campo etiqueta="Nombre">
                         <Entrada value={f.nombre} onChange={(e) => cambiarFuente(i, { ...f, nombre: e.target.value })} />
@@ -958,11 +997,15 @@ export default function Ajustes() {
                         onClick={() => {
                           hardware.quitar(f.id);
                           aplicar({ ...cfg, fuentes: cfg.fuentes.filter((_, j) => j !== i) });
+                          setFuenteAbierta(null);
                         }}
                       >
                         Quitar
                       </Boton>
                     </div>
+                    </div>
+                    </Modal>
+                    )}
                   </div>
                 );
               })}
@@ -1258,7 +1301,7 @@ export default function Ajustes() {
           )}
 
           {pestana === 'panel' && (
-            <Bloque titulo="Ver la pantalla sin hardware">
+            <Bloque titulo="Ver la pantalla sin hardware" plegable>
               <Nota>
                 Genera un camión de mentira que recorre una ruta y da caudales, nivel,
                 revoluciones y temperatura. Sirve para decidir cómo se ve el panel mientras
@@ -1288,7 +1331,7 @@ export default function Ajustes() {
           {/* ── Inercial ───────────────────────────────────────────────── */}
           {pestana === 'inercial' && (
             <>
-              <Bloque titulo="Movimiento e inclinación">
+              <Bloque titulo="Movimiento e inclinación" plegable abiertoAlInicio>
                 <Nota>
                   El equipo lleva dentro una unidad inercial. No hace falta cable ni que el
                   camión hable ningún protocolo: mide cómo está inclinado, cómo se conduce y
@@ -1499,7 +1542,7 @@ export default function Ajustes() {
                 )}
               </Bloque>
 
-              <Bloque titulo="Lo que mide la inercial">
+              <Bloque titulo="Lo que mide la inercial" plegable>
                 <Nota>
                   Las mismas opciones que cualquier otra señal: nombre, unidad, curva, y si se
                   guarda y si sale hacia fuera. Están aquí y no en Sensores porque no llegan por
@@ -1562,7 +1605,7 @@ export default function Ajustes() {
           {pestana === 'posicion' && (
             <>
 
-            <Bloque titulo="GPS y RTK">
+            <Bloque titulo="GPS y RTK" plegable abiertoAlInicio>
               <div className="grid grid-cols-2 gap-3">
                 <Campo etiqueta="Dispositivo del receptor">
                   <Entrada
@@ -1606,7 +1649,7 @@ export default function Ajustes() {
               </Aviso>
             </Bloque>
 
-            <Bloque titulo="Cuándo gira el mapa">
+            <Bloque titulo="Cuándo gira el mapa" plegable>
               <Nota>
                 Arriba es siempre hacia donde se va, y para eso el mapa gira con la marcha. Pero
                 el rumbo del receptor sale de comparar dos posiciones, así que{' '}
@@ -1680,7 +1723,7 @@ export default function Ajustes() {
               </Nota>
             </Bloque>
 
-            <Bloque titulo="Plano de la mina y geocercas">
+            <Bloque titulo="Plano de la mina y geocercas" plegable>
                 <Nota>
                   Un mapa de calles no dice nada dentro de una mina. Esto baja el plano de la
                   empresa y las geocercas, y los deja guardados en el equipo: se descargan
@@ -1732,7 +1775,7 @@ export default function Ajustes() {
 
           {/* ── Datos ──────────────────────────────────────────────────── */}
           {pestana === 'datos' && (
-            <Bloque titulo="Lo que se guarda en el equipo">
+            <Bloque titulo="Lo que se guarda en el equipo" plegable abiertoAlInicio>
               <Nota>
                 Las lecturas se guardan aquí, en el propio equipo, con la posición del momento.
                 Así queda histórico aunque no haya red — y un consumo sin saber dónde se produjo
@@ -1883,7 +1926,7 @@ export default function Ajustes() {
           {/* ── Servidor ───────────────────────────────────────────────── */}
           {pestana === 'servidor' && (
             <>
-            <Bloque titulo="Servidor">
+            <Bloque titulo="Servidor" plegable abiertoAlInicio>
               <Nota>
                 Para mandar lo leído y traer lo que haga falta. Si el equipo se queda sin red,
                 sigue leyendo y midiendo igual: esto no es imprescindible para trabajar.
@@ -1923,7 +1966,7 @@ export default function Ajustes() {
               </Aviso>
             </Bloque>
 
-              <Bloque titulo="Actualizar DiPlus App (App Principal ~9 MB)">
+              <Bloque titulo="Actualizar DiPlus App (App Principal ~9 MB)" plegable>
                 <Nota>
                   El equipo descarga el APK de DiPlus de la dirección configurada y abre el instalador de Android.
                   Al pesar solo ~9 MB, la actualización es rápida y no consume ancho de banda pesado.
@@ -2028,7 +2071,7 @@ export default function Ajustes() {
                 )}
               </Bloque>
 
-              <Bloque titulo="Instalar / Actualizar Tailscale VPN (~105 MB)">
+              <Bloque titulo="Instalar / Actualizar Tailscale VPN (~105 MB)" plegable>
                 <Nota>
                   Tailscale permite el acceso remoto y scrcpy vía VPN. Pesa ~105 MB y se gestiona de forma independiente
                   para evitar descargas pesadas innecesarias al actualizar la app.
@@ -2081,7 +2124,7 @@ export default function Ajustes() {
                   </Aviso>
                 )}
 
-              <Bloque titulo="Acceso remoto">
+              <Bloque titulo="Acceso remoto" plegable>
                 <Nota>
                   Abre una puerta en el equipo para poder mirarlo de lejos sin cable. No
                   depende del ADB, que muere en cada reinicio, así que sigue en pie después

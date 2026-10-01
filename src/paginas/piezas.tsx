@@ -1,14 +1,28 @@
 /** Piezas de interfaz que se repiten. Todo lo que aparece en más de una vista. */
-import { ReactNode } from 'react';
+import { useState, ReactNode } from 'react';
 
+/**
+ * Una seccion de la configuracion.
+ *
+ * Con `plegable` arranca cerrada y se abre al pulsar la cabecera. Es para los
+ * bloques largos: una pestaña con cuatro de ellos abiertos son cientos de lineas
+ * de scroll, y para cambiar una cosa hay que pasar por delante de todas las
+ * demas. Cerrados, la pestaña se lee de un vistazo y se abre lo que toca.
+ *
+ * `abiertoAlInicio` deja abierto el que es el asunto principal de su pestaña.
+ */
 export const Bloque = ({
-  titulo, accion, children, className = '',
+  titulo, accion, children, className = '', plegable = false, abiertoAlInicio = false,
 }: {
   titulo?: string;
   accion?: ReactNode;
   children: ReactNode;
   className?: string;
-}) => (
+  plegable?: boolean;
+  abiertoAlInicio?: boolean;
+}) => {
+  const [abierto, setAbierto] = useState(!plegable || abiertoAlInicio);
+  return (
   /* `shrink-0` no es adorno: dentro de una columna flexible con scroll, los
      hijos se **comprimen** para caber en vez de desbordar, y como la seccion
      recorta lo que sobra, el contenido desaparecia. En Configuracion se veian
@@ -20,14 +34,28 @@ export const Bloque = ({
     }
   >
     {(titulo || accion) && (
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <span className="rotulo">{titulo}</span>
-        {accion}
+      <header
+        className={
+          'flex items-center justify-between gap-3 border-b border-line px-4 py-3'
+          + (plegable ? ' cursor-pointer select-none' : '')
+          + (plegable && !abierto ? ' border-b-transparent' : '')
+        }
+        onClick={plegable ? () => setAbierto(!abierto) : undefined}
+      >
+        <span className="rotulo flex items-center gap-2">
+          {plegable && (
+            <span className={'text-ink3 transition-transform ' + (abierto ? 'rotate-90' : '')}>›</span>
+          )}
+          {titulo}
+        </span>
+        {/* La accion no debe plegar: suele ser un boton de añadir. */}
+        {accion && <span onClick={(e) => e.stopPropagation()}>{accion}</span>}
       </header>
     )}
-    <div className="flex flex-col gap-4 p-4">{children}</div>
+    {abierto && <div className="flex flex-col gap-4 p-4">{children}</div>}
   </section>
-);
+  );
+};
 
 export const Campo = ({
   etiqueta, ayuda, children,
