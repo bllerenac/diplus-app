@@ -16,10 +16,47 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    /*
+     * Firma del release.
+     *
+     * Android rechaza una actualizacion firmada con otra llave: habria que
+     * desinstalar en cada tablet, y con la app se va el historico local. Por eso
+     * el release se firma con la **misma llave de depuracion** mientras no haya
+     * una propia, y asi se instala encima de lo que ya hay.
+     *
+     * Para usar una llave propia, poner en android/gradle.properties:
+     *
+     *   DIPLUS_STORE_FILE=/ruta/diplus.jks
+     *   DIPLUS_STORE_PASSWORD=...
+     *   DIPLUS_KEY_ALIAS=diplus
+     *   DIPLUS_KEY_PASSWORD=...
+     *
+     * Ojo: cambiar de llave obliga a desinstalar y reinstalar en toda la flota.
+     * Es una decision de operacion, no de compilacion.
+     */
+    signingConfigs {
+        release {
+            if (project.hasProperty('DIPLUS_STORE_FILE')) {
+                storeFile file(DIPLUS_STORE_FILE)
+                storePassword DIPLUS_STORE_PASSWORD
+                keyAlias DIPLUS_KEY_ALIAS
+                keyPassword DIPLUS_KEY_PASSWORD
+            } else {
+                storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+
     buildTypes {
         release {
+            /* Sin ofuscar a proposito: Capacitor y los plugins buscan clases por
+               reflexion y ProGuard se las lleva. */
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }
