@@ -278,9 +278,11 @@ public class ActualizadorPlugin extends Plugin {
         if (!puedeInstalar()) {
             call.reject("Android no deja instalar desde esta aplicación todavía. "
                     + "En la pantalla que sale ahora hay que darle permiso, y volver a intentarlo.");
+            pasoAlInstalador(true);
             abrirPermiso();
             return;
         }
+        pasoAlInstalador(true);
 
         PackageManager pm = getContext().getPackageManager();
         PackageInfo info = pm.getPackageArchiveInfo(f.getAbsolutePath(), 0);
@@ -362,12 +364,16 @@ public class ActualizadorPlugin extends Plugin {
         receptorResultado = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ctx, Intent intent) {
-                try { ctx.unregisterReceiver(this); } catch (Exception ignored) {}
-                receptorResultado = null;
-
                 int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS,
                         PackageInstaller.STATUS_FAILURE);
                 String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+
+                /* Tras pedir confirmacion llega otro aviso con el resultado:
+                   el receptor se queda hasta entonces. */
+                if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    try { ctx.unregisterReceiver(this); } catch (Exception ignored) {}
+                    receptorResultado = null;
+                }
 
                 if (status == PackageInstaller.STATUS_SUCCESS) {
                     Log.i(TAG, "instalacion completada");
@@ -382,10 +388,12 @@ public class ActualizadorPlugin extends Plugin {
                         /* El call se resolverá cuando el usuario acepte y llegue
                            STATUS_SUCCESS, o rechace y llegue STATUS_FAILURE. */
                     }
+                    return;
                 } else {
                     String error = "Instalación rechazada (código " + status + ")"
                             + (msg != null ? ": " + msg : "");
                     Log.w(TAG, error);
+                    pasoAlInstalador(false);
                     if (callInstalar != null) callInstalar.reject(error);
                 }
                 callInstalar = null;
@@ -400,6 +408,16 @@ public class ActualizadorPlugin extends Plugin {
         }
     }
 
+    /** Suelta o vuelve a fijar el kiosco para que se vea el dialogo del sistema. */
+    private void pasoAlInstalador(boolean abrir) {
+        if (!(getActivity() instanceof MainActivity)) return;
+        MainActivity m = (MainActivity) getActivity();
+        m.runOnUiThread(() -> {
+            if (abrir) m.abrirPasoAlInstalador();
+            else m.cerrarPasoAlInstalador();
+        });
+    }
+
     /* ── Fallback: instalador clasico ─────────────────────────────────────── */
 
     private void instalarViaIntent(File f, PluginCall call) {
@@ -412,6 +430,7 @@ public class ActualizadorPlugin extends Plugin {
             getContext().startActivity(i);
             call.resolve();
         } catch (Exception e) {
+            pasoAlInstalador(false);
             call.reject("No se pudo abrir el instalador: " + e.getMessage());
         }
     }

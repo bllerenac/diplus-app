@@ -27,9 +27,11 @@ public class ArranqueReceptor extends BroadcastReceiver {
 
         /* Se atienden los dos: el arranque normal y el de los equipos que
            cifran el almacenamiento, que emiten el suyo antes de desbloquear. */
+        /* MY_PACKAGE_REPLACED: tras actualizarse, Android deja la app cerrada. */
         if (!Intent.ACTION_BOOT_COMPLETED.equals(accion)
                 && !"android.intent.action.QUICKBOOT_POWERON".equals(accion)
-                && !"android.intent.action.LOCKED_BOOT_COMPLETED".equals(accion)) {
+                && !"android.intent.action.LOCKED_BOOT_COMPLETED".equals(accion)
+                && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(accion)) {
             return;
         }
 

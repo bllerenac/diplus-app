@@ -63,7 +63,39 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         activarInmersivo();
-        if (kioscoActivo) fijarPantalla();
+        /* Se volvio del instalador sin actualizar (cancelado): se cierra el paso. */
+        if (instalando && System.currentTimeMillis() - desdeInstalador > 2000) cerrarPasoAlInstalador();
+        if (kioscoActivo && !instalando) fijarPantalla();
+    }
+
+    /* ── Paso al instalador ───────────────────────────────────────────────────
+     *
+     * Con la tarea fijada Android no deja abrir pantallas de otras apps, y el
+     * dialogo de instalar es del sistema: no saldria. Ademas, al perder el foco
+     * el kiosco trae la app al frente y lo taparia. Mientras se instala se
+     * suelta la pantalla; se vuelve a fijar al cancelar, al fallar o a los 5 min.
+     */
+    static volatile boolean instalando = false;
+    private static long desdeInstalador = 0;
+    private final Runnable vencerInstalador = this::cerrarPasoAlInstalador;
+
+    void abrirPasoAlInstalador() {
+        instalando = true;
+        desdeInstalador = System.currentTimeMillis();
+        soltarPantalla();
+        View v = getWindow().getDecorView();
+        v.removeCallbacks(vencerInstalador);
+        v.postDelayed(vencerInstalador, 5 * 60 * 1000);
+    }
+
+    void cerrarPasoAlInstalador() {
+        if (!instalando) return;
+        instalando = false;
+        getWindow().getDecorView().removeCallbacks(vencerInstalador);
+        if (kioscoActivo) {
+            fijarPantalla();
+            volverAlFrente();
+        }
     }
 
     /**
@@ -228,7 +260,9 @@ public class MainActivity extends BridgeActivity {
             activarInmersivo();
         } else if (kioscoActivo) {
             // Alguien intentó salir → volvemos al frente en cuanto podamos
-            getWindow().getDecorView().postDelayed(this::volverAlFrente, 300);
+            getWindow().getDecorView().postDelayed(() -> {
+                if (!instalando) volverAlFrente();
+            }, 300);
         }
     }
 
@@ -236,7 +270,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (kioscoActivo) {
+        if (kioscoActivo && !instalando) {
             volverAlFrente();
         }
     }

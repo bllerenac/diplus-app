@@ -29,7 +29,7 @@ import { planoGuardado } from '../nucleo/plano';
 import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
 import { horometro } from '../nucleo/horometro';
-import { revisarSola, revisarTailscale } from '../nucleo/actualizacion';
+import { revisarSola } from '../nucleo/actualizacion';
 import { segundoPlano } from '../nucleo/reloj';
 
 /* three.js y el modelo solo se bajan si se enciende el modo demo. */
