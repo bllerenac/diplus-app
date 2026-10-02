@@ -39,6 +39,9 @@ export interface Dato { mac: string; servicio: string; caracteristica: string; h
 
 interface Ruta { servicio: string; caracteristica: string }
 
+/** Clásico se habla por serie (SPP); LE, por GATT; dual, por los dos. */
+export interface Emparejado { mac: string; nombre: string | null; tipo: 'clasico' | 'le' | 'dual' | 'desconocido' }
+
 interface PluginBluetooth {
   estado(): Promise<EstadoBt>;
   pedirPermisos(): Promise<EstadoBt>;
@@ -52,6 +55,13 @@ interface PluginBluetooth {
   escribir(o: Ruta & { hex: string; sinRespuesta?: boolean }): Promise<void>;
   escuchar(o: Ruta): Promise<void>;
   dejarDeEscuchar(o: Ruta): Promise<void>;
+  emparejados(): Promise<{ equipos: Emparejado[] }>;
+  emparejar(o: { mac: string; pin?: string }): Promise<{ mac: string; estado: string }>;
+  olvidar(o: { mac: string }): Promise<void>;
+  conectarSerie(o: { mac: string }): Promise<void>;
+  escribirSerie(o: { hex: string }): Promise<void>;
+  desconectarSerie(): Promise<void>;
+  addListener(e: 'emparejamiento', fn: (x: { mac: string; estado: string }) => void): Promise<{ remove: () => void }>;
   addListener(e: 'dispositivo', fn: (a: Anuncio) => void): Promise<{ remove: () => void }>;
   addListener(e: 'datos', fn: (d: Dato) => void): Promise<{ remove: () => void }>;
   addListener(e: 'conexion', fn: (c: { mac: string; estado: string; codigo: number }) => void): Promise<{ remove: () => void }>;
@@ -83,6 +93,15 @@ export const bluetooth = {
   escribir: (r: Ruta, hex: string, sinRespuesta = false) => Nativo.escribir({ ...r, hex, sinRespuesta }),
   escuchar: (r: Ruta) => Nativo.escuchar(r),
   dejarDeEscuchar: (r: Ruta) => Nativo.dejarDeEscuchar(r),
+
+  emparejados: () => Nativo.emparejados().then((r) => r.equipos),
+  /** Con `pin` se pone solo y no sale el diálogo del sistema (que el kiosco puede tapar). */
+  emparejar: (mac: string, pin?: string) => Nativo.emparejar({ mac, pin }),
+  olvidar: (mac: string) => Nativo.olvidar({ mac }),
+  conectarSerie: (mac: string) => Nativo.conectarSerie({ mac }),
+  escribirSerie: (hex: string) => Nativo.escribirSerie({ hex }),
+  desconectarSerie: () => Nativo.desconectarSerie(),
+  alEmparejar: (fn: (x: { mac: string; estado: string }) => void) => oir('emparejamiento', fn),
 
   alAnuncio: (fn: (a: Anuncio) => void) => oir('dispositivo', fn),
   alDato: (fn: (d: Dato) => void) => oir('datos', fn),

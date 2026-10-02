@@ -11,6 +11,10 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothSocket;
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
@@ -36,6 +40,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -88,6 +94,218 @@ public class BluetoothPlugin extends Plugin {
     public void load() {
         BluetoothManager bm = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
         adaptador = bm != null ? bm.getAdapter() : null;
+
+        IntentFilter f = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+        f.addAction(BluetoothDevice.ACTION_PAIRING_REQUEST);
+        /* Por delante del dialogo del sistema, para poner el PIN sin que salga. */
+        f.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY - 1);
+        getContext().registerReceiver(alEmparejar, f);
+    }
+
+    /* ── Emparejamiento ────────────────────────────────────────────────────── */
+
+    private PluginCall llamadaEmparejar;
+    private String macEmparejando;
+    private String pin;
+
+    private static String tipo(BluetoothDevice d) {
+        switch (d.getType()) {
+            case BluetoothDevice.DEVICE_TYPE_CLASSIC: return "clasico";
+            case BluetoothDevice.DEVICE_TYPE_LE: return "le";
+            case BluetoothDevice.DEVICE_TYPE_DUAL: return "dual";
+            default: return "desconocido";
+        }
+    }
+
+    private final BroadcastReceiver alEmparejar = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            BluetoothDevice d = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            if (d == null) return;
+
+            if (BluetoothDevice.ACTION_PAIRING_REQUEST.equals(i.getAction())) {
+                if (pin != null && d.getAddress().equalsIgnoreCase(macEmparejando)) {
+                    try {
+                        d.setPin(pin.getBytes());
+                        abortBroadcast();
+                    } catch (Exception e) {
+                        Log.w(TAG, "setPin: " + e.getMessage());
+                    }
+                }
+                return;
+            }
+
+            int estado = i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE);
+            JSObject o = new JSObject();
+            o.put("mac", d.getAddress());
+            o.put("estado", estado == BluetoothDevice.BOND_BONDED ? "emparejado"
+                    : estado == BluetoothDevice.BOND_BONDING ? "emparejando" : "no");
+            notifyListeners("emparejamiento", o);
+
+            if (llamadaEmparejar == null || !d.getAddress().equalsIgnoreCase(macEmparejando)) return;
+            if (estado == BluetoothDevice.BOND_BONDING) return;
+            PluginCall pc = llamadaEmparejar;
+            llamadaEmparejar = null;
+            pin = null;
+            pc.setKeepAlive(false);
+            if (estado == BluetoothDevice.BOND_BONDED) pc.resolve(o);
+            else pc.reject("No se emparejó. ¿PIN equivocado o se canceló?");
+        }
+    };
+
+    @PluginMethod
+    public void emparejados(PluginCall call) {
+        JSArray lista = new JSArray();
+        if (adaptador != null && conPermiso()) {
+            for (BluetoothDevice d : adaptador.getBondedDevices()) {
+                JSObject o = new JSObject();
+                o.put("mac", d.getAddress());
+                o.put("nombre", d.getName());
+                o.put("tipo", tipo(d));
+                lista.put(o);
+            }
+        }
+        JSObject r = new JSObject();
+        r.put("equipos", lista);
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void emparejar(PluginCall call) {
+        String mac = call.getString("mac", "");
+        if (adaptador == null || !adaptador.isEnabled()) {
+            call.reject("El Bluetooth está apagado.");
+            return;
+        }
+        if (!BluetoothAdapter.checkBluetoothAddress(mac)) {
+            call.reject("Esa MAC no es válida: " + mac);
+            return;
+        }
+        BluetoothDevice d = adaptador.getRemoteDevice(mac);
+        if (d.getBondState() == BluetoothDevice.BOND_BONDED) {
+            JSObject o = new JSObject();
+            o.put("mac", mac);
+            o.put("estado", "emparejado");
+            call.resolve(o);
+            return;
+        }
+        detenerEscaneo();
+        String p = call.getString("pin", "");
+        pin = p == null || p.isEmpty() ? null : p;
+        macEmparejando = mac;
+        call.setKeepAlive(true);
+        llamadaEmparejar = call;
+        if (!d.createBond()) {
+            llamadaEmparejar = null;
+            call.setKeepAlive(false);
+            call.reject("Android no dejó empezar el emparejamiento.");
+        }
+    }
+
+    @PluginMethod
+    public void olvidar(PluginCall call) {
+        try {
+            BluetoothDevice d = adaptador.getRemoteDevice(call.getString("mac", ""));
+            d.getClass().getMethod("removeBond").invoke(d);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("No se pudo olvidar: " + e.getMessage());
+        }
+    }
+
+    /* ── Serie (SPP), para equipos de Bluetooth clasico ────────────────────── */
+
+    private static final UUID SPP = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
+    private BluetoothSocket enchufe;
+    private OutputStream salida;
+
+    @PluginMethod
+    public void conectarSerie(PluginCall call) {
+        String mac = call.getString("mac", "");
+        if (adaptador == null || !adaptador.isEnabled()) {
+            call.reject("El Bluetooth está apagado.");
+            return;
+        }
+        cerrarSerie();
+        detenerEscaneo();
+        BluetoothDevice d = adaptador.getRemoteDevice(mac);
+        new Thread(() -> {
+            BluetoothSocket s;
+            try {
+                s = d.createRfcommSocketToServiceRecord(SPP);
+                s.connect();
+            } catch (Exception e) {
+                call.reject("No conectó por serie: " + e.getMessage());
+                return;
+            }
+            enchufe = s;
+            try {
+                salida = s.getOutputStream();
+            } catch (Exception e) { /* se vera al escribir */ }
+            call.resolve();
+            leerSerie(s, mac);
+        }).start();
+    }
+
+    private void leerSerie(BluetoothSocket s, String mac) {
+        byte[] buf = new byte[1024];
+        try (InputStream in = s.getInputStream()) {
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                byte[] trozo = new byte[n];
+                System.arraycopy(buf, 0, trozo, 0, n);
+                JSObject o = new JSObject();
+                o.put("mac", mac);
+                o.put("servicio", "spp");
+                o.put("caracteristica", "spp");
+                o.put("hex", hex(trozo));
+                o.put("at", System.currentTimeMillis());
+                notifyListeners("datos", o);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "serie: " + e.getMessage());
+        }
+        if (enchufe == s) {
+            enchufe = null;
+            JSObject e = new JSObject();
+            e.put("mac", mac);
+            e.put("estado", "desconectado");
+            e.put("codigo", 0);
+            notifyListeners("conexion", e);
+        }
+    }
+
+    @PluginMethod
+    public void escribirSerie(PluginCall call) {
+        OutputStream o = salida;
+        if (enchufe == null || o == null) {
+            call.reject("No hay conexión serie.");
+            return;
+        }
+        try {
+            o.write(deHex(call.getString("hex", "")));
+            o.flush();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("No se pudo escribir: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void desconectarSerie(PluginCall call) {
+        cerrarSerie();
+        call.resolve();
+    }
+
+    private void cerrarSerie() {
+        BluetoothSocket s = enchufe;
+        enchufe = null;
+        salida = null;
+        if (s != null) {
+            try {
+                s.close();
+            } catch (Exception e) { /* ya cerrado */ }
+        }
     }
 
     private String aliasNecesario() {
@@ -569,6 +787,10 @@ public class BluetoothPlugin extends Plugin {
     protected void handleOnDestroy() {
         detenerEscaneo();
         cerrarGatt();
+        cerrarSerie();
+        try {
+            getContext().unregisterReceiver(alEmparejar);
+        } catch (Exception e) { /* no estaba */ }
     }
 
     /* ── Utilidades ────────────────────────────────────────────────────────── */

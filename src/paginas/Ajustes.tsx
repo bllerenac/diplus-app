@@ -16,7 +16,9 @@ import {
   IonBackButton, IonButtons, IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
 } from '@ionic/react';
 
-import { Config, Servidor, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro } from '../nucleo/config';
+import {
+  Config, Servidor, URL_RUSTDESK_GITHUB, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro,
+} from '../nucleo/config';
 import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, RegistroModbus, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
 import { TIPOS_LECTURA, TipoLectura } from '../nucleo/lecturas';
@@ -646,12 +648,17 @@ export default function Ajustes() {
       return;
     }
     const url = cfg.actualizacion.urlRustdesk.trim();
-    const nombre = url.split('/').pop()?.split('?')[0] || 'rustdesk.apk';
     setRustdesk({ bajando: true, bytes: 0, total: 0, eco: null, ok: false });
+    const bajar = (u: string) => actualizador.guardarEnDescargas(
+      u, u.split('/').pop()?.split('?')[0] || 'rustdesk.apk',
+      (bytes, total) => setRustdesk((r) => ({ ...r, bytes, total })),
+    );
     try {
-      const g = await actualizador.guardarEnDescargas(url, nombre, (bytes, total) =>
-        setRustdesk((r) => ({ ...r, bytes, total })),
-      );
+      /* Si el servidor todavía no lo tiene, de la publicación de GitHub. */
+      const g = await bajar(url).catch((e) => {
+        if (url === URL_RUSTDESK_GITHUB) throw e;
+        return bajar(URL_RUSTDESK_GITHUB);
+      });
       setRustdesk({
         bajando: false, bytes: 0, total: 0, ok: true,
         eco: `Guardado en ${g.ruta} (${(g.bytes / 1048576).toFixed(1)} MB, versión ${g.versionName}).`,
