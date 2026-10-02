@@ -611,33 +611,6 @@ export default function Ajustes() {
   const [avanceTotalTailscale, setAvanceTotalTailscale] = useState(0);
   const [ecoTailscale, setEcoTailscale] = useState<string | null>(null);
 
-  const instalarTailscaleManual = async () => {
-    if (!hayActualizador()) {
-      setEcoTailscale('Instalar Tailscale solo funciona en la tablet.');
-      return;
-    }
-    if (!cfg.actualizacion.urlTailscale.trim()) {
-      setEcoTailscale('Falta la URL del APK de Tailscale.');
-      return;
-    }
-    setBajandoTailscale(true);
-    setEcoTailscale(null);
-    setAvanceTailscale(0);
-    setAvanceTotalTailscale(0);
-    try {
-      const d = await actualizador.descargarCualquier(cfg.actualizacion.urlTailscale, (bytes, total) => {
-        setAvanceTailscale(bytes);
-        setAvanceTotalTailscale(total);
-      });
-      await actualizador.instalar(d.ruta);
-      setEcoTailscale('APK descargado. Abriendo instalador de Android...');
-    } catch (e) {
-      setEcoTailscale(String((e as Error).message ?? e));
-    } finally {
-      setBajandoTailscale(false);
-    }
-  };
-
   /** Lo deja en Download para instalarlo a mano, como RustDesk. */
   const guardarTailscale = async () => {
     if (!hayActualizador()) {
@@ -2154,10 +2127,10 @@ export default function Ajustes() {
                 )}
               </Bloque>
 
-              <Bloque titulo="Instalar / Actualizar Tailscale VPN (~105 MB)" plegable>
+              <Bloque titulo="Descargar Tailscale VPN (~105 MB)" plegable>
                 <Nota>
-                  Tailscale permite el acceso remoto y scrcpy vía VPN. Pesa ~105 MB y se gestiona de forma independiente
-                  para evitar descargas pesadas innecesarias al actualizar la app.
+                  Tailscale permite el acceso remoto y scrcpy vía VPN. Se deja en la carpeta Download
+                  de la tablet, sin instalarlo; después se instala a mano desde el explorador de archivos.
                 </Nota>
 
                 <Campo
@@ -2180,15 +2153,9 @@ export default function Ajustes() {
                   <Boton
                     variante="fuerte"
                     disabled={bajandoTailscale || !cfg.actualizacion.urlTailscale.trim()}
-                    onClick={instalarTailscaleManual}
-                  >
-                    {bajandoTailscale ? 'Bajando Tailscale…' : '🔒 Descargar e Instalar Tailscale'}
-                  </Boton>
-                  <Boton
-                    disabled={bajandoTailscale || !cfg.actualizacion.urlTailscale.trim()}
                     onClick={guardarTailscale}
                   >
-                    Solo dejarlo en Download
+                    {bajandoTailscale ? 'Bajando Tailscale…' : 'Descargar a la carpeta Download'}
                   </Boton>
                 </div>
 
@@ -2200,7 +2167,7 @@ export default function Ajustes() {
                 )}
 
                 {ecoTailscale && (
-                  <Aviso tono={/^(APK descargado|Guardado)/.test(ecoTailscale) ? 'ok' : 'warn'}>
+                  <Aviso tono={ecoTailscale.startsWith('Guardado') ? 'ok' : 'warn'}>
                     {ecoTailscale}
                   </Aviso>
                 )}
