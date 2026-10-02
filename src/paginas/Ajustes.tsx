@@ -638,6 +638,29 @@ export default function Ajustes() {
     }
   };
 
+  /** Lo deja en Download para instalarlo a mano, como RustDesk. */
+  const guardarTailscale = async () => {
+    if (!hayActualizador()) {
+      setEcoTailscale('Descargar Tailscale solo funciona en la tablet.');
+      return;
+    }
+    setBajandoTailscale(true);
+    setEcoTailscale(null);
+    setAvanceTailscale(0);
+    setAvanceTotalTailscale(0);
+    try {
+      const g = await actualizador.guardarEnDescargas(cfg.actualizacion.urlTailscale, 'tailscale.apk', (bytes, total) => {
+        setAvanceTailscale(bytes);
+        setAvanceTotalTailscale(total);
+      });
+      setEcoTailscale(`Guardado en ${g.ruta} (${(g.bytes / 1048576).toFixed(1)} MB, versión ${g.versionName}).`);
+    } catch (e) {
+      setEcoTailscale(String((e as Error).message ?? e));
+    } finally {
+      setBajandoTailscale(false);
+    }
+  };
+
   const [rustdesk, setRustdesk] = useState<{ bajando: boolean; bytes: number; total: number; eco: string | null; ok: boolean }>(
     { bajando: false, bytes: 0, total: 0, eco: null, ok: false },
   );
@@ -2161,6 +2184,12 @@ export default function Ajustes() {
                   >
                     {bajandoTailscale ? 'Bajando Tailscale…' : '🔒 Descargar e Instalar Tailscale'}
                   </Boton>
+                  <Boton
+                    disabled={bajandoTailscale || !cfg.actualizacion.urlTailscale.trim()}
+                    onClick={guardarTailscale}
+                  >
+                    Solo dejarlo en Download
+                  </Boton>
                 </div>
 
                 {bajandoTailscale && avanceTailscale > 0 && (
@@ -2171,7 +2200,7 @@ export default function Ajustes() {
                 )}
 
                 {ecoTailscale && (
-                  <Aviso tono={ecoTailscale.includes('Abriendo') ? 'ok' : 'warn'}>
+                  <Aviso tono={/^(APK descargado|Guardado)/.test(ecoTailscale) ? 'ok' : 'warn'}>
                     {ecoTailscale}
                   </Aviso>
                 )}
