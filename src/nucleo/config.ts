@@ -86,6 +86,8 @@ export interface Config {
   maqueta: boolean;
   /** Cambia el mapa por la pala en 3D. No sobrevive a un reinicio. */
   demoPala: boolean;
+  /** Servicio en primer plano: sigue leyendo y enviando con la pantalla apagada. */
+  segundoPlano: boolean;
   /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
   recomendaciones: Record<string, Recomendacion>;
   /** Lo que se aplica donde no haya nada puesto. */
@@ -122,6 +124,7 @@ const POR_DEFECTO: Config = {
   senales: {},
   maqueta: false,
   demoPala: false,
+  segundoPlano: true,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
 };

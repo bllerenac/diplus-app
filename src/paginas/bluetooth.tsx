@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Anuncio, Caracteristica, Dato, EstadoBt, Servicio, ascii, bluetooth, hayBluetooth,
+  Anuncio, Caracteristica, Dato, EstadoBt, Servicio, ascii, bluetooth, esMac, hayBluetooth,
   leerIBeacon, nombreFabricante, nombreUuid, uuidCorto,
 } from '../nucleo/bluetooth';
 import { Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Modal, Nota, Selector, Vacio } from './piezas';
@@ -98,7 +98,7 @@ export function Bluetooth() {
     intentar(async () => {
       pendientes.current.clear();
       setVistos([]);
-      await bluetooth.escanear(duracion);
+      await bluetooth.escanear(duracion, 200, esMac(filtro) ? [filtro.trim()] : undefined);
     });
 
   const conectar = async (mac: string) => {
@@ -166,6 +166,7 @@ export function Bluetooth() {
         <Nota>
           Lista lo que anuncia cada equipo cercano. Los beacons con acelerómetro suelen mandar sus
           lecturas aquí, en los datos de fabricante o de servicio, sin necesidad de conectarse.
+          Con una MAC completa en el filtro, la búsqueda sigue con la pantalla apagada.
         </Nota>
         <div className="grid grid-cols-[1fr_180px] gap-3">
           <Campo etiqueta="Filtrar por nombre o MAC">

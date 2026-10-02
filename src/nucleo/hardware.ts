@@ -12,6 +12,7 @@ import { Senal, pgnDe, saDe } from './lecturas';
 import { Contexto, protocolo } from './protocolos';
 import { Troceador, aHex, deHex, troceador } from './tramas';
 import { AjustesPorSenal, ajustar, ajustesDe } from './senales';
+import { Reloj, cada, soltar } from './reloj';
 
 /**
  * Un puerto serie del equipo, con el papel que cumple.
@@ -148,7 +149,7 @@ class Hardware {
   private fuentes = new Map<string, Fuente>();
   private troceadores = new Map<string, Troceador>();
   /** Un reloj por fuente que interroga a los aparatos que no hablan solos. */
-  private preguntones = new Map<string, any>();
+  private preguntones = new Map<string, Reloj>();
   /** Lo decidido de cada señal: alias, unidad, factor, curva, si se guarda. */
   private ajustes: AjustesPorSenal = {};
   private oyentesTrama = new Set<OyenteTramas>();
@@ -158,7 +159,7 @@ class Hardware {
   private valores = new Map<string, Senal>();
   private contador = 0;
   private enganchado = false;
-  private temporizador: any = null;
+  private temporizador: Reloj | null = null;
 
   /** Se engancha una sola vez, aunque se arranquen varias fuentes. */
   private async enganchar() {
@@ -175,7 +176,7 @@ class Hardware {
 
     /* El troceo por silencio necesita que alguien mire el reloj: si el aparato
        calla justo despues de la ultima trama, sin esto se quedaria sin cerrar. */
-    this.temporizador = setInterval(() => {
+    this.temporizador = cada(() => {
       for (const [id, tr] of this.troceadores) {
         for (const trozo of tr.vencidos()) this.procesar(id, trozo, {});
       }
@@ -291,10 +292,10 @@ class Hardware {
     const p = protocolo(f.protocoloId);
     if (!p.pregunta) return;
 
-    const cada = Number(f.config?.preguntar_cada_ms ?? 0);
-    if (!Number.isFinite(cada) || cada <= 0) return;
+    const cadaMs = Number(f.config?.preguntar_cada_ms ?? 0);
+    if (!Number.isFinite(cadaMs) || cadaMs <= 0) return;
 
-    const soltar = () => {
+    const preguntar = () => {
       const trama = p.pregunta?.(f.config ?? {});
       if (!trama?.length) return;
       /* Si el puerto no traga, se calla y se reintenta a la vuelta siguiente:
@@ -303,13 +304,13 @@ class Hardware {
         .catch(() => undefined);
     };
 
-    soltar();
-    this.preguntones.set(f.id, setInterval(soltar, Math.max(100, cada)));
+    preguntar();
+    this.preguntones.set(f.id, cada(preguntar, Math.max(100, cadaMs)));
   }
 
   private dejarDePreguntar(id: string) {
     const t = this.preguntones.get(id);
-    if (t) clearInterval(t);
+    if (t) soltar(t);
     this.preguntones.delete(id);
   }
 
@@ -459,7 +460,7 @@ class Hardware {
   }
 
   parar() {
-    if (this.temporizador) clearInterval(this.temporizador);
+    if (this.temporizador) soltar(this.temporizador);
     this.temporizador = null;
   }
 }

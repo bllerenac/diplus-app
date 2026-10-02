@@ -10,6 +10,7 @@
  */
 import { hardware } from './hardware';
 import { senal } from './lecturas';
+import { Reloj, cada, soltar } from './reloj';
 
 const CLAVE_STORAGE = 'diplus.horometro';
 
@@ -39,7 +40,7 @@ export const HOROMETRO_POR_DEFECTO: AjustesHorometro = {
 
 class Horometro {
   private cfg: AjustesHorometro = { ...HOROMETRO_POR_DEFECTO };
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: Reloj | null = null;
   private ultimoTick = Date.now();
   private oyentes = new Set<(e: HorometroEstado) => void>();
   private ciclosParaGuardar = 0;
@@ -74,10 +75,10 @@ class Horometro {
   }
 
   private iniciarReloj() {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) soltar(this.timer);
     this.ultimoTick = Date.now();
 
-    this.timer = setInterval(() => {
+    this.timer = cada(() => {
       const ahora = Date.now();
       // Delta en segundos (con tope de seguridad de 10s para evitar saltos si el SO pausó el proceso)
       const delta = Math.min(10, Math.max(0, (ahora - this.ultimoTick) / 1000));

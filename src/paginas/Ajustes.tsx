@@ -2281,6 +2281,18 @@ export default function Ajustes() {
 
           {pestana === 'kiosco' && (
             <>
+              <Bloque titulo="Pantalla apagada">
+                <Nota>
+                  Con esto la tablet sigue leyendo sensores, guardando y enviando aunque se apague
+                  la pantalla. Deja una notificación fija de DiPlus mientras está puesto.
+                </Nota>
+                <Interruptor
+                  activo={cfg.segundoPlano}
+                  alCambiar={(v) => aplicar({ ...cfg, segundoPlano: v })}
+                  etiqueta="Seguir trabajando con la pantalla apagada"
+                />
+              </Bloque>
+
               <Bloque titulo="Control de acceso">
                 <Nota>
                   La tablet está en modo kiosco: los botones del sistema (atrás, inicio, recientes)

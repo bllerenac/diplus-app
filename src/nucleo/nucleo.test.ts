@@ -6,7 +6,7 @@
  * es justo lo que fallaba antes en campo: que una trama partida en dos lecturas
  * se recomponga y que una configuracion distinta de la de fabrica se reconozca.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { comoVoy, dentroDelPoligono, geocercaDe, recomendacionDe } from './geo';
 import { Geocerca } from './servidor';
 import { arreglarDireccion, esMasNueva, reparo } from './actualizacion';
@@ -20,6 +20,7 @@ import { calcularValoresMqtt, cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio'
 import { hardware } from './hardware';
 import { estadosPala } from './pala';
 import { ascii, leerIBeacon, uuidCorto } from './bluetooth';
+import { alLatir, cada, soltar } from './reloj';
 import { senal } from './lecturas';
 import { horometro } from './horometro';
 
@@ -914,5 +915,31 @@ describe('bluetooth', () => {
 
   it('enseña el texto que venga dentro', () => {
     expect(ascii('48690a')).toBe('Hi·');
+  });
+});
+
+describe('reloj que no se duerme', () => {
+  it('el latido pone al dia lo que el temporizador atraso', () => {
+    vi.useFakeTimers();
+    let vueltas = 0;
+    const r = cada(() => vueltas++, 2000);
+    /* Con la pantalla apagada el temporizador no corre: solo llega el latido. */
+    vi.setSystemTime(Date.now() + 2100);
+    alLatir();
+    expect(vueltas).toBe(1);
+    alLatir();
+    expect(vueltas).toBe(1);
+    soltar(r);
+    vi.useRealTimers();
+  });
+
+  it('el temporizador sigue andando solo con la pantalla encendida', () => {
+    vi.useFakeTimers();
+    let vueltas = 0;
+    const r = cada(() => vueltas++, 1000);
+    vi.advanceTimersByTime(3000);
+    expect(vueltas).toBe(3);
+    soltar(r);
+    vi.useRealTimers();
   });
 });

@@ -12,6 +12,7 @@
 import { podar, guardarLecturas } from './base';
 import { gps } from './gps';
 import { hardware } from './hardware';
+import { Reloj, cada, soltar } from './reloj';
 
 export interface AjustesRegistro {
   activo: boolean;
@@ -22,8 +23,8 @@ export interface AjustesRegistro {
 }
 
 class Registro {
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private podador: ReturnType<typeof setInterval> | null = null;
+  private timer: Reloj | null = null;
+  private podador: Reloj | null = null;
   private ajustes: AjustesRegistro = {
     activo: false,
     cadaMs: 5000,
@@ -38,10 +39,10 @@ class Registro {
     this.parar();
     if (!a.activo) return;
 
-    this.timer = setInterval(() => this.tomarMuestra(), Math.max(500, a.cadaMs));
+    this.timer = cada(() => this.tomarMuestra(), Math.max(500, a.cadaMs));
     /* La poda cada media hora: con hacerlo de vez en cuando basta, y no vale la
        pena mirar el reloj mas a menudo para borrar lo de hace tres dias. */
-    this.podador = setInterval(() => this.podarAhora(), 30 * 60_000);
+    this.podador = cada(() => this.podarAhora(), 30 * 60_000);
   }
 
   private async tomarMuestra() {
@@ -91,8 +92,8 @@ class Registro {
   }
 
   parar() {
-    if (this.timer) clearInterval(this.timer);
-    if (this.podador) clearInterval(this.podador);
+    if (this.timer) soltar(this.timer);
+    if (this.podador) soltar(this.podador);
     this.timer = null;
     this.podador = null;
   }

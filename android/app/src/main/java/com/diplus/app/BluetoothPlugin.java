@@ -13,6 +13,7 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
@@ -36,6 +37,7 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +75,8 @@ public class BluetoothPlugin extends Plugin {
     private final Map<String, Long> ultimoAviso = new HashMap<>();
     private int minMs = 200;
     private Runnable fin;
+    /** Con la pantalla apagada Android pausa los escaneos sin filtro. */
+    private List<ScanFilter> filtros;
 
     private BluetoothGatt gatt;
     private PluginCall llamadaConectar;
@@ -161,6 +165,19 @@ public class BluetoothPlugin extends Plugin {
         detenerEscaneo();
         minMs = Math.max(0, call.getInt("minMs", 200));
         final int segundos = call.getInt("segundos", 15);
+        filtros = null;
+        try {
+            JSArray macs = call.getArray("macs");
+            if (macs != null && macs.length() > 0) {
+                filtros = new ArrayList<>();
+                for (Object m : macs.toList()) {
+                    filtros.add(new ScanFilter.Builder().setDeviceAddress(String.valueOf(m).toUpperCase()).build());
+                }
+            }
+        } catch (Exception e) {
+            call.reject("MAC mal escrita: " + e.getMessage());
+            return;
+        }
 
         escaner = adaptador.getBluetoothLeScanner();
         if (escaner == null) {
@@ -198,7 +215,7 @@ public class BluetoothPlugin extends Plugin {
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
         try {
-            escaner.startScan(null, ajustes, alEscanear);
+            escaner.startScan(filtros, ajustes, alEscanear);
         } catch (Exception e) {
             Log.w(TAG, "startScan: " + e.getMessage());
         }

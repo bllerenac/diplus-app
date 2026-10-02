@@ -35,6 +35,7 @@ import { gps } from './gps';
 import { hardware, enviarPorRed, estadoRed, refrescarEstadoRed } from './hardware';
 import { mqtt, hayMqtt } from './mqtt';
 import { horometro } from './horometro';
+import { Reloj, cada, soltar } from './reloj';
 
 export interface LogEnvio {
   id: number;
@@ -488,10 +489,10 @@ class Envio {
   private cfg: AjustesEnvio = ENVIO_POR_DEFECTO;
 
   private ws: WebSocket | null = null;
-  private relojSocket: ReturnType<typeof setInterval> | null = null;
-  private relojApi: ReturnType<typeof setInterval> | null = null;
-  private relojMqtt: ReturnType<typeof setInterval> | null = null;
-  private relojRed: ReturnType<typeof setInterval> | null = null;
+  private relojSocket: Reloj | null = null;
+  private relojApi: Reloj | null = null;
+  private relojMqtt: Reloj | null = null;
+  private relojRed: Reloj | null = null;
   private reintento: ReturnType<typeof setTimeout> | null = null;
 
   private socket: EstadoCanal = { ...CANAL_PARADO };
@@ -514,7 +515,7 @@ class Envio {
 
     // 1. Socket
     if (socketCambio || primeraVez) {
-      if (this.relojSocket) clearInterval(this.relojSocket);
+      if (this.relojSocket) soltar(this.relojSocket);
       this.relojSocket = null;
       this.cerrarSocket();
       if (cfg.socket.activo && cfg.socket.url.trim()) {
@@ -522,7 +523,7 @@ class Envio {
           ...CANAL_PARADO, enviados: this.socket.enviados, ultimo: this.socket.ultimo,
         };
         this.abrirSocket();
-        this.relojSocket = setInterval(
+        this.relojSocket = cada(
           () => this.porSocket(), Math.max(500, cfg.socket.cadaSeg * 1000),
         );
       } else {
@@ -532,7 +533,7 @@ class Envio {
 
     // 2. API
     if (apiCambio || primeraVez) {
-      if (this.relojApi) clearInterval(this.relojApi);
+      if (this.relojApi) soltar(this.relojApi);
       this.relojApi = null;
       if (cfg.api.activo && cfg.api.url.trim()) {
         this.api = {
@@ -541,7 +542,7 @@ class Envio {
           enviados: this.api.enviados,
           ultimo: this.api.ultimo,
         };
-        this.relojApi = setInterval(
+        this.relojApi = cada(
           () => this.porApi(), Math.max(2000, cfg.api.cadaSeg * 1000),
         );
       } else {
@@ -551,7 +552,7 @@ class Envio {
 
     // 3. MQTT
     if (mqttCambio || primeraVez) {
-      if (this.relojMqtt) clearInterval(this.relojMqtt);
+      if (this.relojMqtt) soltar(this.relojMqtt);
       this.relojMqtt = null;
 
       if (cfg.mqtt.activo && cfg.mqtt.broker.trim() && hayMqtt()) {
@@ -567,7 +568,7 @@ class Envio {
         }).catch((e: Error) => {
           this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
         });
-        this.relojMqtt = setInterval(
+        this.relojMqtt = cada(
           () => this.porMqtt(), Math.max(1000, cfg.mqtt.cadaSeg * 1000),
         );
       } else {
@@ -582,21 +583,21 @@ class Envio {
   /** Enciende o apaga la difusion por WiFi segun la configuracion. */
   private aplicarRed(cfg: AjustesEnvio) {
     if (this.relojRed) {
-      clearInterval(this.relojRed);
+      soltar(this.relojRed);
       this.relojRed = null;
     }
     if (cfg.red?.activo) {
-      this.relojRed = setInterval(
+      this.relojRed = cada(
         () => this.porRed(), Math.max(1000, (cfg.red.cadaSeg || 2) * 1000),
       );
     }
   }
 
   parar() {
-    if (this.relojSocket) clearInterval(this.relojSocket);
-    if (this.relojApi)    clearInterval(this.relojApi);
-    if (this.relojMqtt)   clearInterval(this.relojMqtt);
-    if (this.relojRed)    clearInterval(this.relojRed);
+    if (this.relojSocket) soltar(this.relojSocket);
+    if (this.relojApi)    soltar(this.relojApi);
+    if (this.relojMqtt)   soltar(this.relojMqtt);
+    if (this.relojRed)    soltar(this.relojRed);
     if (this.reintento)  clearTimeout(this.reintento);
     this.relojSocket = null;
     this.relojApi    = null;

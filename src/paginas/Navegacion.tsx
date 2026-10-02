@@ -30,6 +30,7 @@ import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
 import { horometro } from '../nucleo/horometro';
 import { revisarSola, revisarTailscale } from '../nucleo/actualizacion';
+import { segundoPlano } from '../nucleo/reloj';
 
 /* three.js y el modelo solo se bajan si se enciende el modo demo. */
 const DemoPala = lazy(() => import('./DemoPala'));
@@ -410,6 +411,10 @@ export default function Navegacion() {
   useEffect(() => {
     movimiento.aplicar(cfg.movimiento);
   }, [cfg.movimiento]);
+
+  useEffect(() => {
+    segundoPlano.aplicar(cfg.segundoPlano, cfg.servidor.equipo).catch(() => undefined);
+  }, [cfg.segundoPlano, cfg.servidor.equipo]);
 
   /* ── Sensores ─────────────────────────────────────────────────────────── */
   useEffect(() => {

@@ -18,6 +18,7 @@ import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Config, cargar } from './config';
 import { hardware } from './hardware';
 import { gps } from './gps';
+import { Reloj, cada, soltar } from './reloj';
 
 interface PluginCanal {
   arrancar(o: { puerto: number; token: string }): Promise<{ puerto: number }>;
@@ -90,7 +91,7 @@ export interface Manos {
 }
 
 class Canal {
-  private reloj: ReturnType<typeof setInterval> | null = null;
+  private reloj: Reloj | null = null;
   private cfg: Config | null = null;
   private manos: Manos | null = null;
 
@@ -109,7 +110,7 @@ class Canal {
 
     if (!quiere) {
       if (this.reloj) {
-        clearInterval(this.reloj);
+        soltar(this.reloj);
         this.reloj = null;
       }
       await Nativo.parar().catch(() => undefined);
@@ -119,7 +120,7 @@ class Canal {
     await Nativo.arrancar({ puerto: cfg.canal.puerto, token: cfg.canal.token.trim() })
       .catch(() => undefined);
 
-    if (!this.reloj) this.reloj = setInterval(() => this.latir(), LATIDO_MS);
+    if (!this.reloj) this.reloj = cada(() => this.latir(), LATIDO_MS);
     this.latir();
   }
 

@@ -44,7 +44,7 @@ interface PluginBluetooth {
   pedirPermisos(): Promise<EstadoBt>;
   encender(): Promise<void>;
   /** `segundos: 0` escanea sin parar. `minMs` limita los avisos por equipo. */
-  escanear(o: { segundos: number; minMs?: number }): Promise<void>;
+  escanear(o: { segundos: number; minMs?: number; macs?: string[] }): Promise<void>;
   detener(): Promise<void>;
   conectar(o: { mac: string }): Promise<{ mac: string; servicios: Servicio[] }>;
   desconectar(): Promise<void>;
@@ -74,7 +74,8 @@ export const bluetooth = {
   estado: () => Nativo.estado(),
   pedirPermisos: () => Nativo.pedirPermisos(),
   encender: () => Nativo.encender(),
-  escanear: (segundos: number, minMs = 200) => Nativo.escanear({ segundos, minMs }),
+  /** Con `macs`, el filtro lo hace Android y sigue funcionando con la pantalla apagada. */
+  escanear: (segundos: number, minMs = 200, macs?: string[]) => Nativo.escanear({ segundos, minMs, macs }),
   detener: () => Nativo.detener(),
   conectar: (mac: string) => Nativo.conectar({ mac }),
   desconectar: () => Nativo.desconectar(),
@@ -90,6 +91,8 @@ export const bluetooth = {
 };
 
 /* ── Para leer lo que llega ─────────────────────────────────────────────── */
+
+export const esMac = (t: string) => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(t.trim());
 
 /** Los UUID del estándar en su forma de 16 bits: 0x2a19 en vez de los 36 caracteres. */
 export const uuidCorto = (uuid: string) => {
