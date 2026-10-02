@@ -118,14 +118,16 @@ import {
 import { Montaje } from './montaje';
 import { Envio } from './envio';
 import { HorometroAjuste } from './HorometroAjuste';
+import { Bluetooth } from './bluetooth';
 import { horometro } from '../nucleo/horometro';
 
 type Pestana =
-  'sensores' | 'inercial' | 'panel' | 'posicion' | 'datos' | 'envio' | 'horometro' | 'servidor' | 'kiosco';
+  'sensores' | 'inercial' | 'bluetooth' | 'panel' | 'posicion' | 'datos' | 'envio' | 'horometro' | 'servidor' | 'kiosco';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'sensores', nombre: 'Sensores' },
   { id: 'inercial', nombre: 'Inercial' },
+  { id: 'bluetooth', nombre: 'Bluetooth' },
   { id: 'panel', nombre: 'Panel' },
   { id: 'posicion', nombre: 'Posición' },
   { id: 'datos', nombre: 'Datos' },
@@ -631,6 +633,31 @@ export default function Ajustes() {
       setEcoTailscale(String((e as Error).message ?? e));
     } finally {
       setBajandoTailscale(false);
+    }
+  };
+
+  const [rustdesk, setRustdesk] = useState<{ bajando: boolean; bytes: number; total: number; eco: string | null; ok: boolean }>(
+    { bajando: false, bytes: 0, total: 0, eco: null, ok: false },
+  );
+
+  const guardarRustdesk = async () => {
+    if (!hayActualizador()) {
+      setRustdesk((r) => ({ ...r, eco: 'Descargar RustDesk solo funciona en la tablet.', ok: false }));
+      return;
+    }
+    const url = cfg.actualizacion.urlRustdesk.trim();
+    const nombre = url.split('/').pop()?.split('?')[0] || 'rustdesk.apk';
+    setRustdesk({ bajando: true, bytes: 0, total: 0, eco: null, ok: false });
+    try {
+      const g = await actualizador.guardarEnDescargas(url, nombre, (bytes, total) =>
+        setRustdesk((r) => ({ ...r, bytes, total })),
+      );
+      setRustdesk({
+        bajando: false, bytes: 0, total: 0, ok: true,
+        eco: `Guardado en ${g.ruta} (${(g.bytes / 1048576).toFixed(1)} MB, versión ${g.versionName}).`,
+      });
+    } catch (e) {
+      setRustdesk({ bajando: false, bytes: 0, total: 0, ok: false, eco: String((e as Error).message ?? e) });
     }
   };
   /* ── Plano y geocercas ────────────────────────────────────────────────── */
@@ -1626,6 +1653,8 @@ export default function Ajustes() {
           )}
 
           {/* ── Posición ───────────────────────────────────────────────── */}
+          {pestana === 'bluetooth' && <Bluetooth />}
+
           {pestana === 'posicion' && (
             <>
 
@@ -2139,6 +2168,43 @@ export default function Ajustes() {
                     {ecoTailscale}
                   </Aviso>
                 )}
+              </Bloque>
+
+              <Bloque titulo="Descargar RustDesk (~75 MB)" plegable>
+                <Nota>
+                  Deja el instalador de RustDesk en la carpeta Download de la tablet, sin
+                  instalarlo. Después se instala a mano desde el explorador de archivos. La
+                  versión universal sirve para cualquier procesador y pide Android 5.1 o más.
+                </Nota>
+
+                <Campo etiqueta="Dirección del APK de RustDesk">
+                  <Entrada
+                    value={cfg.actualizacion.urlRustdesk ?? ''}
+                    placeholder="https://…/rustdesk.apk"
+                    onChange={(e) =>
+                      aplicar({ ...cfg, actualizacion: { ...cfg.actualizacion, urlRustdesk: e.target.value } })
+                    }
+                  />
+                </Campo>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Boton
+                    variante="fuerte"
+                    disabled={rustdesk.bajando || !cfg.actualizacion.urlRustdesk.trim()}
+                    onClick={guardarRustdesk}
+                  >
+                    {rustdesk.bajando ? 'Bajando RustDesk…' : 'Descargar a la carpeta Download'}
+                  </Boton>
+                </div>
+
+                {rustdesk.bajando && rustdesk.bytes > 0 && (
+                  <p className="m-0 font-mono text-[11.5px] text-ink2">
+                    Descargando: {(rustdesk.bytes / 1048576).toFixed(1)} MB
+                    {rustdesk.total > 0 && ` de ${(rustdesk.total / 1048576).toFixed(1)} MB`}
+                  </p>
+                )}
+
+                {rustdesk.eco && <Aviso tono={rustdesk.ok ? 'ok' : 'warn'}>{rustdesk.eco}</Aviso>}
               </Bloque>
 
                 {instalada && !instalada.puedeInstalar && (

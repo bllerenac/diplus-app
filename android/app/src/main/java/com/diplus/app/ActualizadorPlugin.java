@@ -1,5 +1,6 @@
 package com.diplus.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -11,15 +12,19 @@ import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.util.Log;
 
 import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -51,9 +56,15 @@ import java.net.URL;
  * con cambiar instalacionSilenciosa() para que devuelva true y este plugin
  * se encargara del resto sin tocar nada mas.
  */
-@CapacitorPlugin(name = "Actualizador")
+@CapacitorPlugin(
+    name = "Actualizador",
+    permissions = {
+        @Permission(alias = ActualizadorPlugin.ALMACEN, strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE })
+    }
+)
 public class ActualizadorPlugin extends Plugin {
 
+    static final String ALMACEN = "almacen";
     private static final String TAG = "Actualizador";
     private static final String ACCION_RESULTADO = "com.diplus.app.INSTALL_RESULT";
 
@@ -182,6 +193,70 @@ public class ActualizadorPlugin extends Plugin {
             r.put("versionCode", codigoDe(nuevo));
             r.put("bytes", destino.length());
             call.resolve(r);
+        }).start();
+    }
+
+    /**
+     * Baja un APK y lo deja en la carpeta Download del equipo, para instalarlo
+     * a mano desde el explorador. En Android 9 escribir ahi pide permiso.
+     */
+    @PluginMethod
+    public void guardarEnDescargas(PluginCall call) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                && getPermissionState(ALMACEN) != PermissionState.GRANTED) {
+            requestPermissionForAlias(ALMACEN, call, "trasPedirAlmacen");
+            return;
+        }
+        guardarYa(call);
+    }
+
+    @PermissionCallback
+    private void trasPedirAlmacen(PluginCall call) {
+        if (getPermissionState(ALMACEN) != PermissionState.GRANTED) {
+            call.reject("Sin permiso de almacenamiento no se puede guardar en Descargas.");
+            return;
+        }
+        guardarYa(call);
+    }
+
+    private void guardarYa(PluginCall call) {
+        final String direccion = call.getString("url", "");
+        final String nombre = call.getString("nombre", "descarga.apk").replaceAll("[^\\w.-]", "_");
+        if (direccion == null || direccion.trim().isEmpty()) {
+            call.reject("Falta la dirección del APK.");
+            return;
+        }
+
+        new Thread(() -> {
+            File temporal = new File(getContext().getCacheDir(), "guardar.apk");
+            File carpeta = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File destino = new File(carpeta, nombre);
+            try {
+                bajar(direccion.trim(), temporal);
+                PackageInfo info = getContext().getPackageManager()
+                        .getPackageArchiveInfo(temporal.getAbsolutePath(), 0);
+                if (info == null) throw new Exception("Lo que hay en esa dirección no es un APK válido.");
+
+                if (!carpeta.exists() && !carpeta.mkdirs()) throw new Exception("No se pudo crear " + carpeta);
+                try (InputStream in = new FileInputStream(temporal); OutputStream out = new FileOutputStream(destino)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+
+                JSObject r = new JSObject();
+                r.put("ruta", destino.getAbsolutePath());
+                r.put("paquete", info.packageName);
+                r.put("versionName", info.versionName != null ? info.versionName : "");
+                r.put("bytes", destino.length());
+                call.resolve(r);
+            } catch (Exception e) {
+                Log.w(TAG, "guardar en descargas: " + e.getMessage());
+                borrar(destino);
+                call.reject(e.getMessage());
+            } finally {
+                borrar(temporal);
+            }
         }).start();
     }
 

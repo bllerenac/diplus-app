@@ -37,6 +37,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MovimientoPlugin.class);
         registerPlugin(KioscoPlugin.class);
         registerPlugin(MqttPlugin.class);
+        registerPlugin(BluetoothPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Mantener pantalla encendida siempre (tablet de campo)

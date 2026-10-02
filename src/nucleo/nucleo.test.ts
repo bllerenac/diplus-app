@@ -19,6 +19,7 @@ import { Rumbo } from './rumbo';
 import { calcularValoresMqtt, cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
 import { hardware } from './hardware';
 import { estadosPala } from './pala';
+import { ascii, leerIBeacon, uuidCorto } from './bluetooth';
 import { senal } from './lecturas';
 import { horometro } from './horometro';
 
@@ -896,5 +897,22 @@ describe('estados de la pala', () => {
 
   it('el ruido por debajo de los umbrales es estar quieta', () => {
     expect(estadosPala({ velocidad: 0.2, giro: 2, pluma: -1 })).toEqual(['quieta']);
+  });
+});
+
+describe('bluetooth', () => {
+  it('acorta los UUID del estandar y deja los propios', () => {
+    expect(uuidCorto('00002A19-0000-1000-8000-00805F9B34FB')).toBe('0x2a19');
+    expect(uuidCorto('6e400001-b5a3-f393-e0a9-e50e24dcca9e')).toBe('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+  });
+
+  it('lee un iBeacon de los datos de fabricante de Apple', () => {
+    const ib = leerIBeacon('0215fda50693a4e24fb1afcfc6eb0764782500010002c5');
+    expect(ib).toEqual({ uuid: 'fda50693-a4e2-4fb1-afcf-c6eb07647825', major: 1, minor: 2, tx: -59 });
+    expect(leerIBeacon('1005')).toBeNull();
+  });
+
+  it('enseña el texto que venga dentro', () => {
+    expect(ascii('48690a')).toBe('Hi·');
   });
 });

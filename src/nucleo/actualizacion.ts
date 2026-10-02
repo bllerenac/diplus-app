@@ -22,12 +22,20 @@ export interface Descarga {
   bytes: number;
 }
 
+export interface Guardado {
+  ruta: string;
+  paquete: string;
+  versionName: string;
+  bytes: number;
+}
+
 interface PluginActualizador {
   version(): Promise<VersionInstalada>;
   descargar(o: { url: string }): Promise<Descarga>;
   /** Descarga cualquier APK sin comprobar que sea de esta aplicacion. Para Tailscale y similares. */
   descargarCualquier(o: { url: string }): Promise<Descarga>;
   instalar(o: { ruta: string }): Promise<void>;
+  guardarEnDescargas(o: { url: string; nombre: string }): Promise<Guardado>;
   addListener(evento: 'onDescarga', fn: (d: { bytes: number; total: number }) => void): Promise<{ remove: () => void }>;
 }
 
@@ -110,6 +118,21 @@ export const actualizador = {
   },
 
   instalar: (ruta: string) => Nativo.instalar({ ruta }),
+
+  /** Deja el APK en la carpeta Download del equipo, sin instalarlo. */
+  async guardarEnDescargas(
+    url: string, nombre: string, alAvanzar?: (bytes: number, total: number) => void,
+  ): Promise<Guardado> {
+    let quitar: { remove: () => void } | null = null;
+    if (alAvanzar) {
+      quitar = await Nativo.addListener('onDescarga', (d) => alAvanzar(d.bytes, d.total));
+    }
+    try {
+      return await Nativo.guardarEnDescargas({ url: arreglarDireccion(url), nombre });
+    } finally {
+      quitar?.remove?.();
+    }
+  },
 };
 
 /**

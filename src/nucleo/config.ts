@@ -36,6 +36,8 @@ export interface Actualizacion {
   url: string;
   /** URL del APK de Tailscale alojado en el servidor propio. */
   urlTailscale: string;
+  /** APK de RustDesk que se deja en Descargas para instalarlo a mano. */
+  urlRustdesk: string;
   /** Mira si hay versión nueva por su cuenta, sin que nadie pulse. */
   automatica: boolean;
   /** Cada cuántas horas mira. */
@@ -90,6 +92,10 @@ export interface Config {
   recomendacionGeneral: Recomendacion;
 }
 
+/** Universal: trae arm64 y armv7, así sirve sin saber el procesador. */
+const URL_RUSTDESK =
+  'https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-universal-signed.apk';
+
 const POR_DEFECTO: Config = {
   fuentes: [],
   panel: panelFijo(),
@@ -106,6 +112,7 @@ const POR_DEFECTO: Config = {
   actualizacion: {
     url: 'https://miskimayo.wapsi.io/apks/diplus.apk',
     urlTailscale: 'https://miskimayo.wapsi.io/apks/tailscale.apk',
+    urlRustdesk: URL_RUSTDESK,
     automatica: true,
     cadaHoras: 6,
   },
@@ -161,6 +168,7 @@ const alDia = (c: Config): Config => {
     actualizacion: {
       url: act.url && act.url.trim() ? act.url : 'https://miskimayo.wapsi.io/apks/diplus.apk',
       urlTailscale: act.urlTailscale && act.urlTailscale.trim() ? act.urlTailscale : 'https://miskimayo.wapsi.io/apks/tailscale.apk',
+      urlRustdesk: act.urlRustdesk && act.urlRustdesk.trim() ? act.urlRustdesk : URL_RUSTDESK,
       automatica: act.automatica ?? true,
       cadaHoras: act.cadaHoras || 6,
     },
