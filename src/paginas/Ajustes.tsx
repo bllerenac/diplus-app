@@ -1328,6 +1328,30 @@ export default function Ajustes() {
             </Bloque>
           )}
 
+          {pestana === 'panel' && (
+            <Bloque titulo="Modo demo pala" plegable>
+              <Nota>
+                Cambia el mapa de la pantalla principal por la pala en 3D, con botones para
+                girarla, trasladarla y mover la pluma, el brazo y el cucharón. Enseña lo que
+                medirían el GPS, el giroscopio y el beacon de la pluma, y si con eso la pala
+                está subiendo, bajando o girando.
+              </Nota>
+
+              <Interruptor
+                activo={cfg.demoPala}
+                alCambiar={(v) => aplicar({ ...cfg, demoPala: v })}
+                etiqueta="Modo demo pala"
+              />
+
+              {cfg.demoPala && (
+                <Aviso tono="warn">
+                  Todo lo que se mueve en la demo es simulado. El resto de la pantalla y el
+                  envío siguen igual. Se apaga sola al reiniciar la aplicación.
+                </Aviso>
+              )}
+            </Bloque>
+          )}
+
           {/* ── Inercial ───────────────────────────────────────────────── */}
           {pestana === 'inercial' && (
             <>

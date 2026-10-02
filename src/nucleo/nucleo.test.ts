@@ -18,6 +18,7 @@ import { protocolo } from './protocolos';
 import { Rumbo } from './rumbo';
 import { calcularValoresMqtt, cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
 import { hardware } from './hardware';
+import { estadosPala } from './pala';
 import { senal } from './lecturas';
 import { horometro } from './horometro';
 
@@ -877,5 +878,23 @@ describe('el modelo de envio', () => {
     const lote = [calcularValoresMqtt('SC-03'), calcularValoresMqtt('SC-03')];
     expect(Array.isArray(lote)).toBe(true);
     expect(lote[0]).toHaveProperty('fuelMotor');
+  });
+});
+
+describe('estados de la pala', () => {
+  it('girar parada es girar', () => {
+    expect(estadosPala({ velocidad: 0, giro: 18, pluma: 0 })).toEqual(['girando']);
+  });
+
+  it('girar mientras se traslada no es girar', () => {
+    expect(estadosPala({ velocidad: 2, giro: 18, pluma: 0 })).toEqual(['trasladando']);
+  });
+
+  it('subir la pluma mientras gira cuenta las dos cosas', () => {
+    expect(estadosPala({ velocidad: 0, giro: -12, pluma: 6 })).toEqual(['girando', 'subiendo']);
+  });
+
+  it('el ruido por debajo de los umbrales es estar quieta', () => {
+    expect(estadosPala({ velocidad: 0.2, giro: 2, pluma: -1 })).toEqual(['quieta']);
   });
 });

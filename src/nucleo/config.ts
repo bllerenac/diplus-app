@@ -82,6 +82,8 @@ export interface Config {
   senales: AjustesPorSenal;
   /** Genera un camión de mentira para poder ver la pantalla sin hardware. */
   maqueta: boolean;
+  /** Cambia el mapa por la pala en 3D. No sobrevive a un reinicio. */
+  demoPala: boolean;
   /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
   recomendaciones: Record<string, Recomendacion>;
   /** Lo que se aplica donde no haya nada puesto. */
@@ -112,6 +114,7 @@ const POR_DEFECTO: Config = {
   movimiento: MOVIMIENTO_POR_DEFECTO,
   senales: {},
   maqueta: false,
+  demoPala: false,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,
 };
@@ -124,7 +127,7 @@ export const cargar = (): Config => {
   cargada = true;
   try {
     const crudo = localStorage.getItem(CLAVE);
-    if (crudo) memoria = alDia({ ...POR_DEFECTO, ...JSON.parse(crudo) });
+    if (crudo) memoria = { ...alDia({ ...POR_DEFECTO, ...JSON.parse(crudo) }), demoPala: false };
   } catch {
     /* Configuracion ilegible: se sigue con la de fabrica en vez de no arrancar. */
   }

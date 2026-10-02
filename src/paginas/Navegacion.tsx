@@ -6,7 +6,7 @@
  * suelto y confundirlos es creer que se sabe la posicion al centimetro cuando se
  * sabe a metros—, y despues las lecturas que uno haya elegido ver.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, useIonRouter } from '@ionic/react';
 import { ArrowRight, Crosshair, Settings, TerminalSquare } from 'lucide-react';
 import * as Iconos from 'lucide-react';
@@ -30,6 +30,9 @@ import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
 import { horometro } from '../nucleo/horometro';
 import { revisarSola, revisarTailscale } from '../nucleo/actualizacion';
+
+/* three.js y el modelo solo se bajan si se enciende el modo demo. */
+const DemoPala = lazy(() => import('./DemoPala'));
 
 /**
  * Sin posicion no se pinta ninguna.
@@ -552,6 +555,12 @@ export default function Navegacion() {
             <div className="nav-mapa" ref={divMapa} />
           </div>
 
+          {cfg.demoPala && (
+            <Suspense fallback={null}>
+              <DemoPala />
+            </Suspense>
+          )}
+
         <div className="nav-barra">
           <span className="nav-marca">DiPlus</span>
 
@@ -587,7 +596,7 @@ export default function Navegacion() {
           </button>
         </div>
 
-        {!pos && (
+        {!pos && !cfg.demoPala && (
           <div className="nav-sinfix">
             <b>Sin posición</b>
             <span>
@@ -597,7 +606,7 @@ export default function Navegacion() {
           </div>
         )}
 
-        {pos && (
+        {pos && !cfg.demoPala && (
           <div className={`nav-velocidad ${vaVelocidad}`}>
             <b>{velocidad}</b>
             <span>KM/H</span>
@@ -608,7 +617,7 @@ export default function Navegacion() {
             <span className="nav-limite">{consejo.velocidad}</span>
           </div>
         )}
-        {pos && (
+        {pos && !cfg.demoPala && (
           <span className="nav-precision">
             {nombreOrigen(pos.origen)} · {precisionAproximada(pos)}
           </span>
@@ -616,7 +625,7 @@ export default function Navegacion() {
         {/* Lo que hay que mantener aquí, flotando sobre el mapa abajo a la
             derecha: es lo último que se mira antes de volver la vista a la
             pista, así que va sobre el terreno y no en el panel. */}
-        <footer className="nav-consejo">
+        {!cfg.demoPala && <footer className="nav-consejo">
           {donde && <p className="nav-consejo__donde">{donde.nombre}</p>}
 
           <div className={`nav-consejo__dato ${vaConsumo}`}>
@@ -650,7 +659,7 @@ export default function Navegacion() {
               </span>
             </div>
           )}
-        </footer>
+        </footer>}
 
         </div>
         <aside className="nav-panel">
