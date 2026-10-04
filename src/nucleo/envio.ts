@@ -225,6 +225,7 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
 
 /** Hasta dónde se mandó ya del histórico. Sobrevive a un reinicio a propósito. */
 const MARCA = 'diplus.envio.marca';
+const REINTENTO_MQTT_MS = 15000;
 
 /* Reintentos de la cola por vuelta. Pocos: si hay mil pendientes y se sueltan
    todos de golpe, la primera vez que vuelve la cobertura se atraganta la red
@@ -498,6 +499,10 @@ class Envio {
   private socket: EstadoCanal = { ...CANAL_PARADO };
   private api: EstadoCanal = { ...CANAL_PARADO };
   private mqttCh: EstadoCanal = { ...CANAL_PARADO };
+  /** Cambia con cada intento: la respuesta de uno viejo no pisa al nuevo. */
+  private intentoMqtt = 0;
+  private conectandoMqtt = false;
+  private ultimoIntentoMqtt = 0;
   private enCola = 0;
   private mandando = false;
 
@@ -556,22 +561,14 @@ class Envio {
       this.relojMqtt = null;
 
       if (cfg.mqtt.activo && cfg.mqtt.broker.trim() && hayMqtt()) {
-        this.mqttCh = { ...CANAL_PARADO, estado: 'conectando' };
-        mqtt.conectar({
-          broker: cfg.mqtt.broker.trim(),
-          puerto: cfg.mqtt.puerto,
-          usuario: cfg.mqtt.usuario,
-          clave: cfg.mqtt.contrasena,
-          clientId: `diplus-${cfg.equipo || 'tablet'}`,
-        }).then(() => {
-          this.mqttCh = { ...this.mqttCh, estado: 'abierto', error: null };
-        }).catch((e: Error) => {
-          this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
-        });
+        this.mqttCh = { ...CANAL_PARADO };
+        this.conectarMqtt();
         this.relojMqtt = cada(
           () => this.porMqtt(), Math.max(1000, cfg.mqtt.cadaSeg * 1000),
         );
       } else {
+        this.intentoMqtt++;
+        this.conectandoMqtt = false;
         if (hayMqtt()) mqtt.desconectar().catch(() => undefined);
         this.mqttCh = { ...CANAL_PARADO };
       }
@@ -899,6 +896,31 @@ class Envio {
     }
   }
 
+  /**
+   * La reconexión automática de Paho solo actúa tras una primera conexión
+   * buena: si al encender no había red, sin esto el MQTT quedaba muerto.
+   */
+  private conectarMqtt() {
+    const intento = ++this.intentoMqtt;
+    const { mqtt: c, equipo } = this.cfg;
+    this.conectandoMqtt = true;
+    this.ultimoIntentoMqtt = Date.now();
+    this.mqttCh = { ...this.mqttCh, estado: 'conectando' };
+    mqtt.conectar({
+      broker: c.broker.trim(),
+      puerto: c.puerto,
+      usuario: c.usuario,
+      clave: c.contrasena,
+      clientId: `diplus-${equipo || 'tablet'}`,
+    }).then(() => {
+      if (intento === this.intentoMqtt) this.mqttCh = { ...this.mqttCh, estado: 'abierto', error: null };
+    }).catch((e: Error) => {
+      if (intento === this.intentoMqtt) this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
+    }).finally(() => {
+      if (intento === this.intentoMqtt) this.conectandoMqtt = false;
+    });
+  }
+
   private porMqtt() {
     /* Antes de armar: el estado de red tiene su propio reloj dentro, asi que
        llamarlo en cada vuelta no cuesta mas que una comparacion. */
@@ -916,6 +938,12 @@ class Envio {
       return;
     }
 
+    /* Sin conexión no se publica: el snapshot ya quedó en la base y lo manda la API. */
+    if (this.mqttCh.estado !== 'abierto') {
+      if (!this.conectandoMqtt && Date.now() - this.ultimoIntentoMqtt > REINTENTO_MQTT_MS) this.conectarMqtt();
+      return;
+    }
+
     mqtt.publicar(topicReal, payload).then(() => {
       this.mqttCh = {
         ...this.mqttCh,
@@ -926,6 +954,7 @@ class Envio {
       };
       agregarLogEnvio('mqtt', 'ok', `Publicado exitosamente en '${topicReal}'`, payload);
     }).catch((e: Error) => {
+      /* Se cayó la conexión: la próxima vuelta reconecta en vez de insistir. */
       this.mqttCh = { ...this.mqttCh, estado: 'fallo', error: e.message };
       agregarLogEnvio('mqtt', 'error', `Fallo al publicar MQTT en '${topicReal}': ${e.message}`, payload);
     });
