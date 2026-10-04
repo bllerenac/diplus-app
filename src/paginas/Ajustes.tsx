@@ -17,7 +17,7 @@ import {
 } from '@ionic/react';
 
 import {
-  Config, Servidor, URL_RUSTDESK_GITHUB, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro,
+  Config, DEMO_PALA_DISPONIBLE, Servidor, URL_RUSTDESK_GITHUB, cargar, guardar, nuevaFuente, nuevaFuenteCaudalimetro,
 } from '../nucleo/config';
 import { Fuente, Hallazgo, PuertoDelEquipo, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { CampoProtocolo, RegistroModbus, SenalManual, defectosDe, protocolo, protocolosDe } from '../nucleo/protocolos';
@@ -1367,13 +1367,20 @@ export default function Ajustes() {
                 está subiendo, bajando o girando.
               </Nota>
 
-              <Interruptor
-                activo={cfg.demoPala}
-                alCambiar={(v) => aplicar({ ...cfg, demoPala: v })}
-                etiqueta="Modo demo pala"
-              />
+              {DEMO_PALA_DISPONIBLE ? (
+                <Interruptor
+                  activo={cfg.demoPala}
+                  alCambiar={(v) => aplicar({ ...cfg, demoPala: v })}
+                  etiqueta="Modo demo pala"
+                />
+              ) : (
+                <Aviso tono="warn">
+                  Desactivado por ahora: con el navegador interno de esta tablet (WebView 78) el
+                  dibujo en 3D cuelga la pantalla.
+                </Aviso>
+              )}
 
-              {cfg.demoPala && (
+              {DEMO_PALA_DISPONIBLE && cfg.demoPala && (
                 <Aviso tono="warn">
                   Todo lo que se mueve en la demo es simulado. El resto de la pantalla y el
                   envío siguen igual. Se apaga sola al reiniciar la aplicación.

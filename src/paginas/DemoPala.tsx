@@ -44,6 +44,7 @@ const MIRA_INICIAL = new THREE.Vector3(-12, 4, -6);
 
 const rad = THREE.MathUtils.degToRad;
 const acotar = (v: number, [a, b]: readonly [number, number]) => Math.min(b, Math.max(a, v));
+const POSE_CLAVES = Object.keys(POSE_INICIAL) as (keyof Pose)[];
 
 /** Mientras se mantiene apretado, se mueve. */
 function Mantener({ alApretar, alSoltar, nombre, children }: {
@@ -85,12 +86,13 @@ export default function DemoPala() {
 
     let render: THREE.WebGLRenderer;
     try {
-      render = new THREE.WebGLRenderer({ antialias: true });
+      /* Sin suavizado y a 1:1: el WebView 78 con la Adreno 506 se colgaba. */
+      render = new THREE.WebGLRenderer({ antialias: false });
     } catch {
       setCarga('Este equipo no puede dibujar en 3D (sin WebGL).');
       return;
     }
-    render.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    render.setPixelRatio(1);
     div.appendChild(render.domElement);
 
     const escena = new THREE.Scene();
@@ -132,12 +134,20 @@ export default function DemoPala() {
     orbita.maxPolarAngle = Math.PI / 2 - 0.05;
     orbita.update();
 
+    /* Se dibuja solo cuando algo cambia. */
+    let sucio = true;
+    let oculta = false;
+    let dibujado = 0;
+    let ultimaClave = '';
+    orbita.addEventListener('change', () => { sucio = true; });
+
     const ajustar = () => {
       const { clientWidth: w, clientHeight: h } = div;
       if (!w || !h) return;
       render.setSize(w, h);
       camara.aspect = w / h;
       camara.updateProjectionMatrix();
+      sucio = true;
     };
     const observador = new ResizeObserver(ajustar);
     observador.observe(div);
@@ -164,6 +174,7 @@ export default function DemoPala() {
           brazo: m.getObjectByName('brazo')!,
           cucharon: m.getObjectByName('cucharon')!,
         };
+        sucio = true;
         setCarga('lista');
       },
       (e) => e.total && setCarga(Math.round((e.loaded / e.total) * 100)),
@@ -181,6 +192,8 @@ export default function DemoPala() {
       maquina.position.set(0, 0, 0);
       camara.position.copy(CAMARA_INICIAL);
       orbita.target.copy(MIRA_INICIAL);
+      orbita.update();
+      sucio = true;
     };
 
     const paso = (ahora: number) => {
@@ -233,13 +246,34 @@ export default function DemoPala() {
         piezas.brazo.rotation.z = rad(p.brazo);
         piezas.cucharon.rotation.z = rad(p.cucharon);
       }
-      orbita.update();
-      render.render(escena, camara);
+      if (POSE_CLAVES.some((c) => p[c] !== antes[c])) sucio = true;
+
+      /* Oculta (Configuración abierta encima) no se dibuja; quieta, tampoco. */
+      const visible = div.offsetParent !== null && !document.hidden;
+      if (!visible) {
+        oculta = true;
+        return;
+      }
+      if (oculta) {
+        oculta = false;
+        sucio = true;
+      }
+      if (sucio && ahora - dibujado >= 33) {
+        orbita.update();
+        render.render(escena, camara);
+        sucio = false;
+        dibujado = ahora;
+      }
 
       if (ahora - aviso > 200) {
         aviso = ahora;
-        setLectura({ ...medida });
-        setPose(p);
+        const clave = [medida.velocidad, medida.giro, medida.pluma, p.pluma, p.brazo, p.cucharon]
+          .map((v) => v.toFixed(1)).join();
+        if (clave !== ultimaClave) {
+          ultimaClave = clave;
+          setLectura({ ...medida });
+          setPose(p);
+        }
       }
     };
     cuadro = requestAnimationFrame(paso);

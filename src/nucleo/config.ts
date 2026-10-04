@@ -94,7 +94,10 @@ export interface Config {
   recomendacionGeneral: Recomendacion;
 }
 
-const URL_RUSTDESK = 'https://miskimayo.wapsi.io/apks/rustdesk.apk';
+/** El 3D (WebGL) cuelga la GPU con el WebView 78 y la Adreno 506 de las tablets. */
+export const DEMO_PALA_DISPONIBLE = false;
+
+const URL_RUSTDESK ='https://miskimayo.wapsi.io/apks/rustdesk.apk';
 /** Universal: trae arm64 y armv7, así sirve sin saber el procesador. Respaldo si el servidor no lo tiene. */
 export const URL_RUSTDESK_GITHUB =
   'https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-universal-signed.apk';

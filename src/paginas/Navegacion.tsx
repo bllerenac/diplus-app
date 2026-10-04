@@ -14,7 +14,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './Navegacion.css';
 
-import { Config, alCambiar, cargar, guardar } from '../nucleo/config';
+import { Config, DEMO_PALA_DISPONIBLE, alCambiar, cargar, guardar } from '../nucleo/config';
 import { Posicion, calidad, gps, nombreOrigen, precisionAproximada } from '../nucleo/gps';
 import { ProblemaPuerto, TramaVista, hardware, hayHardware } from '../nucleo/hardware';
 import { registro } from '../nucleo/registro';
@@ -471,6 +471,7 @@ export default function Navegacion() {
    */
   useEffect(() => alCambiar((c) => setCfg({ ...c })), []);
 
+  const demo = DEMO_PALA_DISPONIBLE && cfg.demoPala;
   const cal = calidad(pos?.calidad ?? 0);
   const velocidad = Math.max(0, Math.round((pos?.velocidad ?? 0) * 3.6));
 
@@ -560,7 +561,7 @@ export default function Navegacion() {
             <div className="nav-mapa" ref={divMapa} />
           </div>
 
-          {cfg.demoPala && (
+          {demo && (
             <Suspense fallback={null}>
               <DemoPala />
             </Suspense>
@@ -601,7 +602,7 @@ export default function Navegacion() {
           </button>
         </div>
 
-        {!pos && !cfg.demoPala && (
+        {!pos && !demo && (
           <div className="nav-sinfix">
             <b>Sin posición</b>
             <span>
@@ -611,7 +612,7 @@ export default function Navegacion() {
           </div>
         )}
 
-        {pos && !cfg.demoPala && (
+        {pos && !demo && (
           <div className={`nav-velocidad ${vaVelocidad}`}>
             <b>{velocidad}</b>
             <span>KM/H</span>
@@ -622,7 +623,7 @@ export default function Navegacion() {
             <span className="nav-limite">{consejo.velocidad}</span>
           </div>
         )}
-        {pos && !cfg.demoPala && (
+        {pos && !demo && (
           <span className="nav-precision">
             {nombreOrigen(pos.origen)} · {precisionAproximada(pos)}
           </span>
@@ -630,7 +631,7 @@ export default function Navegacion() {
         {/* Lo que hay que mantener aquí, flotando sobre el mapa abajo a la
             derecha: es lo último que se mira antes de volver la vista a la
             pista, así que va sobre el terreno y no en el panel. */}
-        {!cfg.demoPala && <footer className="nav-consejo">
+        {!demo && <footer className="nav-consejo">
           {donde && <p className="nav-consejo__donde">{donde.nombre}</p>}
 
           <div className={`nav-consejo__dato ${vaConsumo}`}>
