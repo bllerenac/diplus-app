@@ -888,6 +888,19 @@ class Envio {
       cuerpo[clave] = typeof v === 'number' || typeof v === 'string' ? v : null;
     }
 
+    /* El GPS no esta entre las señales de hardware: va por su modulo. Sin fijar
+       no se manda nada, para que la caja no tome un 0 por una posicion. */
+    const p = gps.posicion();
+    if (p) {
+      cuerpo['gps.lat'] = p.lat;
+      cuerpo['gps.lon'] = p.lon;
+      cuerpo['gps.alt'] = p.alt;
+      cuerpo['gps.velocidad'] = p.velocidad;
+      cuerpo['gps.rumbo'] = p.rumbo;
+      cuerpo['gps.satelites'] = p.satelites;
+      cuerpo['gps.calidad'] = p.calidad;
+    }
+
     try {
       await enviarPorRed(cfg.puerto, JSON.stringify(cuerpo));
     } catch {
