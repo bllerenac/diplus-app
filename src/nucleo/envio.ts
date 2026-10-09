@@ -29,7 +29,9 @@ import {
   quitarPendiente,
   guardarSnapshot,
   leerSnapshotsPendientes,
-  marcarSnapshotsEnviados,
+  borrarSnapshots,
+  podarSnapshotsEnviados,
+  podarSnapshotsViejos,
 } from './base';
 import { gps } from './gps';
 import { hardware, enviarPorRed, estadoRed, refrescarEstadoRed } from './hardware';
@@ -226,6 +228,12 @@ export const ENVIO_POR_DEFECTO: AjustesEnvio = {
 /** Hasta dónde se mandó ya del histórico. Sobrevive a un reinicio a propósito. */
 const MARCA = 'diplus.envio.marca';
 const REINTENTO_MQTT_MS = 15000;
+/** Lo que puede tardar un POST antes de darlo por perdido. */
+const ESPERA_HTTP_MS = 30000;
+/** Pasado esto, una vuelta de envio se da por colgada y se vuelve a intentar. */
+const VUELTA_MAX_MS = 120000;
+/** Lo que se guarda sin mandar antes de empezar a tirar lo mas viejo. */
+const RETENCION_SNAPSHOTS_H = 72;
 
 /* Reintentos de la cola por vuelta. Pocos: si hay mil pendientes y se sueltan
    todos de golpe, la primera vez que vuelve la cobertura se atraganta la red
@@ -505,6 +513,8 @@ class Envio {
   private ultimoIntentoMqtt = 0;
   private enCola = 0;
   private mandando = false;
+  private mandandoDesde = 0;
+  private podando = false;
 
   private marca = Number(localStorage.getItem(MARCA)) || 0;
 
@@ -547,6 +557,7 @@ class Envio {
           enviados: this.api.enviados,
           ultimo: this.api.ultimo,
         };
+        this.podarViejos();
         this.relojApi = cada(
           () => this.porApi(), Math.max(2000, cfg.api.cadaSeg * 1000),
         );
@@ -730,7 +741,10 @@ class Envio {
 
     if (Capacitor.isNativePlatform()) {
       try {
-        const r = await CapacitorHttp.post({ url, headers, data: cuerpo });
+        const r = await CapacitorHttp.post({
+          url, headers, data: cuerpo,
+          connectTimeout: ESPERA_HTTP_MS, readTimeout: ESPERA_HTTP_MS,
+        });
         const respDetalle = typeof r.data === 'string' ? r.data : JSON.stringify(r.data, null, 2);
         if (r.status < 200 || r.status >= 300) {
           agregarLogEnvio('api', 'error', `HTTP ${r.status}: Servidor rechazó la petición`, respDetalle || `Status ${r.status}`);
@@ -746,7 +760,10 @@ class Envio {
     }
 
     try {
-      const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(cuerpo) });
+      const r = await fetch(url, {
+        method: 'POST', headers, body: JSON.stringify(cuerpo),
+        signal: AbortSignal.timeout(ESPERA_HTTP_MS),
+      });
       const textResp = await r.text().catch(() => '');
       if (!r.ok) {
         agregarLogEnvio('api', 'error', `HTTP ${r.status}: ${r.statusText || 'Error'}`, textResp || `Status ${r.status}`);
@@ -768,8 +785,11 @@ class Envio {
    * 2. Si no hay snapshots o falla, ejecuta la lógica estándar de envío histórico.
    */
   async porApi(): Promise<void> {
-    if (this.mandando) return;
+    /* El candado tiene fecha de caducidad: si una vuelta se queda colgada, sin
+       esto no se vuelve a mandar nada hasta reiniciar la aplicacion. */
+    if (this.mandando && Date.now() - this.mandandoDesde < VUELTA_MAX_MS) return;
     this.mandando = true;
+    this.mandandoDesde = Date.now();
 
     try {
       // Intentar primero enviar snapshots históricos de Miskimayo
@@ -785,7 +805,7 @@ class Envio {
         if (loteObjetos.length > 0) {
           try {
             await this.entregar(loteObjetos);
-            await marcarSnapshotsEnviados(ids);
+            await borrarSnapshots(ids);
             this.api = {
               estado: 'abierto',
               enviados: this.api.enviados + loteObjetos.length,
@@ -832,6 +852,27 @@ class Envio {
       }
     } finally {
       this.mandando = false;
+    }
+  }
+
+  /**
+   * Saca los snapshots que la version anterior dejo marcados en vez de borrar.
+   *
+   * De a poco y una sola vez: pueden ser cientos de miles y borrarlos de un
+   * golpe bloquearia la base mientras se sigue leyendo y mandando.
+   */
+  private async podarViejos(): Promise<void> {
+    if (this.podando) return;
+    this.podando = true;
+    try {
+      await podarSnapshotsViejos(RETENCION_SNAPSHOTS_H);
+      for (;;) {
+        const borrados = await podarSnapshotsEnviados(2000);
+        if (borrados < 2000) return;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    } catch {
+      /* Si falla se reintenta en el siguiente arranque. */
     }
   }
 

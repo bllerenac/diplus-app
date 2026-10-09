@@ -101,6 +101,10 @@ const conTienda = async <T>(
     const pet = hacer(tx.objectStore(nombre));
     pet.onsuccess = () => resolve(pet.result);
     pet.onerror = () => reject(pet.error);
+    /* Sin esto, una transaccion abortada —sin sitio en disco, sobre todo— deja
+       la promesa sin cumplir ni fallar, y quien la espera se cuelga para
+       siempre. Fue lo que dejo a SH-03 sin mandar al API. */
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
   });
 };
 
@@ -118,6 +122,7 @@ export const guardarLecturas = async (filas: Lectura[]): Promise<number> => {
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('lecturas', 'readwrite');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const tienda = tx.objectStore('lecturas');
     for (const f of filas) tienda.add(f);
     tx.oncomplete = () => resolve(filas.length);
@@ -131,6 +136,7 @@ export const leerDe = async (clave: string, desde: number, limite = 500): Promis
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('lecturas', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const idx = tx.objectStore('lecturas').index('clave_at');
     const rango = IDBKeyRange.bound([clave, desde], [clave, Infinity]);
     const salida: Lectura[] = [];
@@ -158,6 +164,7 @@ export const leerDesde = async (desde: number, limite = 200): Promise<Lectura[]>
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('lecturas', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const idx = tx.objectStore('lecturas').index('at');
     const salida: Lectura[] = [];
 
@@ -178,6 +185,7 @@ export const resumen = async (): Promise<{ filas: number; desde: number | null }
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('lecturas', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const tienda = tx.objectStore('lecturas');
     const cuenta = tienda.count();
 
@@ -204,6 +212,7 @@ export const podar = async (horas: number): Promise<number> => {
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('lecturas', 'readwrite');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const idx = tx.objectStore('lecturas').index('at');
     let borradas = 0;
 
@@ -251,6 +260,7 @@ export const calibraciones = async (que: string, limite = 10): Promise<Calibraci
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('calibraciones', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const idx = tx.objectStore('calibraciones').index('que_at');
     const salida: Calibracion[] = [];
 
@@ -302,6 +312,7 @@ export const leerSnapshotsPendientes = async (limite = 100): Promise<Snapshot[]>
   const db = await abrir();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('snapshots', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const store = tx.objectStore('snapshots');
     const idx = store.index('enviado_at');
     const resultados: Snapshot[] = [];
@@ -323,27 +334,74 @@ export const leerSnapshotsPendientes = async (limite = 100): Promise<Snapshot[]>
   });
 };
 
-export const marcarSnapshotsEnviados = async (ids: number[]): Promise<void> => {
+/**
+ * Se borran, no se marcan.
+ *
+ * Marcarlos dejaba un registro por ciclo MQTT para siempre —unos 43 000 al
+ * dia— hasta llenar el hueco que Android le da a la aplicacion. Y al llenarse,
+ * la transaccion aborta y se lleva por delante el envio entero.
+ */
+export const borrarSnapshots = async (ids: number[]): Promise<void> => {
   if (ids.length === 0) return;
   const db = await abrir();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('snapshots', 'readwrite');
     const store = tx.objectStore('snapshots');
+    for (const id of ids) store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
+  });
+};
 
-    let processed = 0;
-    for (const id of ids) {
-      const getReq = store.get(id);
-      getReq.onsuccess = () => {
-        const item = getReq.result as Snapshot;
-        if (item) {
-          item.enviado = 1;
-          store.put(item);
-        }
-        processed++;
-        if (processed === ids.length) resolve();
-      };
-      getReq.onerror = () => reject(getReq.error);
-    }
+/**
+ * Tira los pendientes mas viejos que `horas`.
+ *
+ * Sin tope, una semana sin cobertura son 300 000 registros y se vuelve a
+ * llenar el hueco de la aplicacion. Son las mismas 72 h que el registro de
+ * lecturas guarda por defecto.
+ */
+export const podarSnapshotsViejos = async (horas: number): Promise<number> => {
+  const corte = Date.now() - horas * 3600_000;
+  const db = await abrir();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snapshots', 'readwrite');
+    const idx = tx.objectStore('snapshots').index('at');
+    let borrados = 0;
+
+    const cur = idx.openCursor(IDBKeyRange.upperBound(corte));
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c) return;
+      c.delete();
+      borrados++;
+      c.continue();
+    };
+    tx.oncomplete = () => resolve(borrados);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
+  });
+};
+
+/** Los que quedaron marcados como enviados por la version anterior. */
+export const podarSnapshotsEnviados = async (limite = 5000): Promise<number> => {
+  const db = await abrir();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snapshots', 'readwrite');
+    const idx = tx.objectStore('snapshots').index('enviado_at');
+    let borrados = 0;
+
+    const cur = idx.openCursor(IDBKeyRange.bound([1, 0], [1, Infinity]));
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c || borrados >= limite) return;
+      c.delete();
+      borrados++;
+      c.continue();
+    };
+    tx.oncomplete = () => resolve(borrados);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
   });
 };
 
@@ -351,6 +409,7 @@ export const cuantosSnapshotsPendientes = async (): Promise<number> => {
   const db = await abrir();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('snapshots', 'readonly');
+    tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'));
     const idx = tx.objectStore('snapshots').index('enviado_at');
     const req = idx.count(IDBKeyRange.bound([0, 0], [0, Infinity]));
     req.onsuccess = () => resolve(req.result);
