@@ -294,6 +294,20 @@ export const cuantosPendientes = (): Promise<number> =>
 /** `true` si el navegador de este equipo tiene IndexedDB. */
 export const hayBase = (): boolean => typeof indexedDB !== 'undefined';
 
+/**
+ * Le pone plazo a una operacion de la base.
+ *
+ * Una transaccion que se queda a medias no falla: se calla. Quien la espera se
+ * cuelga, y lo de arriba parece sano. Mejor un error que un silencio.
+ */
+export const conPlazo = <T,>(promesa: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promesa,
+    new Promise<T>((_, rechazar) =>
+      setTimeout(() => rechazar(new Error(`la base no contestó en ${ms / 1000} s`)), ms),
+    ),
+  ]);
+
 /* ── Snapshots (Miskimayo payload histórico) ──────────────────────────────── */
 
 export interface Snapshot {
