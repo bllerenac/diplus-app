@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Senal } from '../nucleo/lecturas';
+const dicho = (e: unknown) => (e instanceof Error ? e.message : String(e));
 import {
   AjustesEnvio,
   CAMPOS_MQTT_MISKIMAYO,
@@ -28,7 +29,7 @@ import {
 } from '../nucleo/envio';
 import { hayMqtt } from '../nucleo/mqtt';
 import { hardware } from '../nucleo/hardware';
-import { cuantosSnapshotsPendientes } from '../nucleo/base';
+import { conPlazo, cuantosSnapshotsPendientes } from '../nucleo/base';
 import { Aviso, Bloque, Boton, Campo, Entrada, Interruptor, Nota, Selector, Vacio } from './piezas';
 
 const DICHO: Record<EstadoCanal['estado'], string> = {
@@ -78,6 +79,7 @@ export function Envio({
   const [ecoMqtt, setEcoMqtt] = useState<string | null>(null);
   const [probandoMqtt, setProbandoMqtt] = useState(false);
   const [snapsPendientes, setSnapsPendientes] = useState(0);
+  const [falloBase, setFalloBase] = useState<string | null>(null);
 
   const [logs, setLogs] = useState<LogEnvio[]>(obtenerLogsEnvio());
   const [filtroCanal, setFiltroCanal] = useState<'todos' | 'mqtt' | 'api' | 'socket'>('todos');
@@ -92,7 +94,14 @@ export function Envio({
       setMuestra(envio.vistaPrevia());
       setMuestraMqtt(envio.vistaPreviaMqtt());
       setValoresMqtt(envio.valoresMqtt());
-      setSnapsPendientes(await cuantosSnapshotsPendientes().catch(() => 0));
+      /* Un cero callado era lo peor: con la base trabada el aviso desaparecia
+         en vez de decirlo, y parecia que no habia nada pendiente. */
+      try {
+        setSnapsPendientes(await conPlazo(cuantosSnapshotsPendientes(), 5000));
+        setFalloBase(null);
+      } catch (e) {
+        setFalloBase(dicho(e));
+      }
     };
 
     const t = setInterval(actualizar, 1000);
@@ -392,7 +401,14 @@ export function Envio({
 
         <Marcador e={estado.mqtt} unidad="publicaciones" />
 
-        {snapsPendientes > 0 && (
+        {falloBase && (
+          <Aviso tono="bad">
+            No se puede leer la base del equipo: {falloBase}. Mientras siga así, lo que el MQTT
+            guarda no se puede mandar al API. Suele ser que no queda espacio.
+          </Aviso>
+        )}
+
+        {!falloBase && snapsPendientes > 0 && (
           <div className="rounded-xl border border-line bg-sur2 px-3.5 py-2.5 font-mono text-[11px] text-ink2">
             📊 <b>{snapsPendientes}</b> snapshots guardados en BD pendientes de envío por API (100 cada 10s).
           </div>
