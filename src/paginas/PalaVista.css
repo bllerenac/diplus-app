@@ -8,7 +8,9 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 22px 26px;
+  /* Arriba se deja sitio para la barra, que sigue siendo la de siempre y
+     tiene que quedar visible y pulsable: el menu no cambia en modo pala. */
+  padding: 80px 26px 22px;
   background: #0b1217;
   user-select: none;
   -webkit-user-select: none;

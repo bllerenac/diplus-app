@@ -473,6 +473,8 @@ export default function Navegacion() {
   useEffect(() => alCambiar((c) => setCfg({ ...c })), []);
 
   const demo = DEMO_PALA_DISPONIBLE && cfg.demoPala;
+  /* Con el mapa tapado, sus avisos y tarjetas no pintan nada: estorban. */
+  const tapado = demo || cfg.modoPala;
   const cal = calidad(pos?.calidad ?? 0);
   const velocidad = Math.max(0, Math.round((pos?.velocidad ?? 0) * 3.6));
 
@@ -607,7 +609,7 @@ export default function Navegacion() {
           </button>
         </div>
 
-        {!pos && !demo && (
+        {!pos && !tapado && (
           <div className="nav-sinfix">
             <b>Sin posición</b>
             <span>
@@ -617,7 +619,7 @@ export default function Navegacion() {
           </div>
         )}
 
-        {pos && !demo && (
+        {pos && !tapado && (
           <div className={`nav-velocidad ${vaVelocidad}`}>
             <b>{velocidad}</b>
             <span>KM/H</span>
@@ -628,7 +630,7 @@ export default function Navegacion() {
             <span className="nav-limite">{consejo.velocidad}</span>
           </div>
         )}
-        {pos && !demo && (
+        {pos && !tapado && (
           <span className="nav-precision">
             {nombreOrigen(pos.origen)} · {precisionAproximada(pos)}
           </span>
@@ -636,7 +638,7 @@ export default function Navegacion() {
         {/* Lo que hay que mantener aquí, flotando sobre el mapa abajo a la
             derecha: es lo último que se mira antes de volver la vista a la
             pista, así que va sobre el terreno y no en el panel. */}
-        {!demo && <footer className="nav-consejo">
+        {!tapado && <footer className="nav-consejo">
           {donde && <p className="nav-consejo__donde">{donde.nombre}</p>}
 
           <div className={`nav-consejo__dato ${vaConsumo}`}>

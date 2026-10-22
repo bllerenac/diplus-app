@@ -17,6 +17,7 @@ import {
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
 import { Aviso, Bloque, Boton, Nota, Vacio } from './piezas';
+import retrato from './pala-lateral.webp';
 
 /** Lo último que se oyó de un beacon. */
 interface Visto {
@@ -29,17 +30,20 @@ interface Visto {
   meneo: number;
 }
 
-const SITIOS: Record<PapelBeacon, { x: number; y: number; etiqueta: string; donde: string }> = {
+/** En porcentaje sobre la foto, que es lo que aguanta cualquier tamaño. */
+const SITIOS: Record<PapelBeacon, {
+  x: number; y: number; lado: 'arriba' | 'abajo' | 'derecha'; etiqueta: string; donde: string;
+}> = {
   tornamesa: {
-    x: 86, y: 104, etiqueta: 'Tornamesa',
+    x: 70, y: 46, lado: 'abajo', etiqueta: 'Tornamesa',
     donde: 'En el bastidor de la superestructura, cerca de la cabina. Es la referencia: no mide la pluma, mide cómo está parada la máquina.',
   },
   pluma: {
-    x: 158, y: 92, etiqueta: 'Pluma',
+    x: 44, y: 27, lado: 'arriba', etiqueta: 'Pluma',
     donde: 'En el alma de la pluma, cerca de su base y en la cara que mira a la cabina. El ángulo es el mismo en toda la pieza, así que abajo mide igual pero con el radio más cerca y menos golpes.',
   },
   brazo: {
-    x: 222, y: 84, etiqueta: 'Brazo',
+    x: 6, y: 28, lado: 'derecha', etiqueta: 'Brazo',
     donde: 'En la parte alta del brazo, cerca de su pivote y mirando a la cabina. Lo más lejos posible del cucharón.',
   },
 };
@@ -111,40 +115,49 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
           cuál tienes en la mano, agítalo: su fila se marca sola.
         </Nota>
 
-        <svg viewBox="0 0 300 170" className="mt-3 w-full" role="img" aria-label="Dónde va cada beacon en la pala">
-          {/* orugas */}
-          <rect x="18" y="132" width="132" height="26" rx="13" className="fill-none stroke-ink3" strokeWidth="2.5" />
-          <line x1="40" y1="145" x2="128" y2="145" className="stroke-ink3" strokeWidth="1" strokeDasharray="4 5" />
-          {/* superestructura y cabina */}
-          <path d="M32 132 L32 104 L104 104 L104 86 L136 86 L142 132 Z" className="fill-none stroke-ink2" strokeWidth="2.5" />
-          {/* pluma */}
-          <line x1="134" y1="116" x2="206" y2="58" className="stroke-ink2" strokeWidth="7" strokeLinecap="round" />
-          {/* brazo */}
-          <line x1="206" y1="58" x2="238" y2="116" className="stroke-ink2" strokeWidth="6" strokeLinecap="round" />
-          {/* cucharón */}
-          <path d="M232 116 L252 118 L248 136 L230 130 Z" className="fill-none stroke-ink3" strokeWidth="2.5" strokeLinejoin="round" />
+        {/* La foto sale del modelo 3D, renderizado una vez fuera del equipo: la
+            tablet solo pinta un mapa de bits, que es lo único que su WebView
+            aguanta sin colgar la GPU. */}
+        <div className="relative mx-auto mt-3 w-full max-w-[600px]">
+          <img src={retrato} alt="Pala de perfil con los sitios de cada beacon" className="block w-full" />
 
           {(Object.keys(SITIOS) as PapelBeacon[]).map((p) => {
             const s = SITIOS[p];
             const activo = p === sitio;
             const puesto = Boolean(asignadas[p]);
+            const sitioEtiqueta = {
+              arriba: 'bottom-full left-1/2 mb-1 -translate-x-1/2',
+              abajo: 'top-full left-1/2 mt-1 -translate-x-1/2',
+              derecha: 'left-full top-1/2 ml-1.5 -translate-y-1/2',
+            }[s.lado];
             return (
-              <g key={p} onClick={() => setSitio(p)} className="cursor-pointer">
-                <circle
-                  cx={s.x} cy={s.y} r={activo ? 11 : 8}
-                  className={activo ? 'fill-acc/25 stroke-acc' : puesto ? 'fill-ok/15 stroke-ok' : 'fill-bad/10 stroke-bad'}
-                  strokeWidth="2.5"
-                />
-                <text x={s.x} y={s.y + 3.5} textAnchor="middle" className="fill-ink1 font-mono text-[9px]">
+              <button
+                key={p}
+                onClick={() => setSitio(p)}
+                aria-label={`Beacon de ${s.etiqueta}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer"
+                style={{ left: `${s.x}%`, top: `${s.y}%` }}
+              >
+                <span
+                  className={`flex items-center justify-center rounded-full border-2 font-mono text-[11px] shadow-lg transition ${
+                    activo ? 'h-8 w-8 border-acc bg-acc text-[#06231a]'
+                      : puesto ? 'h-7 w-7 border-ok bg-bg1/90 text-ok'
+                      : 'h-7 w-7 border-bad bg-bg1/90 text-bad'
+                  }`}
+                >
                   {puesto ? '✓' : '?'}
-                </text>
-                <text x={s.x} y={s.y - 15} textAnchor="middle" className="fill-ink2 font-mono text-[8.5px] uppercase tracking-wider">
+                </span>
+                <span
+                  className={`absolute whitespace-nowrap rounded-md bg-bg1/85 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                    activo ? 'text-acc' : 'text-ink2'
+                  } ${sitioEtiqueta}`}
+                >
                   {s.etiqueta}
-                </text>
-              </g>
+                </span>
+              </button>
             );
           })}
-        </svg>
+        </div>
 
         <div className="mt-2 rounded-xl border border-line bg-bg2 px-3.5 py-3">
           <p className="m-0 font-mono text-[11px] uppercase tracking-wider text-acc">{SITIOS[sitio].etiqueta}</p>
