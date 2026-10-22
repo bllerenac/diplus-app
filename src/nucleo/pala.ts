@@ -50,6 +50,19 @@ export const NOMBRE_ESTADO: Record<EstadoPala, string> = {
  * donde no hay forma de alinear nada con precisión sobre una pluma.
  * ------------------------------------------------------------------------ */
 
+/** Como va armado el frente: cambia el cucharón y por dónde excava. */
+export type TipoPala = 'frontal' | 'retro';
+
+export const NOMBRE_TIPO: Record<TipoPala, string> = {
+  frontal: 'Carga frontal',
+  retro: 'Retroexcavadora',
+};
+
+/** Los modelos de la flota. El E es el de accionamiento eléctrico. */
+export type ModeloPala = 'PC4000-11' | 'PC4000-11E';
+
+export const MODELOS: ModeloPala[] = ['PC4000-11', 'PC4000-11E'];
+
 export type PapelBeacon = 'tornamesa' | 'pluma' | 'brazo';
 
 export const NOMBRE_PAPEL: Record<PapelBeacon, string> = {

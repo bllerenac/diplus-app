@@ -215,10 +215,11 @@ export const PalaVista = ({
                 pluma={aDibujo('pluma', anguloPluma)}
                 brazo={aDibujo('brazo', anguloBrazo)}
                 inclinacion={inclinacion ?? 0}
+                tipo={cfg.pala.tipo}
               />
             </div>
             <div className="palav-arriba">
-              <PalaDesdeArriba giro={giroAcumulado} />
+              <PalaDesdeArriba giro={giroAcumulado} tipo={cfg.pala.tipo} />
               <span className="palav-rotulo">Giro</span>
             </div>
           </div>

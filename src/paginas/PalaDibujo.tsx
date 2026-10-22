@@ -9,6 +9,7 @@
  * Nada de WebGL: el WebView de estas tablets cuelga la GPU con él. Esto es
  * SVG, que se rasteriza en una sola capa y no deja costuras al girar.
  */
+import { TipoPala } from '../nucleo/pala';
 import './PalaDibujo.css';
 
 /** Dónde pivota cada pieza en el dibujo de perfil. */
@@ -22,18 +23,22 @@ const limitar = (g: number) => Math.max(-TOPE, Math.min(TOPE, g));
 const giroEn = (grados: number, p: { x: number; y: number }) =>
   `rotate(${limitar(grados).toFixed(1)} ${p.x} ${p.y})`;
 
-/** Los dientes del cucharón, repartidos por su borde. */
-const DIENTES = [0, 1, 2, 3].map((i) => {
-  const t = 0.14 + i * 0.24;
-  return { x1: 70 + t * 52, y1: 228 - t * 6, x2: 66 + t * 52, y2: 240 - t * 6 };
-});
+/** Los dientes, repartidos por el borde que ataca el banco. */
+const dientesDe = (tipo: TipoPala) =>
+  [0, 1, 2, 3].map((i) => {
+    const t = 0.14 + i * 0.24;
+    return tipo === 'frontal'
+      ? { x1: 70 + t * 52, y1: 228 - t * 6, x2: 66 + t * 52, y2: 240 - t * 6 }
+      : { x1: 96 + t * 40, y1: 236 - t * 20, x2: 104 + t * 40, y2: 246 - t * 22 };
+  });
 
 export const PalaPerfil = ({
-  pluma = 0, brazo = 0, inclinacion = 0,
+  pluma = 0, brazo = 0, inclinacion = 0, tipo = 'frontal',
 }: {
   pluma?: number;
   brazo?: number;
   inclinacion?: number;
+  tipo?: TipoPala;
 }) => (
   <svg viewBox="0 0 440 268" className="pdib-svg" role="img" aria-label="La pala vista de perfil">
     <line x1="14" y1="250" x2="426" y2="250" className="pdib-suelo" />
@@ -91,10 +96,21 @@ export const PalaPerfil = ({
           <circle cx={PIVOTE_BRAZO.x} cy={PIVOTE_BRAZO.y} r="10" className="pdib-pasador" />
           <circle cx={PIVOTE_BRAZO.x} cy={PIVOTE_BRAZO.y} r="4" className="pdib-eje" />
 
-          {/* Cucharón de frente: cajón con dientes abajo */}
-          <path d="M84 196 L118 186 L130 230 L70 244 L58 214 Z" className="pdib-cuchara" />
-          <path d="M84 196 L118 186 L122 202 L88 212 Z" className="pdib-cuchara-alto" />
-          {DIENTES.map((d, i) => (
+          {/* El cucharón es lo que distingue a las dos máquinas: la de carga
+              frontal es un cajón que empuja hacia afuera y descarga por el
+              fondo; la retro es una cuchara que tira hacia la máquina. */}
+          {tipo === 'frontal' ? (
+            <>
+              <path d="M84 196 L118 186 L130 230 L70 244 L58 214 Z" className="pdib-cuchara" />
+              <path d="M84 196 L118 186 L122 202 L88 212 Z" className="pdib-cuchara-alto" />
+            </>
+          ) : (
+            <>
+              <path d="M84 196 L118 186 L140 212 L136 238 L96 240 L78 220 Z" className="pdib-cuchara" />
+              <path d="M84 196 L118 186 L128 198 L92 210 Z" className="pdib-cuchara-alto" />
+            </>
+          )}
+          {dientesDe(tipo).map((d, i) => (
             <line key={i} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2} className="pdib-diente" />
           ))}
         </g>
@@ -109,7 +125,7 @@ export const PalaPerfil = ({
  * Las orugas se quedan quietas y gira la tornamesa: el tren de rodaje apunta a
  * donde se trasladó por última vez, que es como trabaja una pala.
  */
-export const PalaDesdeArriba = ({ giro = 0 }: { giro?: number }) => (
+export const PalaDesdeArriba = ({ giro = 0, tipo = 'frontal' }: { giro?: number; tipo?: TipoPala }) => (
   <svg viewBox="0 0 170 170" className="pdib-svg" role="img" aria-label="La pala vista desde arriba">
     <rect x="30" y="22" width="26" height="126" rx="12" className="pdib-oruga" />
     <rect x="114" y="22" width="26" height="126" rx="12" className="pdib-oruga" />
@@ -126,7 +142,9 @@ export const PalaDesdeArriba = ({ giro = 0 }: { giro?: number }) => (
       <rect x="62" y="64" width="46" height="48" rx="7" className="pdib-casa" />
       <rect x="66" y="96" width="38" height="16" rx="4" className="pdib-contrapeso" />
       <path d="M78 64 L92 64 L90 20 L80 20 Z" className="pdib-pluma" />
-      <path d="M74 26 L96 26 L99 8 L71 8 Z" className="pdib-cuchara" />
+      {tipo === 'frontal'
+        ? <path d="M72 26 L98 26 L101 6 L69 6 Z" className="pdib-cuchara" />
+        : <path d="M74 24 L96 24 L94 8 L76 8 Z" className="pdib-cuchara" />}
       <circle cx="85" cy="85" r="6" className="pdib-pasador" />
       <circle cx="85" cy="85" r="2.5" className="pdib-eje" />
     </g>

@@ -10,7 +10,7 @@ import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
 import { Tarjeta, nuevaTarjeta, panelFijo } from './panel';
 import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
-import { Calibracion, PapelBeacon } from './pala';
+import { Calibracion, ModeloPala, PapelBeacon, TipoPala } from './pala';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 import { AjustesPorSenal } from './senales';
 import { AjustesEnvio, ENVIO_POR_DEFECTO } from './envio';
@@ -64,6 +64,10 @@ export interface Canal {
  * mano: arriba de una pala, con polvo, los tres beacons son idénticos.
  */
 export interface AjustesPala {
+  /** Qué máquina es: cambia el dibujo y lo que se enseña. */
+  modelo: ModeloPala;
+  /** Carga frontal o retroexcavadora. */
+  tipo: TipoPala;
   /** MAC del beacon de cada sitio, vacío si todavía no se asignó. */
   beacons: Record<PapelBeacon, string>;
   /** Las posturas capturadas, por sitio. */
@@ -80,6 +84,8 @@ export interface AjustesPala {
 }
 
 export const PALA_POR_DEFECTO: AjustesPala = {
+  modelo: 'PC4000-11',
+  tipo: 'frontal',
   beacons: { tornamesa: '', pluma: '', brazo: '' },
   calibracion: {},
   dibujo: {},

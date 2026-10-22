@@ -13,10 +13,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Anuncio, bluetooth, hayBluetooth } from '../nucleo/bluetooth';
 import { LecturaKSensor, Vector3, kSensorDe } from '../nucleo/ksensor';
 import {
-  Calibracion, NOMBRE_PAPEL, POSTURAS, PapelBeacon, Postura, anguloCalibrado, inclinacionMaquina,
+  Calibracion, MODELOS, ModeloPala, NOMBRE_PAPEL, NOMBRE_TIPO, POSTURAS, PapelBeacon,
+  Postura, TipoPala, anguloCalibrado, inclinacionMaquina,
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
-import { Aviso, Bloque, Boton, Modal, Nota, Vacio } from './piezas';
+import { Aviso, Bloque, Boton, Campo, Modal, Nota, Selector, Vacio } from './piezas';
 import { PalaPerfil } from './PalaDibujo';
 
 /** Lo último que se oyó de un beacon. */
@@ -130,6 +131,33 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
 
   return (
     <>
+      <Bloque titulo="Qué máquina es">
+        <Nota>
+          Las dos son Komatsu PC4000-11, pero la de carga frontal y la retroexcavadora llevan el
+          frente distinto y excavan al revés. El dibujo cambia con esto.
+        </Nota>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Campo etiqueta="Modelo">
+            <Selector
+              value={cfg.pala.modelo}
+              onChange={(e) => aplicar({ ...cfg, pala: { ...cfg.pala, modelo: e.target.value as ModeloPala } })}
+            >
+              {MODELOS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </Selector>
+          </Campo>
+          <Campo etiqueta="Frente">
+            <Selector
+              value={cfg.pala.tipo}
+              onChange={(e) => aplicar({ ...cfg, pala: { ...cfg.pala, tipo: e.target.value as TipoPala } })}
+            >
+              {(Object.keys(NOMBRE_TIPO) as TipoPala[]).map((t) => (
+                <option key={t} value={t}>{NOMBRE_TIPO[t]}</option>
+              ))}
+            </Selector>
+          </Campo>
+        </div>
+      </Bloque>
+
       <Bloque titulo="Dónde va cada beacon">
         <Nota>
           Toca un sitio de la máquina y elígele un beacon de los que están emitiendo. Para saber
@@ -140,7 +168,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
             trata de señalar dónde va cada beacon, no de verlo moverse. */}
         <div className="mx-auto mt-3 w-full max-w-[600px]">
           <div className="relative">
-            <PalaPerfil />
+            <PalaPerfil tipo={cfg.pala.tipo} />
           {(Object.keys(SITIOS) as PapelBeacon[]).map((p) => {
             const s = SITIOS[p];
             const activo = p === sitio;
@@ -279,6 +307,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
       {postura && (
         <VerPostura
           postura={postura}
+          tipo={cfg.pala.tipo}
           llega={Boolean(porMac.get(asignadas[postura.papel]))}
           alCerrar={() => setPostura(null)}
           alCapturar={() => capturar(postura)}
@@ -331,9 +360,10 @@ const Resultado = ({ cfg, porMac }: { cfg: Config; porMac: Map<string, Visto> })
  * ángulo del dibujo corresponde a cada extremo medido.
  */
 const VerPostura = ({
-  postura, llega, alCerrar, alCapturar,
+  postura, tipo, llega, alCerrar, alCapturar,
 }: {
   postura: Postura;
+  tipo: TipoPala;
   llega: boolean;
   alCerrar: () => void;
   alCapturar: () => void;
@@ -362,7 +392,7 @@ const VerPostura = ({
       la sacudida además de la gravedad.
     </p>
     <div className="mx-auto mt-1 w-full max-w-[460px]">
-      <PalaPerfil pluma={postura.pose.pluma} brazo={postura.pose.brazo} />
+      <PalaPerfil pluma={postura.pose.pluma} brazo={postura.pose.brazo} tipo={tipo} />
     </div>
   </Modal>
 );
