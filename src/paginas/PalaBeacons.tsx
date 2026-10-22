@@ -17,7 +17,7 @@ import {
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
 import { Aviso, Bloque, Boton, Nota, Vacio } from './piezas';
-import retrato from './pala-lateral.webp';
+import { PalaDibujo } from './PalaDibujo';
 
 /** Lo último que se oyó de un beacon. */
 interface Visto {
@@ -26,24 +26,29 @@ interface Visto {
   rssi: number;
   at: number;
   lectura: LecturaKSensor;
-  /** Para el truco de agitarlo: cuánto se movió desde la muestra anterior. */
-  meneo: number;
+  /** Para el truco de agitarlo: cuándo fue la última sacudida. */
+  meneoAt: number;
 }
+
+/** Cuánto tiene que saltar el vector para contarlo como sacudida. */
+const UMBRAL_MENEO = 60;
+/** Y cuánto se queda marcado, para que no parpadee. */
+const MARCA_MS = 2500;
 
 /** En porcentaje sobre la foto, que es lo que aguanta cualquier tamaño. */
 const SITIOS: Record<PapelBeacon, {
   x: number; y: number; lado: 'arriba' | 'abajo' | 'derecha'; etiqueta: string; donde: string;
 }> = {
   tornamesa: {
-    x: 70, y: 46, lado: 'abajo', etiqueta: 'Tornamesa',
+    x: 70, y: 70, lado: 'abajo', etiqueta: 'Tornamesa',
     donde: 'En el bastidor de la superestructura, cerca de la cabina. Es la referencia: no mide la pluma, mide cómo está parada la máquina.',
   },
   pluma: {
-    x: 44, y: 27, lado: 'arriba', etiqueta: 'Pluma',
+    x: 40, y: 66, lado: 'arriba', etiqueta: 'Pluma',
     donde: 'En el alma de la pluma, cerca de su base y en la cara que mira a la cabina. El ángulo es el mismo en toda la pieza, así que abajo mide igual pero con el radio más cerca y menos golpes.',
   },
   brazo: {
-    x: 6, y: 28, lado: 'derecha', etiqueta: 'Brazo',
+    x: 27, y: 62, lado: 'derecha', etiqueta: 'Brazo',
     donde: 'En la parte alta del brazo, cerca de su pivote y mirando a la cabina. Lo más lejos posible del cucharón.',
   },
 };
@@ -63,13 +68,14 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
       const l = kSensorDe(a);
       if (!l) return; /* solo interesan los que mandan lecturas */
       const antes = pendientes.current.get(a.mac);
+      const salto = antes ? distancia(antes.lectura.ejes, l.ejes) : 0;
       pendientes.current.set(a.mac, {
         mac: a.mac,
         nombre: a.nombre,
         rssi: a.rssi,
         at: Date.now(),
         lectura: l,
-        meneo: antes ? distancia(antes.lectura.ejes, l.ejes) : 0,
+        meneoAt: salto > UMBRAL_MENEO ? Date.now() : (antes?.meneoAt ?? 0),
       });
     });
     bluetooth.escanear(0, 200).catch((e) => setEco(String(e)));
@@ -115,12 +121,10 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
           cuál tienes en la mano, agítalo: su fila se marca sola.
         </Nota>
 
-        {/* La foto sale del modelo 3D, renderizado una vez fuera del equipo: la
-            tablet solo pinta un mapa de bits, que es lo único que su WebView
-            aguanta sin colgar la GPU. */}
-        <div className="relative mx-auto mt-3 w-full max-w-[600px]">
-          <img src={retrato} alt="Pala de perfil con los sitios de cada beacon" className="block w-full" />
-
+        {/* El mismo dibujo que en la pantalla principal, pero quieto: aquí se
+            trata de señalar dónde va cada beacon, no de verlo moverse. */}
+        <div className="mx-auto mt-3 w-full max-w-[600px]">
+          <PalaDibujo>
           {(Object.keys(SITIOS) as PapelBeacon[]).map((p) => {
             const s = SITIOS[p];
             const activo = p === sitio;
@@ -157,6 +161,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
               </button>
             );
           })}
+          </PalaDibujo>
         </div>
 
         <div className="mt-2 rounded-xl border border-line bg-bg2 px-3.5 py-3">
@@ -182,9 +187,12 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
           </Vacio>
         ) : (
           <div className="flex flex-col gap-2">
-            {[...vistos].sort((a, b) => b.meneo - a.meneo || b.rssi - a.rssi).map((v) => {
+            {/* Por MAC y no por señal ni por meneo: esos cambian cada medio
+                segundo y las filas saltaban mientras uno intenta tocarlas. El
+                que se agita se marca donde está. */}
+            {[...vistos].sort((a, b) => a.mac.localeCompare(b.mac)).map((v) => {
               const puesto = (Object.keys(asignadas) as PapelBeacon[]).find((p) => asignadas[p] === v.mac);
-              const agitado = v.meneo > 60;
+              const agitado = Date.now() - v.meneoAt < MARCA_MS;
               return (
                 <button
                   key={v.mac}
@@ -203,7 +211,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
                     {`  ·  ${(v.lectura.pilaMv / 1000).toFixed(2)} V`}
                   </div>
                   <div className="mt-1 font-mono text-[10px] uppercase tracking-wider">
-                    {agitado && <span className="text-acc">se está moviendo · </span>}
+                    {agitado && <span className="text-acc">se acaba de mover · </span>}
                     <span className={puesto ? 'text-ok' : 'text-ink3'}>
                       {puesto ? NOMBRE_PAPEL[puesto] : `tocar para poner en ${SITIOS[sitio].etiqueta.toLowerCase()}`}
                     </span>

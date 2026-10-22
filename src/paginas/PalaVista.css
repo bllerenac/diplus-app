@@ -3,7 +3,10 @@
 
 .palav {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 450;
   display: flex;
   flex-direction: column;
@@ -137,3 +140,20 @@
 }
 .palav-falta p { margin: 0; font-size: 15px; }
 .palav-pista { font-size: 13px; color: var(--ink3, #7d8f99); }
+
+/* El dibujo manda en la pantalla: es lo que se mira de reojo. Los numeros
+   quedan debajo, para cuando hace falta el dato exacto. */
+.palav-maquina-dibujo {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Ni min() ni aspect-ratio: ninguno existe en el Chrome 78 de estas tablets.
+   El alto sale del padding proporcional que lleva el propio dibujo. */
+.palav-maquina-dibujo > * {
+  max-width: 470px;
+  width: 100%;
+}

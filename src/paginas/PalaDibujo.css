@@ -1,0 +1,22 @@
+/* El hueco del dibujo. El alto sale de un padding proporcional al render
+   (1500 x 938): `aspect-ratio` no existe en el Chrome 78 de estas tablets. */
+
+.pdib {
+  position: relative;
+  width: 100%;
+  padding-top: 62.53%;
+}
+
+.pdib-lienzo {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}

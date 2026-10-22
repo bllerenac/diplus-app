@@ -17,10 +17,13 @@ import {
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
 import { Senal } from '../nucleo/lecturas';
+import { PalaDibujo } from './PalaDibujo';
 import './PalaVista.css';
 
 /** Sobre cuánto se mide la velocidad de la pluma. */
 const VENTANA_MS = 1500;
+/** Si en este rato no llegó nada, se rearma el escaneo. */
+const SIN_NADA_MS = 6000;
 /** Pasado esto, el beacon se da por mudo. */
 const MUDO_MS = 8000;
 
@@ -55,13 +58,27 @@ export const PalaVista = ({
       const l = kSensorDe(a);
       if (l) pendientes.current.set(a.mac, { lectura: l, rssi: a.rssi, at: Date.now() });
     });
-    bluetooth.escanear(0, 200, macs).catch(() => undefined);
+    const arrancar = () => bluetooth.escanear(0, 200, macs).catch(() => undefined);
+    arrancar();
+
     const t = setInterval(() => {
       setOidos(new Map(pendientes.current));
       repintar((n) => n + 1);
     }, 500);
+
+    /* La pantalla de Ajustes escanea por su cuenta y al salir de ella llama a
+       detener(), que corta el escaneo de todos. Sin esto, al volver aquí no
+       llegaba nada y los tres beacons salían sin señal. Rearmar por si acaso
+       cuesta poco y también cubre los cortes que mete Android. */
+    const vigilante = setInterval(() => {
+      let ultimo = 0;
+      for (const o of pendientes.current.values()) ultimo = Math.max(ultimo, o.at);
+      if (Date.now() - ultimo > SIN_NADA_MS) arrancar();
+    }, SIN_NADA_MS);
+
     return () => {
       clearInterval(t);
+      clearInterval(vigilante);
       quitar();
       bluetooth.detener().catch(() => undefined);
     };
@@ -125,6 +142,14 @@ export const PalaVista = ({
         </div>
       ) : (
         <>
+          <div className="palav-maquina-dibujo">
+            <PalaDibujo
+              pluma={anguloPluma ?? 0}
+              brazo={anguloBrazo ?? 0}
+              inclinacion={inclinacion ?? 0}
+            />
+          </div>
+
           <div className="palav-angulos">
             <Medida
               titulo="Pluma"
