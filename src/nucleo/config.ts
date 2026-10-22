@@ -68,11 +68,20 @@ export interface AjustesPala {
   beacons: Record<PapelBeacon, string>;
   /** Las posturas capturadas, por sitio. */
   calibracion: Partial<Record<PapelBeacon, Calibracion>>;
+  /**
+   * Cómo se ve la máquina cuando los ángulos medidos valen cero.
+   *
+   * El dibujo sale de un modelo con su propia pose, que no tiene por qué
+   * parecerse a la máquina. Se ajusta a ojo una vez, con la pala en su
+   * postura de referencia, y desde ahí el dibujo representa la de verdad.
+   */
+  dibujo: { pluma: number; brazo: number };
 }
 
 export const PALA_POR_DEFECTO: AjustesPala = {
   beacons: { tornamesa: '', pluma: '', brazo: '' },
   calibracion: {},
+  dibujo: { pluma: 0, brazo: 0 },
 };
 
 export interface Config {

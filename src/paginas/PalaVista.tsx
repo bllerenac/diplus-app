@@ -17,7 +17,7 @@ import {
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
 import { Senal } from '../nucleo/lecturas';
-import { PalaDibujo } from './PalaDibujo';
+import { PalaDesdeArriba, PalaPerfil } from './PalaDibujo';
 import './PalaVista.css';
 
 /** Sobre cuánto se mide la velocidad de la pluma. */
@@ -113,12 +113,26 @@ export const PalaVista = ({
   }
   const velocidadPluma = gradosPorSegundo(historia.current);
 
-  const giro = useMemo(() => {
+  const senal = (sufijo: string) => {
     for (const [clave, s] of valores) {
-      if (clave.endsWith('.giro') && typeof s.valor === 'number') return s.valor;
+      if (clave.endsWith(sufijo) && typeof s.valor === 'number') return s.valor;
     }
     return 0;
-  }, [valores]);
+  };
+  const giro = senal('.giro');
+  const giroVertical = senal('.giro_vertical');
+
+  /* El giro de la tornamesa se acumula del giróscopo. Deriva con las horas,
+     así que vale para ver que la máquina está girando, no para saber hacia
+     dónde mira en absoluto. Por debajo del umbral se considera quieta: si no,
+     el ruido del sensor la haría girar sola. */
+  const giroAcum = useRef(0);
+  const giroAl = useRef(Date.now());
+  const ahora = Date.now();
+  const dt = Math.min(2, (ahora - giroAl.current) / 1000);
+  giroAl.current = ahora;
+  if (Math.abs(giroVertical) > 1.5) giroAcum.current += giroVertical * dt;
+  const giroAcumulado = giroAcum.current;
 
   const estados = estadosPala({ velocidad: velocidadKmh, giro, pluma: velocidadPluma });
   const principal = estados[0];
@@ -143,14 +157,18 @@ export const PalaVista = ({
       ) : (
         <>
           <div className="palav-maquina-dibujo">
-            <PalaDibujo
-              pluma={anguloPluma ?? 0}
-              brazo={anguloBrazo ?? 0}
-              inclinacion={inclinacion ?? 0}
-            />
+            <div className="palav-perfil">
+              <PalaPerfil pluma={anguloPluma ?? 0} brazo={anguloBrazo ?? 0} inclinacion={inclinacion ?? 0} />
+            </div>
+            <div className="palav-arriba">
+              <PalaDesdeArriba giro={giroAcumulado} />
+              <span className="palav-rotulo">Giro</span>
+            </div>
           </div>
 
-          <div className="palav-angulos">
+          {/* Los números acompañan al dibujo, no compiten con él: una fila
+              corta debajo, para cuando hace falta el dato exacto. */}
+          <div className="palav-datos">
             <Medida
               titulo="Pluma"
               valor={grados(anguloPluma)}
@@ -162,11 +180,7 @@ export const PalaVista = ({
               valor={grados(anguloBrazo)}
               pie={anguloBrazo === null ? faltaDe(cfg, 'brazo', Boolean(lecturaDe('brazo'))) : ''}
             />
-          </div>
-
-          <div className="palav-maquina">
-            <span>Inclinación de la máquina</span>
-            <b>{grados(inclinacion)}</b>
+            <Medida titulo="Máquina" valor={grados(inclinacion)} pie="inclinación" />
           </div>
         </>
       )}

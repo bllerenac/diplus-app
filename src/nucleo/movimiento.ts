@@ -211,6 +211,14 @@ class Movimiento {
        la velocidad de giro del momento. */
     const giro = (modulo(d.gx, d.gy, d.gz) * 180) / Math.PI;
 
+    /* Y el giro sobre el eje vertical, con signo: es el de la tornamesa de una
+       pala. Se saca proyectando el giróscopo sobre la gravedad que mide el
+       acelerómetro, así sale bien sin importar cómo quedó montada la tablet. */
+    const g = modulo(d.ax, d.ay, d.az);
+    const vertical = g > 0.5
+      ? ((d.gx * d.ax + d.gy * d.ay + d.gz * d.az) / g) * (180 / Math.PI)
+      : 0;
+
     return [
       senal('inclinacion', 'Inclinación', '°',
         inclinacion === null ? null : Number(inclinacion.toFixed(1))),
@@ -221,6 +229,7 @@ class Movimiento {
       senal('frenadas', 'Frenadas bruscas', '', this.frenadas),
       senal('pico_frenada', 'Frenada más fuerte', 'm/s²', Number(this.picoFrenada.toFixed(2))),
       senal('giro', 'Giro', '°/s', Number(giro.toFixed(1))),
+      senal('giro_vertical', 'Giro sobre el eje vertical', '°/s', Number(vertical.toFixed(1))),
       senal('motor', 'Motor', '', vibracion > c.umbralMotor ? 'Encendido' : 'Parado'),
     ];
   }

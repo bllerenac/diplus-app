@@ -17,7 +17,7 @@ import {
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
 import { Aviso, Bloque, Boton, Nota, Vacio } from './piezas';
-import { PalaDibujo } from './PalaDibujo';
+import { PalaPerfil } from './PalaDibujo';
 
 /** Lo último que se oyó de un beacon. */
 interface Visto {
@@ -40,15 +40,15 @@ const SITIOS: Record<PapelBeacon, {
   x: number; y: number; lado: 'arriba' | 'abajo' | 'derecha'; etiqueta: string; donde: string;
 }> = {
   tornamesa: {
-    x: 70, y: 70, lado: 'abajo', etiqueta: 'Tornamesa',
+    x: 67, y: 66, lado: 'abajo', etiqueta: 'Tornamesa',
     donde: 'En el bastidor de la superestructura, cerca de la cabina. Es la referencia: no mide la pluma, mide cómo está parada la máquina.',
   },
   pluma: {
-    x: 40, y: 66, lado: 'arriba', etiqueta: 'Pluma',
+    x: 41, y: 47, lado: 'arriba', etiqueta: 'Pluma',
     donde: 'En el alma de la pluma, cerca de su base y en la cara que mira a la cabina. El ángulo es el mismo en toda la pieza, así que abajo mide igual pero con el radio más cerca y menos golpes.',
   },
   brazo: {
-    x: 27, y: 62, lado: 'derecha', etiqueta: 'Brazo',
+    x: 27, y: 60, lado: 'derecha', etiqueta: 'Brazo',
     donde: 'En la parte alta del brazo, cerca de su pivote y mirando a la cabina. Lo más lejos posible del cucharón.',
   },
 };
@@ -124,7 +124,8 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
         {/* El mismo dibujo que en la pantalla principal, pero quieto: aquí se
             trata de señalar dónde va cada beacon, no de verlo moverse. */}
         <div className="mx-auto mt-3 w-full max-w-[600px]">
-          <PalaDibujo>
+          <div className="relative">
+            <PalaPerfil />
           {(Object.keys(SITIOS) as PapelBeacon[]).map((p) => {
             const s = SITIOS[p];
             const activo = p === sitio;
@@ -161,7 +162,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
               </button>
             );
           })}
-          </PalaDibujo>
+          </div>
         </div>
 
         <div className="mt-2 rounded-xl border border-line bg-bg2 px-3.5 py-3">
@@ -186,7 +187,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
             Adv Type en KSensor y Sensor Axis encendido.
           </Vacio>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col space-y-2">
             {/* Por MAC y no por señal ni por meneo: esos cambian cada medio
                 segundo y las filas saltaban mientras uno intenta tocarlas. El
                 que se agita se marca donde está. */}
@@ -229,7 +230,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
           movimiento mide la sacudida además de la gravedad, así que capturar en marcha estropea
           la medida.
         </Nota>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-3 flex flex-col space-y-2">
           {POSTURAS.map((p, i) => (
             <div key={p.id} className="rounded-xl border border-line bg-bg2 px-3.5 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -277,7 +278,7 @@ const Resultado = ({ cfg, porMac }: { cfg: Config; porMac: Map<string, Visto> })
   return (
     <div className="mt-3 rounded-xl border border-line bg-bg2 px-3.5 py-3">
       <p className="m-0 font-mono text-[11px] uppercase tracking-wider text-ink3">Midiendo ahora</p>
-      <div className="mt-2 flex flex-col gap-1">
+      <div className="mt-2 flex flex-col space-y-1">
         {filas.map((f) => (
           <div key={f.p} className="flex items-baseline justify-between gap-3">
             <span className="text-[12.5px] text-ink2">

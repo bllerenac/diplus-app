@@ -1,117 +1,95 @@
 /**
- * La pala de perfil, girando con los ángulos medidos.
+ * La pala dibujada, moviéndose con lo que miden los beacons.
  *
- * El modelo 3D se renderizó una vez fuera del equipo, una imagen por pieza.
- * Aquí no hay 3D ninguno: se dibujan las tres imágenes en un canvas y se las
- * gira. El WebView de estas tablets cuelga la GPU con WebGL, y rotando capas
- * con CSS su driver pintaba costuras blancas por toda la pantalla; en un solo
- * canvas hay una sola superficie y no hay nada que componer.
+ * Es un dibujo vectorial, no una foto: a esta distancia y con la máquina
+ * sacudiéndose, una silueta limpia se lee de un vistazo y la textura de un
+ * modelo escaneado solo ensucia. Además escala sin perder nitidez y toma los
+ * colores del tema.
  *
- * El brazo gira dentro del giro de la pluma, como en la máquina de verdad: al
- * subir la pluma, el brazo la acompaña y además gira lo suyo.
+ * Nada de WebGL: el WebView de estas tablets cuelga la GPU con él. Esto es
+ * SVG, que se rasteriza en una sola capa y no deja costuras al girar.
+ *
+ * De perfil se ven la pluma y el brazo; desde arriba, el giro de la tornamesa.
  */
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import base from './capa-base.webp';
-import capaPluma from './capa-pluma.webp';
-import capaBrazo from './capa-brazo.webp';
 import './PalaDibujo.css';
 
-/** Proporción del render, para reservar el hueco antes de dibujar. */
-const ANCHO = 1500;
-const ALTO = 938;
+/** Dónde pivota cada pieza en el dibujo de perfil. */
+const PIVOTE_PLUMA = { x: 218, y: 186 };
+const PIVOTE_BRAZO = { x: 95, y: 98 };
 
-/** Dónde pivota cada pieza, en fracción de la imagen. Sale de buscar los
- *  vértices más cercanos entre una pieza y la siguiente en el modelo. */
-const PIVOTE_PLUMA = { x: 0.5202, y: 0.8805 };
-const PIVOTE_BRAZO = { x: 0.2996, y: 0.5296 };
-/** La máquina entera se ladea sobre el suelo, entre las orugas. */
-const APOYO = { x: 0.52, y: 0.95 };
-
-/** Tope de giro en pantalla, para que ninguna pieza se salga del cuadro. */
-const TOPE = 34;
+/** Tope de giro en pantalla, para que nada se salga del cuadro. */
+const TOPE = 38;
 const limitar = (g: number) => Math.max(-TOPE, Math.min(TOPE, g));
-const aRadianes = (g: number) => (limitar(g) * Math.PI) / 180;
 
-const cargar = (src: string) =>
-  new Promise<HTMLImageElement>((ok, mal) => {
-    const i = new Image();
-    i.onload = () => ok(i);
-    i.onerror = mal;
-    i.src = src;
-  });
+const giroEn = (grados: number, p: { x: number; y: number }) =>
+  `rotate(${limitar(grados).toFixed(1)} ${p.x} ${p.y})`;
 
-export const PalaDibujo = ({
-  pluma = 0, brazo = 0, inclinacion = 0, children, className = '',
+export const PalaPerfil = ({
+  pluma = 0, brazo = 0, inclinacion = 0,
 }: {
-  /** Grados de la pluma respecto de su postura de calibración. */
   pluma?: number;
-  /** Grados del brazo, los suyos propios. */
   brazo?: number;
-  /** Inclinación de la máquina: ladea el conjunto. */
   inclinacion?: number;
-  /** Marcadores u otra cosa que vaya encima del dibujo. */
-  children?: ReactNode;
-  className?: string;
-}) => {
-  const lienzo = useRef<HTMLCanvasElement>(null);
-  const piezas = useRef<HTMLImageElement[] | null>(null);
-  const [listo, setListo] = useState(false);
+}) => (
+  <svg viewBox="0 0 430 250" className="pdib-svg" role="img" aria-label="La pala vista de perfil">
+    {/* Suelo */}
+    <line x1="18" y1="232" x2="412" y2="232" className="pdib-suelo" />
 
-  useEffect(() => {
-    let vivo = true;
-    Promise.all([cargar(base), cargar(capaPluma), cargar(capaBrazo)])
-      .then((imgs) => { if (vivo) { piezas.current = imgs; setListo(true); } })
-      .catch(() => undefined);
-    return () => { vivo = false; };
-  }, []);
+    <g transform={`rotate(${limitar(inclinacion).toFixed(1)} 250 228)`}>
+      {/* Orugas */}
+      <rect x="175" y="196" width="195" height="34" rx="17" className="pdib-oruga" />
+      <circle cx="200" cy="213" r="7" className="pdib-rueda" />
+      <circle cx="345" cy="213" r="7" className="pdib-rueda" />
+      <line x1="216" y1="213" x2="329" y2="213" className="pdib-riel" />
 
-  useEffect(() => {
-    const c = lienzo.current;
-    const imgs = piezas.current;
-    if (!listo || !c || !imgs) return;
+      {/* Superestructura y contrapeso */}
+      <path d="M205 196 L205 141 L330 141 L368 153 L372 196 Z" className="pdib-casa" />
+      {/* Cabina */}
+      <path d="M213 141 L213 100 L251 100 L259 113 L259 141 Z" className="pdib-cabina" />
+      <path d="M219 137 L219 106 L245 106 L251 118 L251 137 Z" className="pdib-vidrio" />
+      {/* Escape */}
+      <rect x="300" y="128" width="9" height="14" rx="2" className="pdib-detalle" />
 
-    /* El lienzo se dimensiona al hueco real para que no salga borroso. */
-    const ancho = c.clientWidth;
-    if (!ancho) return;
-    const alto = Math.round((ancho * ALTO) / ANCHO);
-    const escala = Math.min(2, window.devicePixelRatio || 1);
-    if (c.width !== Math.round(ancho * escala)) {
-      c.width = Math.round(ancho * escala);
-      c.height = Math.round(alto * escala);
-    }
+      {/* Pluma, y dentro de ella el brazo: al subir la pluma, el brazo la acompaña */}
+      <g transform={giroEn(pluma, PIVOTE_PLUMA)}>
+        <path d="M206 198 L86 106 L100 86 L234 174 Z" className="pdib-pluma" />
+        <circle cx={PIVOTE_PLUMA.x} cy={PIVOTE_PLUMA.y} r="9" className="pdib-pasador" />
+        {/* Cilindro de la pluma */}
+        <line x1="262" y1="176" x2="186" y2="130" className="pdib-cilindro" />
+        <line x1="224" y1="153" x2="186" y2="130" className="pdib-vastago" />
 
-    const g = c.getContext('2d');
-    if (!g) return;
-    g.setTransform(escala, 0, 0, escala, 0, 0);
-    g.clearRect(0, 0, ancho, alto);
+        <g transform={giroEn(brazo, PIVOTE_BRAZO)}>
+          <path d="M82 90 L110 98 L126 172 L98 180 Z" className="pdib-brazo" />
+          <circle cx={PIVOTE_BRAZO.x} cy={PIVOTE_BRAZO.y} r="8" className="pdib-pasador" />
+          {/* Cucharón de frente, como una pala de empuje */}
+          <path d="M98 180 L126 172 L136 210 L92 218 L80 198 Z" className="pdib-cuchara" />
+          <path d="M92 218 L136 210" className="pdib-dientes" />
+        </g>
+      </g>
+    </g>
+  </svg>
+);
 
-    const girar = (p: { x: number; y: number }, grados: number) => {
-      g.translate(p.x * ancho, p.y * alto);
-      g.rotate(aRadianes(grados));
-      g.translate(-p.x * ancho, -p.y * alto);
-    };
+/**
+ * La misma máquina desde arriba.
+ *
+ * Las orugas se quedan quietas y gira la tornamesa, que es lo que hace la
+ * pala de verdad: el tren de rodaje apunta a donde se trasladó por última vez.
+ */
+export const PalaDesdeArriba = ({ giro = 0 }: { giro?: number }) => (
+  <svg viewBox="0 0 160 160" className="pdib-svg" role="img" aria-label="La pala vista desde arriba">
+    {/* Orugas, fijas */}
+    <rect x="36" y="26" width="24" height="108" rx="11" className="pdib-oruga" />
+    <rect x="100" y="26" width="24" height="108" rx="11" className="pdib-oruga" />
 
-    g.save();
-    girar(APOYO, inclinacion);
-    g.drawImage(imgs[0], 0, 0, ancho, alto);
-
-    g.save();
-    girar(PIVOTE_PLUMA, pluma);
-    g.drawImage(imgs[1], 0, 0, ancho, alto);
-
-    g.save();
-    girar(PIVOTE_BRAZO, brazo);
-    g.drawImage(imgs[2], 0, 0, ancho, alto);
-
-    g.restore();
-    g.restore();
-    g.restore();
-  }, [listo, pluma, brazo, inclinacion]);
-
-  return (
-    <div className={`pdib ${className}`}>
-      <canvas ref={lienzo} className="pdib-lienzo" />
-      {children}
-    </div>
-  );
-};
+    <g transform={`rotate(${(giro % 360).toFixed(1)} 80 80)`}>
+      {/* Tornamesa */}
+      <circle cx="80" cy="80" r="30" className="pdib-tornamesa" />
+      <rect x="62" y="62" width="48" height="36" rx="6" className="pdib-casa" />
+      {/* Pluma, que marca hacia dónde mira */}
+      <path d="M74 62 L86 62 L84 14 L76 14 Z" className="pdib-pluma" />
+      <path d="M70 20 L90 20 L92 6 L68 6 Z" className="pdib-cuchara" />
+      <circle cx="80" cy="80" r="5" className="pdib-pasador" />
+    </g>
+  </svg>
+);

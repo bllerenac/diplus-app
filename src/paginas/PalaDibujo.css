@@ -1,22 +1,85 @@
-/* El hueco del dibujo. El alto sale de un padding proporcional al render
-   (1500 x 938): `aspect-ratio` no existe en el Chrome 78 de estas tablets. */
+/* La pala dibujada. Silueta rellena y contorno claro: a tres metros y con la
+   maquina moviendose, lo que se lee es la forma, no el detalle. */
 
-.pdib {
-  position: relative;
-  width: 100%;
-  padding-top: 62.53%;
-}
-
-.pdib-lienzo {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
+.pdib-svg {
   display: block;
   width: 100%;
   height: 100%;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
+}
+
+.pdib-svg * {
+  transition: transform 180ms linear;
+}
+
+.pdib-suelo {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 2;
+  stroke-dasharray: 10 8;
+}
+
+.pdib-oruga {
+  fill: #1b2730;
+  stroke: #46616f;
+  stroke-width: 2.5;
+}
+.pdib-rueda { fill: #46616f; }
+.pdib-riel {
+  stroke: #46616f;
+  stroke-width: 2;
+  stroke-dasharray: 5 6;
+}
+
+.pdib-casa {
+  fill: #d9b43a;
+  stroke: #15202a;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.pdib-cabina {
+  fill: #e7c552;
+  stroke: #15202a;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.pdib-vidrio { fill: #15323f; }
+.pdib-detalle { fill: #15202a; }
+
+.pdib-pluma,
+.pdib-brazo {
+  fill: #e4c04a;
+  stroke: #15202a;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.pdib-cuchara {
+  fill: #c9a333;
+  stroke: #15202a;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.pdib-dientes {
+  stroke: #15202a;
+  stroke-width: 5;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.pdib-pasador {
+  fill: #15202a;
+}
+.pdib-cilindro {
+  stroke: #15202a;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.pdib-vastago {
+  stroke: #9fb4c0;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.pdib-tornamesa {
+  fill: #223240;
+  stroke: #46616f;
+  stroke-width: 2;
 }
