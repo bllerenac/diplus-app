@@ -69,19 +69,20 @@ export interface AjustesPala {
   /** Las posturas capturadas, por sitio. */
   calibracion: Partial<Record<PapelBeacon, Calibracion>>;
   /**
-   * Cómo se ve la máquina cuando los ángulos medidos valen cero.
+   * Cómo se ve la máquina en cada postura de la calibración.
    *
-   * El dibujo sale de un modelo con su propia pose, que no tiene por qué
-   * parecerse a la máquina. Se ajusta a ojo una vez, con la pala en su
-   * postura de referencia, y desde ahí el dibujo representa la de verdad.
+   * La silueta viene con su propia pose, que no tiene por qué parecerse a la
+   * máquina. Al capturar cada postura se deja también el dibujo como está la
+   * pala de verdad, y con las dos queda resuelto a qué grado del dibujo
+   * corresponde cada grado medido.
    */
-  dibujo: { pluma: number; brazo: number };
+  dibujo: Partial<Record<PapelBeacon, { a?: number; b?: number }>>;
 }
 
 export const PALA_POR_DEFECTO: AjustesPala = {
   beacons: { tornamesa: '', pluma: '', brazo: '' },
   calibracion: {},
-  dibujo: { pluma: 0, brazo: 0 },
+  dibujo: {},
 };
 
 export interface Config {
@@ -198,6 +199,11 @@ export const cargar = (): Config => {
 const alDia = (c: Config): Config => {
   let res = c;
   const panel = (c.panel as unknown[]) ?? [];
+
+  /* Lo guardado reemplaza al defecto bloque a bloque, no campo a campo: un
+     equipo que grabó la pala antes de que existiera `dibujo` se quedaba sin
+     ese campo y la pantalla reventaba al leerlo. */
+  res = { ...res, pala: { ...PALA_POR_DEFECTO, ...(res.pala ?? {}) } };
 
   if (panel.length && panel.every((x) => typeof x === 'string')) {
     res = {

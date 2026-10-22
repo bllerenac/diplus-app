@@ -16,7 +16,7 @@ import {
   Calibracion, NOMBRE_PAPEL, POSTURAS, PapelBeacon, Postura, anguloCalibrado, inclinacionMaquina,
 } from '../nucleo/pala';
 import { Config } from '../nucleo/config';
-import { Aviso, Bloque, Boton, Nota, Vacio } from './piezas';
+import { Aviso, Bloque, Boton, Modal, Nota, Vacio } from './piezas';
 import { PalaPerfil } from './PalaDibujo';
 
 /** Lo último que se oyó de un beacon. */
@@ -60,6 +60,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
   const [vistos, setVistos] = useState<Visto[]>([]);
   const [sitio, setSitio] = useState<PapelBeacon>('tornamesa');
   const [eco, setEco] = useState<string | null>(null);
+  const [postura, setPostura] = useState<Postura | null>(null);
   const pendientes = useRef(new Map<string, Visto>());
 
   useEffect(() => {
@@ -100,12 +101,26 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
     setEco(null);
   };
 
-  const capturar = (p: Postura) => {
+  const capturar = (p: Postura, pose: { pluma: number; brazo: number }) => {
     const v = porMac.get(asignadas[p.papel]);
     if (!v) { setEco(`No está llegando nada del beacon de ${NOMBRE_PAPEL[p.papel].toLowerCase()}.`); return; }
     const previa: Calibracion = cfg.pala.calibracion[p.papel] ?? { a: v.lectura.ejes };
     const nueva: Calibracion = { ...previa, [p.ranura]: v.lectura.ejes };
-    aplicar({ ...cfg, pala: { ...cfg.pala, calibracion: { ...cfg.pala.calibracion, [p.papel]: nueva } } });
+
+    /* Del dibujo solo se guarda la pieza de esta postura: la otra la mueve el
+       operador para hacerse la composición, pero no es la que se calibra. */
+    const suyo = p.papel === 'brazo' ? pose.brazo : pose.pluma;
+    const antesDibujo = (cfg.pala.dibujo ?? {})[p.papel] ?? {};
+
+    aplicar({
+      ...cfg,
+      pala: {
+        ...cfg.pala,
+        calibracion: { ...cfg.pala.calibracion, [p.papel]: nueva },
+        dibujo: { ...(cfg.pala.dibujo ?? {}), [p.papel]: { ...antesDibujo, [p.ranura]: suyo } },
+      },
+    });
+    setPostura(null);
     setEco(`Capturada: ${p.titulo}.`);
   };
 
@@ -244,7 +259,7 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
                 <Boton
                   variante={hecha(p) ? 'normal' : 'fuerte'}
                   disabled={!asignadas[p.papel]}
-                  onClick={() => capturar(p)}
+                  onClick={() => setPostura(p)}
                 >
                   {hecha(p) ? 'Rehacer' : 'Capturar'}
                 </Boton>
@@ -260,6 +275,16 @@ export const PalaBeacons = ({ cfg, aplicar }: { cfg: Config; aplicar: (c: Config
         {eco && <div className="mt-3"><Aviso tono="ok">{eco}</Aviso></div>}
         <Resultado cfg={cfg} porMac={porMac} />
       </Bloque>
+
+      {postura && (
+        <AjustarPostura
+          postura={postura}
+          cfg={cfg}
+          llega={Boolean(porMac.get(asignadas[postura.papel]))}
+          alCerrar={() => setPostura(null)}
+          alCapturar={(pose) => capturar(postura, pose)}
+        />
+      )}
     </>
   );
 };
@@ -291,3 +316,83 @@ const Resultado = ({ cfg, porMac }: { cfg: Config; porMac: Map<string, Visto> })
     </div>
   );
 };
+
+/**
+ * El modal de cada postura: la pala dibujada y dos mandos para dejarla como
+ * está la máquina de verdad antes de capturar.
+ *
+ * Mueve las dos piezas aunque la postura calibre solo una, porque de otro modo
+ * no hay forma de reconocer la máquina en el dibujo.
+ */
+const AjustarPostura = ({
+  postura, cfg, llega, alCerrar, alCapturar,
+}: {
+  postura: Postura;
+  cfg: Config;
+  llega: boolean;
+  alCerrar: () => void;
+  alCapturar: (pose: { pluma: number; brazo: number }) => void;
+}) => {
+  const guardado = (p: PapelBeacon) => (cfg.pala.dibujo ?? {})[p]?.[postura.ranura];
+  const [pluma, setPluma] = useState(guardado('pluma') ?? 0);
+  const [brazo, setBrazo] = useState(guardado('brazo') ?? 0);
+
+  return (
+    <Modal
+      titulo={postura.titulo}
+      subtitulo={`Calibra ${NOMBRE_PAPEL[postura.papel].toLowerCase()}`}
+      alCerrar={alCerrar}
+      pie={
+        <div className="flex items-center justify-between">
+          <span className={`font-mono text-[11px] uppercase tracking-wider ${llega ? 'text-ok' : 'text-bad'}`}>
+            {llega ? 'Recibiendo del beacon' : 'Sin señal del beacon'}
+          </span>
+          <div className="flex items-center">
+            <Boton variante="tenue" onClick={alCerrar}>Cancelar</Boton>
+            <Boton variante="fuerte" disabled={!llega} onClick={() => alCapturar({ pluma, brazo })} className="ml-2">
+              Capturar
+            </Boton>
+          </div>
+        </div>
+      }
+    >
+      <p className="m-0 text-[12.5px] leading-relaxed text-ink2">{postura.detalle}</p>
+      <p className="mt-2 mb-0 text-[12px] leading-relaxed text-ink3">
+        Mueve la pluma y el brazo hasta que el dibujo quede como está la máquina ahora mismo.
+        Con eso la pantalla principal dibuja tu pala y no una pose cualquiera.
+      </p>
+
+      <div className="mx-auto mt-3 w-full max-w-[420px]">
+        <PalaPerfil pluma={pluma} brazo={brazo} />
+      </div>
+
+      <Mando etiqueta="Pluma" valor={pluma} alCambiar={setPluma} />
+      <Mando etiqueta="Brazo" valor={brazo} alCambiar={setBrazo} />
+    </Modal>
+  );
+};
+
+const Mando = ({
+  etiqueta, valor, alCambiar,
+}: {
+  etiqueta: string;
+  valor: number;
+  alCambiar: (v: number) => void;
+}) => (
+  <div className="mt-3">
+    <div className="flex items-baseline justify-between">
+      <span className="font-mono text-[11px] uppercase tracking-wider text-ink3">{etiqueta}</span>
+      <span className="font-mono text-[13px] text-ink1">{valor.toFixed(0)}°</span>
+    </div>
+    {/* Alto generoso: esto se toca con guantes. */}
+    <input
+      type="range"
+      min={-38}
+      max={38}
+      step={1}
+      value={valor}
+      onChange={(e) => alCambiar(Number(e.target.value))}
+      className="mt-1 h-8 w-full cursor-pointer"
+    />
+  </div>
+);

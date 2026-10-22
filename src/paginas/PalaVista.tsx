@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Anuncio, bluetooth, hayBluetooth } from '../nucleo/bluetooth';
-import { LecturaKSensor, kSensorDe } from '../nucleo/ksensor';
+import { LecturaKSensor, Vector3, kSensorDe } from '../nucleo/ksensor';
 import {
   Muestra, NOMBRE_ESTADO, NOMBRE_PAPEL, PapelBeacon,
   anguloCalibrado, estadosPala, gradosPorSegundo, inclinacionMaquina, ventana,
@@ -26,12 +26,34 @@ const VENTANA_MS = 1500;
 const SIN_NADA_MS = 6000;
 /** Pasado esto, el beacon se da por mudo. */
 const MUDO_MS = 8000;
+/**
+ * Cuánto pesa cada lectura nueva contra lo que ya había.
+ *
+ * Estos acelerómetros tiemblan unas cuantas cuentas aunque estén quietos, y
+ * sin suavizar el ángulo bailaba décimas todo el rato. Con 0.3 a dos lecturas
+ * por segundo el número se asienta en un par de segundos y sigue respondiendo
+ * en cuanto la pluma se mueve de verdad.
+ */
+const PESO_NUEVO = 0.3;
+/** Por debajo de esto no se repinta: evita el baile de la última décima. */
+const ZONA_MUERTA = 0.25;
 
 interface Oido {
   lectura: LecturaKSensor;
+  /** Los ejes ya suavizados: es lo que se mide, no el crudo. */
+  ejes: Vector3;
   rssi: number;
   at: number;
 }
+
+const suavizar = (antes: Vector3 | undefined, nuevo: Vector3): Vector3 =>
+  antes
+    ? {
+      x: antes.x + (nuevo.x - antes.x) * PESO_NUEVO,
+      y: antes.y + (nuevo.y - antes.y) * PESO_NUEVO,
+      z: antes.z + (nuevo.z - antes.z) * PESO_NUEVO,
+    }
+    : nuevo;
 
 const PAPELES: PapelBeacon[] = ['tornamesa', 'pluma', 'brazo'];
 
@@ -56,7 +78,14 @@ export const PalaVista = ({
     if (!hayBluetooth() || macs.length === 0) return;
     const quitar = bluetooth.alAnuncio((a: Anuncio) => {
       const l = kSensorDe(a);
-      if (l) pendientes.current.set(a.mac, { lectura: l, rssi: a.rssi, at: Date.now() });
+      if (!l) return;
+      const antes = pendientes.current.get(a.mac);
+      pendientes.current.set(a.mac, {
+        lectura: l,
+        ejes: suavizar(antes?.ejes, l.ejes),
+        rssi: a.rssi,
+        at: Date.now(),
+      });
     });
     const arrancar = () => bluetooth.escanear(0, 200, macs).catch(() => undefined);
     arrancar();
@@ -94,13 +123,37 @@ export const PalaVista = ({
     const o = lecturaDe(p);
     if (!cal || !o) return null;
     return p === 'tornamesa'
-      ? inclinacionMaquina(cal, o.lectura.ejes)
-      : anguloCalibrado(cal, o.lectura.ejes);
+      ? inclinacionMaquina(cal, o.ejes)
+      : anguloCalibrado(cal, o.ejes);
   };
 
-  const anguloPluma = anguloDe('pluma');
-  const anguloBrazo = anguloDe('brazo');
-  const inclinacion = anguloDe('tornamesa');
+  /* Zona muerta: el valor que se enseña solo cambia si se movió de verdad.
+     Sin esto la última décima bailaba sola y parecía que la pala temblaba. */
+  const quietos = useRef<Partial<Record<PapelBeacon, number>>>({});
+  const asentado = (p: PapelBeacon): number | null => {
+    const g = anguloDe(p);
+    if (g === null) return null;
+    const antes = quietos.current[p];
+    if (antes === undefined || Math.abs(g - antes) > ZONA_MUERTA) quietos.current[p] = g;
+    return quietos.current[p] ?? g;
+  };
+
+  /* Lo medido en grados no es lo que hay que girar en el dibujo: la silueta
+     viene con su propia pose. Las dos posturas de la calibración dicen cómo
+     se veía la máquina en cada extremo, y entre ellas se interpola. */
+  const aDibujo = (p: PapelBeacon, medido: number | null): number => {
+    if (medido === null) return 0;
+    const d = (cfg.pala.dibujo ?? {})[p];
+    const cal = cfg.pala.calibracion[p];
+    if (!d || d.a === undefined || d.b === undefined || !cal?.b) return medido;
+    const recorrido = anguloCalibrado(cal, cal.b);
+    if (recorrido === null || Math.abs(recorrido) < 1) return medido;
+    return d.a + (medido * (d.b - d.a)) / recorrido;
+  };
+
+  const anguloPluma = asentado('pluma');
+  const anguloBrazo = asentado('brazo');
+  const inclinacion = asentado('tornamesa');
 
   /* La velocidad de la pluma sale del ángulo, no de las cuentas crudas: así la
      pendiente del banco se cancela sola al derivar. */
@@ -158,7 +211,11 @@ export const PalaVista = ({
         <>
           <div className="palav-maquina-dibujo">
             <div className="palav-perfil">
-              <PalaPerfil pluma={anguloPluma ?? 0} brazo={anguloBrazo ?? 0} inclinacion={inclinacion ?? 0} />
+              <PalaPerfil
+                pluma={aDibujo('pluma', anguloPluma)}
+                brazo={aDibujo('brazo', anguloBrazo)}
+                inclinacion={inclinacion ?? 0}
+              />
             </div>
             <div className="palav-arriba">
               <PalaDesdeArriba giro={giroAcumulado} />
