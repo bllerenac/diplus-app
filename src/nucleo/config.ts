@@ -10,6 +10,7 @@ import { AjustesRegistro } from './registro';
 import { defectosDe, protocolo } from './protocolos';
 import { Tarjeta, nuevaTarjeta, panelFijo } from './panel';
 import { Recomendacion, RECOMENDACION_POR_DEFECTO } from './geo';
+import { Calibracion, PapelBeacon } from './pala';
 import { AjustesMovimiento, MOVIMIENTO_POR_DEFECTO } from './movimiento';
 import { AjustesPorSenal } from './senales';
 import { AjustesEnvio, ENVIO_POR_DEFECTO } from './envio';
@@ -56,6 +57,24 @@ export interface Canal {
   token: string;
 }
 
+/**
+ * Los beacons de la pala y lo que se capturó al calibrarlos.
+ *
+ * La MAC se asigna a un sitio desde el dibujo de la máquina, no se escribe a
+ * mano: arriba de una pala, con polvo, los tres beacons son idénticos.
+ */
+export interface AjustesPala {
+  /** MAC del beacon de cada sitio, vacío si todavía no se asignó. */
+  beacons: Record<PapelBeacon, string>;
+  /** Las posturas capturadas, por sitio. */
+  calibracion: Partial<Record<PapelBeacon, Calibracion>>;
+}
+
+export const PALA_POR_DEFECTO: AjustesPala = {
+  beacons: { tornamesa: '', pluma: '', brazo: '' },
+  calibracion: {},
+};
+
 export interface Config {
   /** Que se guarda en la base del equipo y durante cuanto. */
   registro: AjustesRegistro;
@@ -86,6 +105,15 @@ export interface Config {
   maqueta: boolean;
   /** Cambia el mapa por la pala en 3D. No sobrevive a un reinicio. */
   demoPala: boolean;
+  /**
+   * Cambia la pantalla principal por la de la pala.
+   *
+   * La vista de camiones no se toca: es otra pantalla, elegida por esta
+   * bandera. El menú es el mismo en los dos casos.
+   */
+  modoPala: boolean;
+  /** Los beacons de la pala y su calibración. */
+  pala: AjustesPala;
   /** Servicio en primer plano: sigue leyendo y enviando con la pantalla apagada. */
   segundoPlano: boolean;
   /** Velocidad y consumo que hay que mantener en cada geocerca, por su id. */
@@ -128,6 +156,8 @@ const POR_DEFECTO: Config = {
   senales: {},
   maqueta: false,
   demoPala: false,
+  modoPala: false,
+  pala: PALA_POR_DEFECTO,
   segundoPlano: true,
   recomendaciones: {},
   recomendacionGeneral: RECOMENDACION_POR_DEFECTO,

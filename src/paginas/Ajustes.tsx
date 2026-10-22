@@ -121,15 +121,17 @@ import { Montaje } from './montaje';
 import { Envio } from './envio';
 import { HorometroAjuste } from './HorometroAjuste';
 import { Bluetooth } from './bluetooth';
+import { PalaBeacons } from './PalaBeacons';
 import { horometro } from '../nucleo/horometro';
 
 type Pestana =
-  'sensores' | 'inercial' | 'bluetooth' | 'panel' | 'posicion' | 'datos' | 'envio' | 'horometro' | 'servidor' | 'kiosco';
+  'sensores' | 'inercial' | 'bluetooth' | 'pala' | 'panel' | 'posicion' | 'datos' | 'envio' | 'horometro' | 'servidor' | 'kiosco';
 
 const PESTANAS: { id: Pestana; nombre: string }[] = [
   { id: 'sensores', nombre: 'Sensores' },
   { id: 'inercial', nombre: 'Inercial' },
   { id: 'bluetooth', nombre: 'Bluetooth' },
+  { id: 'pala', nombre: 'Pala' },
   { id: 'panel', nombre: 'Panel' },
   { id: 'posicion', nombre: 'Posición' },
   { id: 'datos', nombre: 'Datos' },
@@ -1664,6 +1666,8 @@ export default function Ajustes() {
 
           {/* ── Posición ───────────────────────────────────────────────── */}
           {pestana === 'bluetooth' && <Bluetooth />}
+
+          {pestana === 'pala' && <PalaBeacons cfg={cfg} aplicar={aplicar} />}
 
           {pestana === 'posicion' && (
             <>

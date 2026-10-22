@@ -18,7 +18,14 @@ import { protocolo } from './protocolos';
 import { Rumbo } from './rumbo';
 import { calcularValoresMqtt, cuerpoMqtt, CAMPOS_MQTT_MISKIMAYO } from './envio';
 import { hardware } from './hardware';
-import { estadosPala } from './pala';
+import {
+  anguloCalibrado,
+  estadosPala,
+  gradosPorSegundo,
+  inclinacionMaquina,
+  ventana,
+} from './pala';
+import { kSensorDe, leerKSensor } from './ksensor';
 import { ascii, leerIBeacon, uuidCorto } from './bluetooth';
 import { alLatir, cada, soltar } from './reloj';
 import { senal } from './lecturas';
@@ -941,5 +948,113 @@ describe('reloj que no se duerme', () => {
     expect(vueltas).toBe(3);
     soltar(r);
     vi.useRealTimers();
+  });
+});
+
+describe('tramas KSensor de los beacons KKM', () => {
+  /* Esta es la trama real del KBPro_686915, tal como salió del escaneo. */
+  const REAL = '21000b0c771e80ffb9001703c3';
+
+  it('saca pila, temperatura y ejes', () => {
+    const l = leerKSensor(REAL);
+    expect(l).not.toBeNull();
+    expect(l!.pilaMv).toBe(3083);
+    expect(l!.temperatura).toBeCloseTo(30.46, 2);
+    expect(l!.ejes).toEqual({ x: -128, y: 185, z: 791 });
+    expect(l!.tx).toBe(-61);
+  });
+
+  it('no confunde la trama de identidad con una lectura', () => {
+    expect(leerKSensor('770400010001')).toBeNull();
+  });
+
+  it('aguanta basura sin reventar', () => {
+    expect(leerKSensor('')).toBeNull();
+    expect(leerKSensor('21')).toBeNull();
+  });
+
+  it('la encuentra entre los datos de servicio del anuncio', () => {
+    const anuncio = {
+      mac: 'BC:57:29:1F:86:6F', nombre: 'KBPro_686915', rssi: -57, at: 0,
+      fabricante: {}, servicios: [],
+      datosServicio: {
+        '0000feaa-0000-1000-8000-00805f9b34fb': REAL,
+        '00002080-0000-1000-8000-00805f9b34fb': '770400010001',
+      },
+    };
+    expect(kSensorDe(anuncio)!.pilaMv).toBe(3083);
+  });
+});
+
+describe('calibración de la pluma por dos posturas', () => {
+  /* La pluma gira alrededor de un eje horizontal: la gravedad recorre un arco
+     en el plano vertical. Se simula con el beacon mirando hacia abajo y luego
+     girado 40°, que es un recorrido de pluma creíble. */
+  const grados = (g: number) => ({ x: Math.sin((g * Math.PI) / 180), y: 0, z: Math.cos((g * Math.PI) / 180) });
+  const cal = { a: grados(0), b: grados(40) };
+
+  it('la postura de referencia vale cero', () => {
+    expect(anguloCalibrado(cal, grados(0))).toBeCloseTo(0, 6);
+  });
+
+  it('la segunda postura da su ángulo y con signo positivo', () => {
+    expect(anguloCalibrado(cal, grados(40))).toBeCloseTo(40, 6);
+  });
+
+  it('mide posturas intermedias y el sentido contrario', () => {
+    expect(anguloCalibrado(cal, grados(17))).toBeCloseTo(17, 6);
+    expect(anguloCalibrado(cal, grados(-12))).toBeCloseTo(-12, 6);
+  });
+
+  it('no le afecta la escala: las cuentas crudas valen igual', () => {
+    const crudo = { x: grados(25).x * 822, y: 0, z: grados(25).z * 822 };
+    expect(anguloCalibrado(cal, crudo)).toBeCloseTo(25, 6);
+  });
+
+  it('ignora lo que se mueva fuera del plano de giro', () => {
+    const sucio = { ...grados(30), y: 0.08 };
+    expect(anguloCalibrado(cal, sucio)).toBeCloseTo(30, 6);
+  });
+
+  it('sin segunda postura no inventa un ángulo', () => {
+    expect(anguloCalibrado({ a: grados(0) }, grados(10))).toBeNull();
+  });
+
+  it('con las dos posturas iguales tampoco', () => {
+    expect(anguloCalibrado({ a: grados(5), b: grados(5) }, grados(10))).toBeNull();
+  });
+});
+
+describe('velocidad de la pluma', () => {
+  it('son grados por segundo entre los extremos de la ventana', () => {
+    expect(gradosPorSegundo([
+      { at: 1000, angulo: 10 },
+      { at: 2000, angulo: 14 },
+      { at: 3000, angulo: 18 },
+    ])).toBeCloseTo(4, 6);
+  });
+
+  it('bajar da negativo', () => {
+    expect(gradosPorSegundo([{ at: 0, angulo: 30 }, { at: 2000, angulo: 20 }])).toBeCloseTo(-5, 6);
+  });
+
+  it('con una sola muestra no hay velocidad', () => {
+    expect(gradosPorSegundo([{ at: 0, angulo: 10 }])).toBe(0);
+  });
+
+  it('la ventana descarta lo viejo', () => {
+    const m = [{ at: 0, angulo: 1 }, { at: 9000, angulo: 2 }, { at: 9500, angulo: 3 }];
+    expect(ventana(m, 2000, 10000)).toHaveLength(2);
+  });
+});
+
+describe('inclinación de la máquina', () => {
+  it('en la misma postura es cero', () => {
+    expect(inclinacionMaquina({ a: { x: 0, y: 0, z: 1 } }, { x: 0, y: 0, z: 822 })).toBeCloseTo(0, 6);
+  });
+
+  it('un banco inclinado se nota', () => {
+    const tumbado = { x: Math.sin(Math.PI / 36), y: 0, z: Math.cos(Math.PI / 36) };
+    expect(inclinacionMaquina({ a: { x: 0, y: 0, z: 1 } }, tumbado)).toBeCloseTo(5, 4);
   });
 });
