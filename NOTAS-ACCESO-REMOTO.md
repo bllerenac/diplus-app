@@ -78,27 +78,3 @@ estar en la misma red de Tailscale.
 | Responde al ping pero RustDesk no | El servicio se murió: optimización de batería o no se aceptó la captura de pantalla |
 | El equipo desapareció de Tailscale | Caducó la llave (paso 1.5) |
 
----
-
-# Medidas del Komatsu PC4000-11
-
-De catálogo, para dibujar la máquina a escala en vez de a ojo.
-
-| | Carga frontal | Retroexcavadora |
-|---|---|---|
-| Pluma | 7.150 mm | 9.750 mm |
-| Brazo | 4.900 mm | 4.500 mm |
-| Cucharón | 22 m³ | 22 m³ |
-| Alcance máximo | 15.100 mm | 16.650 mm |
-| Altura de corte | 17.400 mm | — |
-| Profundidad | 2.900 mm | 8.000 mm |
-
-Tren de rodaje, igual en las dos: **8.842 mm** de oruga total, **6.700 mm**
-apoyados, **930 mm** de despeje, zapata de 1.200 o 1.500 mm. Alto total unos
-8.500 mm y peso en orden de trabajo entre 393 y 409 t.
-
-La `E` del PC4000-11E es la de accionamiento eléctrico.
-
-**Ojo:** el modelo 3D que hay en `campo/pala-articulada.glb` es un **PC8000**,
-otra máquina. Sirvió para sacar nombres de piezas y proporciones generales, no
-como retrato fiel.
