@@ -1,85 +1,124 @@
-/* La pala dibujada. Silueta rellena y contorno claro: a tres metros y con la
-   maquina moviendose, lo que se lee es la forma, no el detalle. */
+/* Komatsu PC8000 de frente. Dos tonos por pieza —cara superior mas clara que
+   el costado— para que el volumen se lea sin sombras ni degradados, que en
+   este WebView salen caros. */
 
 .pdib-svg {
   display: block;
   width: 100%;
   height: 100%;
 }
-
-.pdib-svg * {
+.pdib-svg g {
   transition: transform 180ms linear;
 }
 
 .pdib-suelo {
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: rgba(255, 255, 255, 0.14);
   stroke-width: 2;
-  stroke-dasharray: 10 8;
+  stroke-dasharray: 12 9;
 }
 
+/* Tren de rodaje */
 .pdib-oruga {
-  fill: #1b2730;
-  stroke: #46616f;
+  fill: #141d24;
+  stroke: #3d5666;
   stroke-width: 2.5;
 }
-.pdib-rueda { fill: #46616f; }
-.pdib-riel {
-  stroke: #46616f;
+.pdib-rueda {
+  fill: #223240;
+  stroke: #3d5666;
+  stroke-width: 2.5;
+}
+.pdib-rodillo {
+  fill: #1b2832;
+  stroke: #3d5666;
+  stroke-width: 1.8;
+}
+.pdib-eje { fill: #7f98a6; }
+.pdib-huella {
+  stroke: #3d5666;
   stroke-width: 2;
-  stroke-dasharray: 5 6;
+  stroke-linecap: round;
 }
 
+/* Chapa */
 .pdib-casa {
-  fill: #d9b43a;
-  stroke: #15202a;
+  fill: #d8b23a;
+  stroke: #121b22;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.pdib-casa-alto { fill: #ecc954; stroke: none; }
+.pdib-contrapeso {
+  fill: #b8942c;
+  stroke: #121b22;
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
 .pdib-cabina {
-  fill: #e7c552;
-  stroke: #15202a;
+  fill: #e8c550;
+  stroke: #121b22;
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
-.pdib-vidrio { fill: #15323f; }
-.pdib-detalle { fill: #15202a; }
+.pdib-vidrio { fill: #15323f; stroke: none; }
+.pdib-escape {
+  fill: #2a3942;
+  stroke: #121b22;
+  stroke-width: 2;
+}
+.pdib-baranda {
+  stroke: #2a3942;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.pdib-escalera {
+  stroke: #2a3942;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
 
+/* Brazos */
 .pdib-pluma,
 .pdib-brazo {
-  fill: #e4c04a;
-  stroke: #15202a;
+  fill: #ddb943;
+  stroke: #121b22;
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
+.pdib-pluma-alto,
+.pdib-brazo-alto { fill: #f0cd5c; stroke: none; }
+
 .pdib-cuchara {
-  fill: #c9a333;
-  stroke: #15202a;
+  fill: #c2a02f;
+  stroke: #121b22;
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
-.pdib-dientes {
-  stroke: #15202a;
-  stroke-width: 5;
+.pdib-cuchara-alto { fill: #d9b53e; stroke: none; }
+.pdib-diente {
+  stroke: #121b22;
+  stroke-width: 6;
   stroke-linecap: round;
-  fill: none;
 }
 
 .pdib-pasador {
-  fill: #15202a;
+  fill: #2a3942;
+  stroke: #121b22;
+  stroke-width: 2;
 }
 .pdib-cilindro {
-  stroke: #15202a;
-  stroke-width: 9;
+  stroke: #2a3942;
+  stroke-width: 11;
   stroke-linecap: round;
 }
 .pdib-vastago {
-  stroke: #9fb4c0;
-  stroke-width: 4;
+  stroke: #a9bdc8;
+  stroke-width: 5;
   stroke-linecap: round;
 }
 
 .pdib-tornamesa {
-  fill: #223240;
-  stroke: #46616f;
+  fill: #1b2832;
+  stroke: #3d5666;
   stroke-width: 2;
 }

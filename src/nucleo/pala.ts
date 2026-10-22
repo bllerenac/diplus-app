@@ -154,6 +154,13 @@ export interface Postura {
   ranura: 'a' | 'b';
   titulo: string;
   detalle: string;
+  /**
+   * Cómo se dibuja la máquina en esta postura: es a lo que hay que apuntar.
+   *
+   * Al estar definidas aquí, la pantalla sabe qué ángulo del dibujo
+   * corresponde a cada extremo medido sin que nadie tenga que ajustarlo.
+   */
+  pose: { pluma: number; brazo: number };
 }
 
 export const POSTURAS: Postura[] = [
@@ -163,6 +170,7 @@ export const POSTURAS: Postura[] = [
     ranura: 'a',
     titulo: 'Máquina en terreno plano',
     detalle: 'Parada y quieta sobre piso nivelado. De aquí sale el cero contra el que se mide después la pendiente del banco.',
+    pose: { pluma: -18, brazo: -10 },
   },
   {
     id: 'pluma-abajo',
@@ -170,6 +178,7 @@ export const POSTURAS: Postura[] = [
     ranura: 'a',
     titulo: 'Pluma abajo, cucharón en el piso',
     detalle: 'Pluma hasta abajo y el cucharón apoyado, como al empezar a excavar. Es el cero de la pluma.',
+    pose: { pluma: -24, brazo: -6 },
   },
   {
     id: 'pluma-arriba',
@@ -177,6 +186,7 @@ export const POSTURAS: Postura[] = [
     ranura: 'b',
     titulo: 'Pluma arriba del todo',
     detalle: 'Sube la pluma al máximo sin mover el brazo. Esto abre el plano de giro y fija hacia dónde crece el ángulo.',
+    pose: { pluma: 26, brazo: -6 },
   },
   {
     id: 'brazo-recogido',
@@ -184,6 +194,7 @@ export const POSTURAS: Postura[] = [
     ranura: 'a',
     titulo: 'Brazo recogido',
     detalle: 'Brazo cerrado contra la pluma, dejando la pluma como esté. Es el cero del brazo.',
+    pose: { pluma: 4, brazo: -28 },
   },
   {
     id: 'brazo-extendido',
@@ -191,5 +202,6 @@ export const POSTURAS: Postura[] = [
     ranura: 'b',
     titulo: 'Brazo extendido del todo',
     detalle: 'Abre el brazo al máximo sin tocar la pluma. Con esto queda medido su recorrido completo.',
+    pose: { pluma: 4, brazo: 26 },
   },
 ];
