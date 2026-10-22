@@ -1,0 +1,137 @@
+/* Modo pala: tapa la columna del mapa, igual que el demo. Numeros grandes,
+   que esto se lee de reojo desde el asiento y con la maquina moviendose. */
+
+.palav {
+  position: absolute;
+  inset: 0;
+  z-index: 450;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 26px;
+  background: #0b1217;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.palav-cabe {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.palav-equipo {
+  font-family: var(--mono, monospace);
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  color: var(--ink1, #e7eef2);
+}
+.palav-estado {
+  font-family: var(--mono, monospace);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--ink3, #7d8f99);
+}
+.palav-subiendo, .palav-bajando { color: var(--acc, #35e0a1); }
+.palav-girando { color: #f0b429; }
+.palav-trasladando { color: #4ea8de; }
+
+.palav-angulos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.palav-medida {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.palav-titulo {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink3, #7d8f99);
+}
+.palav-valor {
+  font-family: var(--mono, monospace);
+  font-size: 46px;
+  line-height: 1.05;
+  color: var(--ink1, #e7eef2);
+}
+.palav-flecha {
+  margin-right: 10px;
+  font-style: normal;
+  color: var(--acc, #35e0a1);
+}
+.palav-pie {
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  color: var(--ink3, #7d8f99);
+}
+
+.palav-maquina {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--ink2, #b6c4cc);
+}
+.palav-maquina b {
+  font-family: var(--mono, monospace);
+  font-size: 20px;
+  color: var(--ink1, #e7eef2);
+}
+
+.palav-beacons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: auto;
+}
+.palav-beacon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--ink2, #b6c4cc);
+}
+.palav-punto {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink3, #7d8f99);
+}
+.palav-ok .palav-punto { background: var(--acc, #35e0a1); }
+.palav-mudo .palav-punto { background: #e2574c; }
+.palav-papel { flex: 1; }
+.palav-pila {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--ink3, #7d8f99);
+}
+
+.palav-falta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--ink2, #b6c4cc);
+}
+.palav-falta p { margin: 0; font-size: 15px; }
+.palav-pista { font-size: 13px; color: var(--ink3, #7d8f99); }

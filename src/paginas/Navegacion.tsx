@@ -28,6 +28,7 @@ import { comoVoy, geocercaDe, recomendacionDe } from '../nucleo/geo';
 import { planoGuardado } from '../nucleo/plano';
 import { canal } from '../nucleo/canal';
 import { movimiento } from '../nucleo/movimiento';
+import { PalaVista } from './PalaVista';
 import { horometro } from '../nucleo/horometro';
 import { revisarSola } from '../nucleo/actualizacion';
 import { segundoPlano } from '../nucleo/reloj';
@@ -565,6 +566,10 @@ export default function Navegacion() {
             <Suspense fallback={null}>
               <DemoPala />
             </Suspense>
+          )}
+
+          {cfg.modoPala && !demo && (
+            <PalaVista cfg={cfg} valores={valores} velocidadKmh={velocidad} />
           )}
 
         <div className="nav-barra">

@@ -1667,7 +1667,25 @@ export default function Ajustes() {
           {/* ── Posición ───────────────────────────────────────────────── */}
           {pestana === 'bluetooth' && <Bluetooth />}
 
-          {pestana === 'pala' && <PalaBeacons cfg={cfg} aplicar={aplicar} />}
+          {pestana === 'pala' && (
+            <>
+              <Bloque titulo="Modo pala">
+                <Nota>
+                  Cambia la pantalla principal por la de la pala: estado, ángulos de pluma y brazo
+                  e inclinación de la máquina. La vista de camiones no se toca, es otra pantalla,
+                  y el menú sigue siendo el mismo.
+                </Nota>
+                <div className="mt-3">
+                  <Interruptor
+                    etiqueta="Pantalla principal de pala"
+                    activo={cfg.modoPala}
+                    alCambiar={(v) => aplicar({ ...cfg, modoPala: v })}
+                  />
+                </div>
+              </Bloque>
+              <PalaBeacons cfg={cfg} aplicar={aplicar} />
+            </>
+          )}
 
           {pestana === 'posicion' && (
             <>
