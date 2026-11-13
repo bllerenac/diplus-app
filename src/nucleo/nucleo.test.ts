@@ -23,6 +23,10 @@ import { ascii, leerIBeacon, uuidCorto } from './bluetooth';
 import { alLatir, cada, soltar } from './reloj';
 import { senal } from './lecturas';
 import { horometro } from './horometro';
+import {
+  Eje, MOVIMIENTO_POR_DEFECTO, V3, avanceDe, comoEsta, conTecho, frenteMedido, girarPostura, pararPostura,
+  posturaDe,
+} from './movimiento';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 
@@ -941,5 +945,76 @@ describe('reloj que no se duerme', () => {
     expect(vueltas).toBe(3);
     soltar(r);
     vi.useRealTimers();
+  });
+});
+
+describe('postura de la inercial', () => {
+  const G = 9.80665;
+  const cerca = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 6));
+  const por = (v: V3, k: number): V3 => [v[0] * k, v[1] * k, v[2] * k];
+  const mas = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const base = { ...MOVIMIENTO_POR_DEFECTO, frente: undefined, techo: undefined };
+
+  it('las seis posturas de antes miden lo mismo que antes', () => {
+    const viejas: [Eje, boolean][] = [
+      ['y', false], ['x', false], ['y', true], ['x', true], ['z', true], ['z', false],
+    ];
+    for (const [eje, inv] of viejas) {
+      const p = posturaDe({ ...base, ejeAvance: eje, avanceInvertido: inv });
+      const ref = por(p.techo, G);
+      const a: V3 = mas(ref, [1.2, -0.7, 0.4]);
+      const i = eje === 'x' ? 0 : eje === 'y' ? 1 : 2;
+      const s = inv ? -1 : 1;
+      expect(avanceDe(a, ref, p.frente)).toBeCloseTo((a[i] - ref[i]) * s, 9);
+      expect(avanceDe(a, null, p.frente)).toBeCloseTo(a[i] * s, 9);
+    }
+  });
+
+  it('inclinada 30°, mide la marcha y no el bache', () => {
+    const p = conTecho({ frente: [0, 0, -1], techo: [0, 1, 0] }, [0, Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6)]);
+    const ref = por(p.techo, G);
+    expect(avanceDe(mas(ref, por(p.frente, 2)), ref, p.frente)).toBeCloseTo(2, 9);
+    expect(avanceDe(mas(ref, por(p.techo, 3)), ref, p.frente)).toBeCloseTo(0, 9);
+    expect(comoEsta(p)).toEqual({ nombre: 'Inclinada', grados: 60 });
+  });
+
+  it('los giros van hacia donde dicen', () => {
+    const tumbada = { frente: [0, 1, 0] as V3, techo: [0, 0, 1] as V3 };
+    cerca(girarPostura(tumbada, 90).frente, [1, 0, 0]);
+    const deLado = { frente: [0, 1, 0] as V3, techo: [-1, 0, 0] as V3 };
+    expect(comoEsta(deLado).nombre).toBe('De lado');
+    const vuelta = [1, 2, 3, 4].reduce((p) => girarPostura(p, 90), tumbada);
+    cerca(vuelta.frente, tumbada.frente);
+    const parada = pararPostura(tumbada, 90);
+    cerca(parada.techo, [0, 1, 0]);
+    cerca(parada.frente, [0, 0, -1]);
+    expect(comoEsta(pararPostura(tumbada, 45)).nombre).toBe('Inclinada');
+  });
+
+  it('nombra cada postura', () => {
+    expect(comoEsta({ frente: [0, 1, 0], techo: [0, 0, 1] })).toEqual({ nombre: 'Tumbada', grados: 0 });
+    expect(comoEsta({ frente: [0, 0, -1], techo: [0, 1, 0] })).toEqual({ nombre: 'De pie', grados: 90 });
+    expect(comoEsta({ frente: [0, 0, -1], techo: [0, -1, 0] }).nombre).toBe('De pie, al revés');
+    expect(comoEsta({ frente: [0, 1, 0], techo: [0, 0, -1] }).nombre).toBe('Boca abajo');
+  });
+
+  it('la postura sigue al sensor y el frente con ella', () => {
+    const p = conTecho({ frente: [0, 1, 0], techo: [0, 0, 1] }, [0, G, 0]);
+    cerca(p.techo, [0, 1, 0]);
+    cerca(p.frente, [0, 0, -1]);
+    const igual = conTecho(p, [0, 2 * G, 0]);
+    cerca(igual.frente, p.frente);
+    const volteada = conTecho(p, [0, -G, 0]);
+    cerca(volteada.frente, p.frente);
+    cerca(volteada.techo, [0, -1, 0]);
+  });
+
+  it('acelerando halla el frente aunque no caiga en ningún eje', () => {
+    const p = girarPostura(conTecho({ frente: [0, 0, -1], techo: [0, 1, 0] }, [0, 0.9, -0.4]), 40);
+    const ref = por(p.techo, G);
+    const m = frenteMedido(mas(por(p.frente, 1.5), por(p.techo, 0.3)), ref)!;
+    cerca(m.frente, p.frente);
+    cerca(m.techo, p.techo);
+    expect(frenteMedido(por(p.frente, 0.3), ref)).toBeNull();
   });
 });

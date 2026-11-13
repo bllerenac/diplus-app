@@ -103,7 +103,7 @@ import { registro } from '../nucleo/registro';
 import { rumbo } from '../nucleo/rumbo';
 import { envio } from '../nucleo/envio';
 import { maqueta } from '../nucleo/maqueta';
-import { AjustesMovimiento, movimiento } from '../nucleo/movimiento';
+import { AjustesMovimiento, movimiento, posturaDe } from '../nucleo/movimiento';
 import { Senal } from '../nucleo/lecturas';
 import { Descargado, descargar, entrar, guardado } from '../nucleo/servidor';
 import { revisar } from '../nucleo/curva';
@@ -1502,13 +1502,12 @@ export default function Ajustes() {
                     </div>
 
                     <Montaje
-                      eje={cfg.movimiento.ejeAvance}
-                      invertido={cfg.movimiento.avanceInvertido}
+                      puesta={posturaDe(cfg.movimiento)}
                       referencia={cfg.movimiento.ref}
-                      alCambiar={(ejeAvance, avanceInvertido) =>
+                      alCambiar={({ frente, techo }) =>
                         aplicar({
                           ...cfg,
-                          movimiento: { ...cfg.movimiento, ejeAvance, avanceInvertido },
+                          movimiento: { ...cfg.movimiento, frente, techo },
                         })
                       }
                     />

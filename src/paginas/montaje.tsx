@@ -1,97 +1,23 @@
 /**
- * Dónde está el frente del camión, visto por dentro y en tres dimensiones.
+ * Cómo va puesto el equipo dentro del camión, en tres dimensiones.
  *
- * Antes esto era un desplegable con «X / Y / Z» y un interruptor para invertir.
- * Eso es correcto y es ilegible: nadie que monte un equipo en una cabina sabe
- * hacia dónde cae la Y del acelerómetro. Después fue un dibujo plano, que ya se
- * entendía pero solo servía para las cuatro posiciones tumbadas; las dos de pie
- * había que explicarlas con palabras porque en un plano no se ven.
- *
- * Aquí el camión se dibuja en alambre —como una radiografía— y el equipo va
- * dentro de la cabina, macizo, en la postura en que quedó instalado. El camión
- * no se mueve: el morro apunta siempre al mismo sitio, y lo único que cambia
- * entre las seis posiciones es cómo queda puesto el equipo. Se arrastra para
- * mirarlo desde otro lado, que es lo que convierte seis casos abstractos en
- * seis cosas que se ven.
- *
- * Al cambiar de posición el equipo **gira**, no salta. Ver el giro es lo que
- * enseña que las seis son la misma cosa mirada de seis maneras; saltando, cada
- * una parecía un dibujo suelto y había que compararlas de memoria.
- *
- * Son seis y no más porque el acelerómetro tiene tres ejes y cada uno se puede
- * mirar en dos sentidos.
- *
- * Aun así el dibujo es una intención, no una medida. Lo que de verdad lo
- * confirma es acelerar: por eso está el botón que mira unos segundos de marcha
- * y elige el eje solo. El dibujo dice lo que se cree; la prueba dice lo que es.
+ * La inclinación la pone el acelerómetro solo; la persona únicamente gira
+ * hasta que la flecha apunte al frente, o lo mide acelerando.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Eje, movimiento } from '../nucleo/movimiento';
+import {
+  Postura, V3, avanceDe, comoEsta, conTecho, cruz, frenteMedido, girarPostura, movimiento,
+  pararPostura,
+} from '../nucleo/movimiento';
 import { Boton, Aviso, Nota } from './piezas';
 
-type Lado = 'arriba' | 'derecha' | 'abajo' | 'izquierda' | 'fuera' | 'detras';
-
-/** Un punto o una dirección. En ejes del equipo: X derecha, Y arriba, Z hacia quien mira. */
-type V3 = [number, number, number];
-
-interface Posicion {
-  id: Lado;
-  eje: Eje;
-  invertido: boolean;
-  nombre: string;
-  /** Cómo queda el equipo puesto así, dicho para quien lo está montando. */
-  como: string;
-  /** Hacia dónde va el morro del camión, en ejes del equipo. */
-  frente: V3;
-  /** Y hacia dónde le queda el techo. Sin esto el camión saldría del revés. */
-  techo: V3;
-}
-
-const POSICIONES: Posicion[] = [
-  { id: 'arriba', eje: 'y', invertido: false,
-    nombre: 'Hacia arriba de la pantalla',
-    como: 'Tumbado, y el borde de arriba de la pantalla mira al frente.',
-    frente: [0, 1, 0], techo: [0, 0, 1] },
-  { id: 'derecha', eje: 'x', invertido: false,
-    nombre: 'Hacia la derecha',
-    como: 'Tumbado, y el borde derecho de la pantalla mira al frente.',
-    frente: [1, 0, 0], techo: [0, 0, 1] },
-  { id: 'abajo', eje: 'y', invertido: true,
-    nombre: 'Hacia abajo de la pantalla',
-    como: 'Tumbado, y el borde de abajo de la pantalla mira al frente.',
-    frente: [0, -1, 0], techo: [0, 0, 1] },
-  { id: 'izquierda', eje: 'x', invertido: true,
-    nombre: 'Hacia la izquierda',
-    como: 'Tumbado, y el borde izquierdo de la pantalla mira al frente.',
-    frente: [-1, 0, 0], techo: [0, 0, 1] },
-  { id: 'detras', eje: 'z', invertido: true,
-    nombre: 'Por la espalda del equipo',
-    como: 'De pie, con la pantalla mirando al conductor. Es lo más común.',
-    frente: [0, 0, -1], techo: [0, 1, 0] },
-  { id: 'fuera', eje: 'z', invertido: false,
-    nombre: 'Por la pantalla',
-    como: 'De pie, con la pantalla mirando al parabrisas.',
-    frente: [0, 0, 1], techo: [0, 1, 0] },
-];
-
-/** Las cuatro tumbadas, en el orden en que las recorre el botón de girar. */
-const VUELTA: Lado[] = ['arriba', 'derecha', 'abajo', 'izquierda'];
-
-const posicionDe = (eje: Eje, invertido: boolean): Posicion =>
-  POSICIONES.find((p) => p.eje === eje && p.invertido === invertido) ?? POSICIONES[0];
-
-const eje3 = (e: Eje) => (e === 'x' ? 0 : e === 'y' ? 1 : 2);
+/** Cada toque de girar. Lo fino lo deja la prueba de marcha. */
+const SALTO = 45;
 
 /** Cuánto dura la prueba de marcha. Corta: acelerar cinco segundos ya se nota. */
 const PRUEBA_MS = 5000;
 
 // ── Las tres dimensiones, con lo justo ──────────────────────────────────────
-
-const cruz = (a: V3, b: V3): V3 => [
-  a[1] * b[2] - a[2] * b[1],
-  a[2] * b[0] - a[0] * b[2],
-  a[0] * b[1] - a[1] * b[0],
-];
 
 /** Desde dónde se mira. Es solo el punto de vista: no cambia nada de lo medido. */
 const mirar = (v: V3, giro: number, alto: number): V3 => {
@@ -128,15 +54,11 @@ type Cuat = [number, number, number, number];
  * posiciones: entre dos cuaterniones hay un camino corto y único, mientras que
  * interpolar matrices casilla a casilla deforma el aparato por el camino.
  *
- * El signo de la primera fila no es un capricho. «Derecha, techo, morro» es la
- * forma natural de decir cómo está puesto un camión, pero como terna es zurda:
- * derecha × techo da hacia atrás, no hacia adelante. Una terna zurda no es un
- * giro sino un giro **más un espejo**, y de una matriz así no sale ningún
- * cuaternión: salía siempre el mismo, y por eso el aparato no se movía. Se
- * quita el espejo aquí y se vuelve a poner al aplicarlo, que es una línea en
- * cada sitio y deja la matriz siendo un giro de verdad.
+ * La primera fila es la izquierda del camión: en el dibujo la X crece hacia su
+ * izquierda (el morro viene hacia quien mira), y así la matriz es un giro de
+ * verdad, sin espejo.
  */
-const cuaternion = (p: Posicion): Cuat => {
+const cuaternion = (p: Postura): Cuat => {
   const d = cruz(p.frente, p.techo);
   /* Por filas, que es la vuelta —del equipo al camión— y es la que se aplica. */
   const m = [
@@ -201,7 +123,7 @@ const GIRO_MS = 420;
 
 // ── El camión, en alambre ───────────────────────────────────────────────────
 
-/* Ejes del camión: X a su derecha, Y hacia el techo, Z hacia el morro. El
+/* Ejes del camión: X a su izquierda, Y hacia el techo, Z hacia el morro. El
    origen es el centro del camión; el suelo queda en y = -46. */
 type Linea = [V3, V3];
 
@@ -330,24 +252,12 @@ const SALPICADERO: V3 = [0, 6, 62];
 // ── El chivato: el equipo solo, con sus ejes ────────────────────────────────
 
 /**
- * Dentro del camión el equipo sale pequeño y medio tapado por el alambre, que
- * está bien para ver dónde queda pero no para ver **cómo** queda. Esto es el
- * mismo aparato, en grande, aparte y con sus tres ejes dibujados: gira con el
- * de dentro, y por eso al pulsar girar se ve el movimiento aunque el de la
- * cabina quede de espaldas.
- *
- * La Z es la que sale por la pantalla, y va marcada como tal. Es la que decide
- * las dos posiciones de pie y la que nadie adivina.
+ * El mismo aparato, en grande y aparte, con una flecha hacia el frente del
+ * camión: dentro de la cabina sale pequeño y tapado por el alambre.
  */
-const CHIVATO = { x: 4, y: 98, ancho: 90, alto: 84, escala: 0.9, largo: 22 };
+const CHIVATO = { x: 4, y: 92, ancho: 100, alto: 90, escala: 0.9, largo: 32 };
 const CHIVATO_C: [number, number] = [
-  CHIVATO.x + CHIVATO.ancho / 2, CHIVATO.y + 36,
-];
-
-const EJES: { dir: V3; color: string; letra: string }[] = [
-  { dir: [1, 0, 0], color: 'var(--acc2)', letra: 'X' },
-  { dir: [0, 1, 0], color: 'var(--warn)', letra: 'Y' },
-  { dir: [0, 0, 1], color: 'var(--acc)', letra: 'Z' },
+  CHIVATO.x + CHIVATO.ancho / 2, CHIVATO.y + 38,
 ];
 
 function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: number }) {
@@ -377,12 +287,7 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
     [giro, alto],
   );
 
-  /* Girar y devolver el espejo que se le quitó al cuaternión, que es este menos
-     de la izquierda. Ver `cuaternion` para el porqué. */
-  const girado = (v: V3): V3 => {
-    const g = conCuat(postura, v);
-    return [-g[0], g[1], g[2]];
-  };
+  const girado = (v: V3): V3 => conCuat(postura, v);
   const enElCamion = (v: V3): V3 => {
     const g = girado(v);
     return [g[0] + SALPICADERO[0], g[1] + SALPICADERO[1], g[2] + SALPICADERO[2]];
@@ -414,10 +319,11 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
   // ── El chivato ──────────────────────────────────────────────────────────
   /* Sin fuga y en su propio centro: aquí no se trata de situar el aparato en
      ningún sitio, solo de verle la postura, y la perspectiva solo estorbaría. */
-  const enChivato = (v: V3): [number, number, number] => {
-    const m = mirar(girado(v), giro, alto);
+  const alChivato = (v: V3): [number, number, number] => {
+    const m = mirar(v, giro, alto);
     return [CHIVATO_C[0] + m[0] * CHIVATO.escala, CHIVATO_C[1] - m[1] * CHIVATO.escala, m[2]];
   };
+  const enChivato = (v: V3) => alChivato(girado(v));
 
   const carasChivato = CARAS.map((c) => {
     const p = c.pts.map((v) => mirar(girado(v), giro, alto));
@@ -425,25 +331,27 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
     return { ...c, z, xy: c.pts.map(enChivato) };
   }).sort((a, b) => a.z - b.z);
 
-  const ejes = EJES.map((e) => {
-    const o = enChivato([0, 0, 0]);
-    const p = enChivato([
-      e.dir[0] * CHIVATO.largo, e.dir[1] * CHIVATO.largo, e.dir[2] * CHIVATO.largo,
-    ]);
+  /* La flecha va en ejes del camión: queda quieta y el equipo gira debajo. */
+  const ejes = [{ color: 'var(--warn)', letra: 'FRENTE' }].map((e) => {
+    const o = alChivato([0, 0, 0]);
+    const p = alChivato([0, 0, CHIVATO.largo]);
     const dx = p[0] - o[0], dy = p[1] - o[1];
     const largo = Math.hypot(dx, dy);
-    /* Un eje que apunta a la cámara se proyecta en un punto: dibujarlo como
-       flecha daría una raya de dos píxeles que no dice nada. Se dibuja como
-       diana, lleno si viene hacia quien mira y hueco si se va. */
+    /* Si apunta a la cámara se proyecta en un punto: se dibuja como diana,
+       llena si viene hacia quien mira y hueca si se va. */
     const deFrente = largo < 4;
     const ux = largo > 0.001 ? dx / largo : 0;
     const uy = largo > 0.001 ? dy / largo : 0;
+    const dentro = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
     return {
       ...e, o, p, deFrente,
       viene: p[2] >= o[2],
       punta: `${p[0]},${p[1]} ${p[0] - ux * 6.5 - uy * 3},${p[1] - uy * 6.5 + ux * 3} ` +
              `${p[0] - ux * 6.5 + uy * 3},${p[1] - uy * 6.5 - ux * 3}`,
-      rotulo: [p[0] + ux * 10 + (deFrente ? 10 : 0), p[1] + uy * 10 + 3],
+      rotulo: [
+        dentro(p[0] + ux * 12 + (deFrente ? 16 : 0), CHIVATO.x + 16, CHIVATO.x + CHIVATO.ancho - 16),
+        dentro(p[1] + uy * 10 + 3, CHIVATO.y + 10, CHIVATO.y + CHIVATO.alto - 18),
+      ],
     };
   });
 
@@ -589,15 +497,22 @@ function Escena({ postura, giro, alto }: { postura: Cuat; giro: number; alto: nu
 const VISTA_INICIAL = { giro: 0.62, alto: 0.34 };
 
 export function Montaje({
-  eje, invertido, referencia, alCambiar,
+  puesta, referencia, alCambiar,
 }: {
-  eje: Eje;
-  invertido: boolean;
+  puesta: Postura;
   referencia: { x: number; y: number; z: number } | null;
-  alCambiar: (eje: Eje, invertido: boolean) => void;
+  alCambiar: (p: Postura) => void;
 }) {
-  const puesta = posicionDe(eje, invertido);
-  const destino = useMemo(() => cuaternion(puesta), [puesta]);
+  /* La gravedad de ahora, suavizada: el dibujo queda como está el equipo. */
+  const [gravedad, setGravedad] = useState<V3 | null>(null);
+  const mostrada = gravedad ? conTecho(puesta, gravedad) : puesta;
+  /* Por valor y redondeada: llega como objeto nuevo en cada pintado y la
+     gravedad tiembla. */
+  const clave = [...mostrada.frente, ...mostrada.techo].map((v) => v.toFixed(2)).join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const destino = useMemo(() => cuaternion(mostrada), [clave]);
+  const como = comoEsta(mostrada);
+  const claveFrente = puesta.frente.join(',');
 
   /* Un poco de lado y un poco desde arriba: de frente no se vería que hay
      fondo, y es justo el fondo lo que se quiere enseñar. */
@@ -630,40 +545,32 @@ export function Montaje({
   const [dictamen, setDictamen] = useState<string | null>(null);
   const muestras = useRef<number[][]>([]);
 
-  /* Lo que marca el eje elegido, ahora mismo. Sin esto el dibujo es una
-     promesa: se elige un lado y no hay forma de ver si acertó sin salir de
-     esta pantalla, mirar el panel y volver. */
+  /* La postura del sensor y lo que marca el frente elegido, ahora mismo. */
   useEffect(() => {
     const t = setInterval(() => {
       const c = movimiento.crudo();
-      if (!c || !referencia) {
+      if (!c) {
         setAvance(null);
         return;
       }
-      const i = eje3(eje);
-      const a = [c.ax, c.ay, c.az][i] - [referencia.x, referencia.y, referencia.z][i];
-      setAvance(invertido ? -a : a);
+      setGravedad((g) => (g
+        ? [g[0] * 0.8 + c.ax * 0.2, g[1] * 0.8 + c.ay * 0.2, g[2] * 0.8 + c.az * 0.2]
+        : [c.ax, c.ay, c.az]));
+      setAvance(referencia ? avanceDe(
+        [c.ax, c.ay, c.az], [referencia.x, referencia.y, referencia.z], puesta.frente,
+      ) : null);
     }, 200);
     return () => clearInterval(t);
-  }, [eje, invertido, referencia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveFrente, referencia]);
 
-  const elegir = (p: Posicion) => {
+  const cambiar = (p: Postura) => {
     setDictamen(null);
-    alCambiar(p.eje, p.invertido);
+    alCambiar(p);
   };
 
-  const girar = (sentido: 1 | -1) => {
-    const i = VUELTA.indexOf(puesta.id);
-    /* Viniendo de una posición de pie se entra por «arriba», que es de donde
-       se sale al tumbar el equipo. */
-    const sig = VUELTA[i < 0 ? 0 : (i + sentido + 4) % 4];
-    elegir(POSICIONES.find((p) => p.id === sig)!);
-  };
-
-  /* La prueba de marcha: se acelera unos segundos y se mira en qué eje se
-     notó. Se compara contra la referencia porque en cuesta la gravedad ya
-     carga uno de los ejes, y sin restarla el resultado sería la pendiente y no
-     la marcha. */
+  /* La prueba de marcha: se acelera unos segundos y se mira hacia dónde se
+     notó, contra la referencia para que la cuesta no cuente como marcha. */
   const probar = () => {
     if (!referencia) {
       setDictamen('Primero hay que calibrar la referencia, aquí arriba.');
@@ -689,28 +596,20 @@ export function Montaje({
         setDictamen('No llegaron lecturas del sensor durante la prueba.');
         return;
       }
-      const ref3 = [referencia.x, referencia.y, referencia.z];
-      const medias = [0, 1, 2].map(
+      const ref3: V3 = [referencia.x, referencia.y, referencia.z];
+      const media = [0, 1, 2].map(
         (i) => muestras.current.reduce((s, m) => s + (m[i] - ref3[i]), 0) / n,
-      );
-      const gana = medias.reduce(
-        (mejor, v, i) => (Math.abs(v) > Math.abs(medias[mejor]) ? i : mejor), 0,
-      );
-
-      /* Por debajo de esto no se aceleró: es ruido, y elegir un eje con ruido
-         es peor que no tocar nada. */
-      if (Math.abs(medias[gana]) < 0.6) {
+      ) as V3;
+      const hallada = frenteMedido(media, ref3);
+      if (!hallada) {
         setDictamen(
           'No se notó ninguna aceleración clara. Hay que acelerar de verdad ' +
           'mientras dura la cuenta, y en llano.',
         );
         return;
       }
-
-      const ejes: Eje[] = ['x', 'y', 'z'];
-      const hallada = posicionDe(ejes[gana], medias[gana] < 0);
-      alCambiar(hallada.eje, hallada.invertido);
-      setDictamen(`Medido: el frente cae ${hallada.nombre.toLowerCase()}. Ya quedó puesto.`);
+      alCambiar(hallada);
+      setDictamen('Medido: la flecha ya apunta a donde aceleró.');
     }, PRUEBA_MS);
   };
 
@@ -765,26 +664,30 @@ export function Montaje({
       </div>
 
       <div className="text-center">
-        <b className="text-[15px] text-acc">{puesta.nombre}</b>
-        <p className="m-0 mt-0.5 text-[11.5px] leading-snug text-ink3">{puesta.como}</p>
+        <b className="text-[15px] text-acc">{como.nombre}</b>
+        <p className="m-0 mt-0.5 text-[11.5px] leading-snug text-ink3">
+          Pantalla a {como.grados}° del piso
+        </p>
       </div>
 
-      {/* Las seis posiciones: cuatro girando y dos de pie. Separadas porque son
-          dos gestos distintos —dar la vuelta al aparato o ponerlo derecho— y
-          juntas en una sola fila de seis nadie las distinguía. */}
       <div className="grid grid-cols-2 gap-2">
-        <Boton className="w-full" onClick={() => girar(-1)}>↺ Girar</Boton>
-        <Boton className="w-full" onClick={() => girar(1)}>Girar ↻</Boton>
-        {POSICIONES.filter((p) => p.eje === 'z').map((p) => (
-          <Boton
-            key={p.id}
-            className="w-full"
-            variante={puesta.id === p.id ? 'fuerte' : 'normal'}
-            onClick={() => elegir(p)}
-          >
-            {p.id === 'detras' ? 'De pie, al conductor' : 'De pie, al frente'}
-          </Boton>
-        ))}
+        <Boton className="w-full" onClick={() => cambiar(girarPostura(mostrada, SALTO))}>
+          ↺ Girar
+        </Boton>
+        <Boton className="w-full" onClick={() => cambiar(girarPostura(mostrada, -SALTO))}>
+          Girar ↻
+        </Boton>
+        {/* Sin sensor (en la PC) no hay quien diga cómo está: se pone a mano. */}
+        {!gravedad && (
+          <>
+            <Boton className="w-full" onClick={() => cambiar(pararPostura(mostrada, SALTO))}>
+              ↑ Parar
+            </Boton>
+            <Boton className="w-full" onClick={() => cambiar(pararPostura(mostrada, -SALTO))}>
+              Acostar ↓
+            </Boton>
+          </>
+        )}
       </div>
 
       {/* ── La comprobación ─────────────────────────────────────────────── */}
@@ -806,9 +709,8 @@ export function Montaje({
       )}
 
       <Nota>
-        Si al elegir el lado ese número sube al acelerar y baja al frenar, está bien puesto. Si
-        sale al revés, es el lado contrario; si apenas se mueve, es otro eje. El botón lo hace
-        solo: púlsalo y acelera en llano mientras dura la cuenta.
+        La inclinación la pone el sensor. Gira hasta que la flecha apunte al frente del camión,
+        o pulsa «Medirlo acelerando» y acelera en llano.
       </Nota>
     </div>
   );

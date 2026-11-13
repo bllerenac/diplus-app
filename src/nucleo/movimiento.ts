@@ -49,13 +49,25 @@ const Nativo = registerPlugin<PluginMovimiento>('Movimiento');
 
 export type Eje = 'x' | 'y' | 'z';
 
+/** En ejes del equipo: X derecha, Y arriba de la pantalla, Z sale de la pantalla. */
+export type V3 = [number, number, number];
+
+export interface Postura {
+  /** Hacia dónde queda el morro del camión. */
+  frente: V3;
+  /** Hacia dónde queda su techo. */
+  techo: V3;
+}
+
 export interface AjustesMovimiento {
   activo: boolean;
   /** Cada cuánto se publica una lectura. Más rápido ve golpes más cortos. */
   cadaMs: number;
-  /** Cuál de los tres ejes apunta hacia adelante, y en qué sentido. */
-  ejeAvance: Eje;
-  avanceInvertido: boolean;
+  frente?: V3;
+  techo?: V3;
+  /** De antes, cuando solo había seis posturas; se leen si falta frente. */
+  ejeAvance?: Eje;
+  avanceInvertido?: boolean;
   /** La gravedad medida con el camión parado y en llano. Es la referencia. */
   ref: { x: number; y: number; z: number } | null;
   /** A partir de cuánto se considera una frenada brusca, en m/s². */
@@ -69,8 +81,8 @@ export interface AjustesMovimiento {
 export const MOVIMIENTO_POR_DEFECTO: AjustesMovimiento = {
   activo: false,
   cadaMs: 100,
-  ejeAvance: 'y',
-  avanceInvertido: false,
+  frente: [0, 1, 0],
+  techo: [0, 0, 1],
   ref: null,
   /* 3 m/s² son unos 0,3 g: una frenada que se nota pero no es de emergencia.
      Se deja bajo a propósito, que subirlo es fácil y bajarlo nadie lo hace. */
@@ -85,6 +97,109 @@ const G = 9.80665;
 const VENTANA = 50;
 
 const modulo = (x: number, y: number, z: number) => Math.sqrt(x * x + y * y + z * z);
+
+const punto = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unidad = (v: V3): V3 => {
+  const m = modulo(v[0], v[1], v[2]) || 1;
+  return [v[0] / m, v[1] / m, v[2] / m];
+};
+/** `v` sin su parte a lo largo de `u`, que tiene que ser unitario. */
+const sinParte = (v: V3, u: V3): V3 => {
+  const d = punto(v, u);
+  return [v[0] - u[0] * d, v[1] - u[1] * d, v[2] - u[2] * d];
+};
+export const cruz = (a: V3, b: V3): V3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+
+/** Giro de `v` alrededor del eje unitario `k` (Rodrigues). */
+const rotar = (v: V3, k: V3, rad: number): V3 => {
+  const c = Math.cos(rad), s = Math.sin(rad), kv = cruz(k, v), d = punto(k, v) * (1 - c);
+  return [
+    v[0] * c + kv[0] * s + k[0] * d,
+    v[1] * c + kv[1] * s + k[1] * d,
+    v[2] * c + kv[2] * s + k[2] * d,
+  ];
+};
+
+/** Que sigan siendo perpendiculares y de largo uno tras muchos giros. */
+const ortonormal = (frente: V3, techo: V3): Postura => {
+  const t = unidad(techo);
+  return { frente: unidad(sinParte(frente, t)), techo: t };
+};
+
+/** La postura guardada. Las configuraciones viejas solo traen eje y signo. */
+export const posturaDe = (c: AjustesMovimiento): Postura => {
+  if (c.frente && c.techo) return { frente: c.frente, techo: c.techo };
+  const e = c.ejeAvance ?? 'y';
+  const s = c.avanceInvertido ? -1 : 1;
+  return {
+    frente: [e === 'x' ? s : 0, e === 'y' ? s : 0, e === 'z' ? s : 0],
+    techo: e === 'z' ? [0, 1, 0] : [0, 0, 1],
+  };
+};
+
+/**
+ * Gira el equipo sobre la vertical del camión; positivo es contra el reloj
+ * visto desde arriba. El frente va en ejes del equipo, así que gira al revés.
+ */
+export const girarPostura = (p: Postura, grados: number): Postura =>
+  ortonormal(rotar(p.frente, p.techo, (-grados * Math.PI) / 180), p.techo);
+
+/** Para el equipo sobre su borde de abajo: positivo levanta el de arriba. */
+export const pararPostura = (p: Postura, grados: number): Postura => {
+  const x: V3 = [1, 0, 0], rad = (-grados * Math.PI) / 180;
+  return ortonormal(rotar(p.frente, x, rad), rotar(p.techo, x, rad));
+};
+
+/** La misma postura con el techo donde dice la gravedad; el frente gira con él. */
+export const conTecho = (p: Postura, gravedad: V3): Postura => {
+  const t = unidad(gravedad);
+  const eje = cruz(p.techo, t);
+  const s = modulo(eje[0], eje[1], eje[2]);
+  const c = punto(p.techo, t);
+  /* Mismo techo o volteado del todo: el frente no se mueve. */
+  if (s < 1e-6) return { frente: p.frente, techo: t };
+  return ortonormal(rotar(p.frente, unidad(eje), Math.atan2(s, c)), t);
+};
+
+/**
+ * El frente medido acelerando: lo que se apartó de la referencia, en el plano
+ * del piso. Null si fue tan poco que es ruido.
+ */
+export const frenteMedido = (media: V3, ref: V3): Postura | null => {
+  const t = unidad(ref);
+  const f = sinParte(media, t);
+  return modulo(f[0], f[1], f[2]) < 0.6 ? null : { frente: unidad(f), techo: t };
+};
+
+/**
+ * La aceleración en la marcha. El frente se aplana sobre el piso de la
+ * referencia, así una cuesta o un bache no se cuelan aunque el equipo vaya
+ * inclinado.
+ */
+export const avanceDe = (a: V3, ref: V3 | null, frente: V3): number => {
+  if (!ref) return punto(a, frente);
+  const plano = sinParte(frente, unidad(ref));
+  const f = modulo(plano[0], plano[1], plano[2]) < 0.2 ? frente : unidad(plano);
+  return punto([a[0] - ref[0], a[1] - ref[1], a[2] - ref[2]], f);
+};
+
+/** Cómo queda el equipo, en palabras, y a cuántos grados del piso va la pantalla. */
+export const comoEsta = (p: Postura): { nombre: string; grados: number } => {
+  const a = (Math.acos(Math.min(1, Math.max(-1, p.techo[2]))) * 180) / Math.PI;
+  const grados = Math.round(Math.min(a, 180 - a));
+  const [x, y] = p.techo;
+  const nombre =
+    a <= 15 ? 'Tumbada'
+      : a >= 165 ? 'Boca abajo'
+        : Math.abs(a - 90) > 15 ? 'Inclinada'
+          : Math.abs(y) < Math.abs(x) ? 'De lado'
+            : y > 0 ? 'De pie' : 'De pie, al revés';
+  return { nombre, grados };
+};
 
 /**
  * El ángulo entre cómo está ahora y cómo estaba al calibrar.
@@ -184,12 +299,9 @@ class Movimiento {
        inclinación se da como desconocida en vez de inventarse un cero. */
     const inclinacion = c.ref ? anguloEntre(ahora, [c.ref.x, c.ref.y, c.ref.z]) : null;
 
-    /* La componente en el eje de marcha, quitándole lo que de la gravedad cae
-       sobre ese eje: si no, una cuesta parecería una aceleración constante. */
-    const idx = c.ejeAvance === 'x' ? 0 : c.ejeAvance === 'y' ? 1 : 2;
-    const refEje = c.ref ? [c.ref.x, c.ref.y, c.ref.z][idx] : 0;
-    let avance = ahora[idx] - refEje;
-    if (c.avanceInvertido) avance = -avance;
+    const avance = avanceDe(
+      [d.ax, d.ay, d.az], c.ref ? [c.ref.x, c.ref.y, c.ref.z] : null, posturaDe(c).frente,
+    );
 
     /* La vibración es cuánto se aparta el módulo de la gravedad: da igual cómo
        esté montado el aparato y da igual la cuesta, solo mide sacudidas. */
